@@ -20,6 +20,8 @@
     min-height: 100vh; display: grid; place-items: center; padding: 2rem 1.25rem;
   }
   main { width: 100%; max-width: 30rem; }
+  /* width/height attributes hold the space, so the form never jumps on load. */
+  #banner { width: 100%; height: auto; border-radius: 14px; margin-bottom: 1.25rem; box-shadow: var(--shadow); }
   h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -.015em; margin: 0 0 .3rem; }
   h1 .arrow { color: var(--dim); font-weight: 400; }
   .sub { color: var(--dim); font-size: .925rem; margin: 0 0 1.5rem; }
@@ -56,6 +58,7 @@
 </style>
 
 <main>
+  <img id="banner" src="/static/banner.png" width="1672" height="941" alt="Scanned PDF to Word with Go, GLM-OCR and Tesseract — headings, paragraphs, tables, page breaks and Odia/Indic text preserved.">
   <h1>PDF <span class="arrow">→</span> Word</h1>
   <p class="sub">Every page, formatting kept. Uses the PDF's text layer when it has one and OCR when it is scanned — Odia (ଓଡ଼ିଆ) either way.</p>
 

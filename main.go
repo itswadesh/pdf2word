@@ -16,7 +16,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
-	_ "embed"
+	"embed"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -36,6 +36,11 @@ import (
 
 //go:embed index.html
 var page []byte
+
+// Embedded at its real path, so http.FS serves it as /static/banner.png.
+//
+//go:embed static
+var static embed.FS
 
 var (
 	addr     = flag.String("addr", "127.0.0.1:8080", "listen address")
@@ -57,6 +62,7 @@ func main() {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(page)
 	})
+	http.Handle("/static/", http.FileServer(http.FS(static)))
 	http.HandleFunc("/convert", convert)
 	log.Printf("http://%s  (lang=%s dpi=%s)", *addr, *lang, *dpi)
 	log.Fatal(http.ListenAndServe(*addr, nil))

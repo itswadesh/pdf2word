@@ -2,6 +2,7 @@
 FROM golang:1.21-alpine AS build
 WORKDIR /src
 COPY go.mod main.go index.html ./
+COPY static ./static
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /pdf2word .
 
 # Debian, not Alpine: Alpine has no Odia traineddata package.
