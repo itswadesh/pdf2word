@@ -1,0 +1,128 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF → Word</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #fff; --ink: #16161a; --dim: #6b6b76;
+    --line: #e0e0dc; --accent: #2f6f4e; --err: #b3261e; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131316; --card: #1c1c20; --ink: #ececf0; --dim: #9a9aa4;
+      --line: #2e2e35; --accent: #6fc294; --err: #ff8a80; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink); background: var(--bg); margin: 0;
+    min-height: 100vh; display: grid; place-items: center; padding: 2rem 1.25rem;
+  }
+  main { width: 100%; max-width: 30rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -.015em; margin: 0 0 .3rem; }
+  h1 .arrow { color: var(--dim); font-weight: 400; }
+  .sub { color: var(--dim); font-size: .925rem; margin: 0 0 1.5rem; }
+
+  /* The label is the whole interaction: click, keyboard, or drop. */
+  #drop {
+    display: grid; place-items: center; gap: .55rem; text-align: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 3rem 1.5rem; cursor: pointer; box-shadow: var(--shadow);
+    transition: border-color .15s, background .15s, transform .15s;
+  }
+  #drop:hover { border-color: var(--accent); }
+  #drop:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+  body.over #drop { border-color: var(--accent); border-style: dashed; transform: scale(1.01); }
+  body.busy #drop { cursor: progress; pointer-events: none; opacity: .75; }
+  /* Off-screen rather than display:none, so the input keeps its tab stop. */
+  #drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  #drop svg { width: 30px; height: 30px; stroke: var(--dim); fill: none; stroke-width: 1.5; }
+  body.busy #drop svg { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .title { font-weight: 550; }
+  .hint { color: var(--dim); font-size: .85rem; }
+
+  /* Indeterminate: OCR gives no progress to report, only that it is running. */
+  #bar { height: 2px; margin-top: 1px; border-radius: 2px; overflow: hidden; background: var(--line); opacity: 0; transition: opacity .2s; }
+  body.busy #bar { opacity: 1; }
+  #bar::after { content: ""; display: block; width: 35%; height: 100%; background: var(--accent); animation: slide 1.3s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(386%); } }
+
+  #status { margin-top: 1rem; font-size: .9rem; color: var(--dim); min-height: 1.5rem; text-align: center; }
+  #status.err { color: var(--err); white-space: pre-wrap; text-align: left; }
+  #status b { color: var(--ink); font-weight: 550; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<main>
+  <h1>PDF <span class="arrow">→</span> Word</h1>
+  <p class="sub">Every page, formatting kept. Uses the PDF's text layer when it has one and OCR when it is scanned — Odia (ଓଡ଼ିଆ) either way.</p>
+
+  <form id="f">
+    <label id="drop">
+      <input type="file" name="pdf" accept="application/pdf,.pdf" required>
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>
+        <path d="M12 12v5m0 0 2-2m-2 2-2-2"/>
+      </svg>
+      <span class="title" id="name">Drop a PDF here</span>
+      <span class="hint" id="hint">or click to choose — it converts straight away</span>
+    </label>
+    <div id="bar"></div>
+  </form>
+  <div id="status" role="status" aria-live="polite"></div>
+</main>
+
+<script>
+const f = document.querySelector('#f'), file = f.pdf;
+const name = document.querySelector('#name'), hint = document.querySelector('#hint'), status = document.querySelector('#status');
+const idle = ['Drop a PDF here', 'or click to choose — it converts straight away'];
+const size = n => n > 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : Math.ceil(n / 1024) + ' KB';
+
+// Picking a file is the only step; nothing else to press.
+file.onchange = () => {
+  const pdf = file.files[0];
+  [name.textContent, hint.textContent] = pdf ? [pdf.name, size(pdf.size)] : idle;
+  if (pdf) f.requestSubmit();
+};
+
+// Anywhere on the page is a drop target — aiming at a box is fussy.
+addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('over'); });
+addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('over'); });
+addEventListener('drop', e => {
+  e.preventDefault(); document.body.classList.remove('over');
+  if (document.body.classList.contains('busy')) return;
+  file.files = e.dataTransfer.files;
+  file.onchange();
+});
+
+f.onsubmit = async e => {
+  e.preventDefault();
+  document.body.classList.add('busy');
+  status.className = '';
+  const started = Date.now();
+  // The clock is aria-hidden, or the live region re-announces every tick.
+  status.innerHTML = `<b>Converting…</b> <span id="t" aria-hidden="true">0s</span> — a scanned book takes a while, every page is OCR'd.`;
+  const t = status.querySelector('#t');
+  const tick = setInterval(() => t.textContent = Math.round((Date.now() - started) / 1000) + 's', 500);
+  try {
+    const res = await fetch('/convert', { method: 'POST', body: new FormData(f) });
+    if (!res.ok) throw new Error(await res.text());
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = (file.files[0].name.replace(/\.pdf$/i, '') || 'converted') + '.docx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    status.innerHTML = `<b>Downloaded ${a.download}</b> — ${res.headers.get('X-Extract-Method') || 'unknown method'}, ${Math.round((Date.now() - started) / 1000)}s.`;
+  } catch (err) {
+    status.className = 'err';
+    status.textContent = err.message.trim();
+  } finally {
+    clearInterval(tick);
+    document.body.classList.remove('busy');
+    [name.textContent, hint.textContent] = idle;
+    file.value = '';
+  }
+};
+</script>
