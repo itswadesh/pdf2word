@@ -47,7 +47,7 @@ temporary folder that is removed when the program exits.
 
 Text-only PDFs convert without Tesseract. If a page needs OCR and Tesseract
 cannot be found, the file fails with a clear message rather than producing an
-empty document; the page footer also warns up front.
+empty document.
 
 Installing Tesseract:
 

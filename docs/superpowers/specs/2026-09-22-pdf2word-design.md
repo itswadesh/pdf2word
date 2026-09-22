@@ -279,7 +279,9 @@ with drag-and-drop, a progress bar, and the Word file downloaded when done.
   "Save Word file" and collapsible notes (warnings). Files uploaded from the
   page download automatically when done; files discovered after a reload
   only offer the button. Polling every 0.5 s while active, 4 s otherwise,
-  which doubles as the keep-alive.
+  which doubles as the keep-alive. No footer: the user asked for the engine
+  status and version lines to be removed; a missing OCR engine surfaces as
+  the file's error message instead (`GET /api/info` remains for tooling).
 - **Lifecycle**: the process exits on its own when the page has been silent
   for 45 s and no job is running, or after 5 minutes if the page never
   opened; `-no-auto-exit` disables this. Ctrl+C always works.

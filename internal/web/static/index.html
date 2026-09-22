@@ -230,13 +230,6 @@
   .notes.hidden { display: none; }
   .notes li { margin: 2px 0; overflow-wrap: anywhere; }
 
-  footer {
-    margin-top: 40px;
-    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-    color: var(--ink-soft); font-size: 14px;
-  }
-  footer .warn { color: var(--alert); }
-
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -288,11 +281,6 @@
   </form>
 
   <ol class="files" id="files" aria-live="polite"></ol>
-
-  <footer>
-    <span id="engine">Checking the OCR engine…</span>
-    <span id="version"></span>
-  </footer>
 </main>
 
 <script>
@@ -516,18 +504,6 @@
     if (s < 60) return s + ' s';
     return Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
   }
-
-  // --- environment ---------------------------------------------------------------------
-  fetch('/api/info').then(r => r.json()).then(info => {
-    $('version').textContent = info.version ? 'pdf2word ' + info.version : '';
-    const e = $('engine');
-    if (info.ocr && info.ocr.available) {
-      e.textContent = 'OCR ready (' + (info.ocr.version || 'engine found') + ')';
-    } else {
-      e.className = 'warn';
-      e.textContent = 'OCR engine not found: scanned pages will fail. Install Tesseract and restart.';
-    }
-  }).catch(() => { $('engine').textContent = ''; });
 
   poll();
 })();
