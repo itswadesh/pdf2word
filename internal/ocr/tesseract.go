@@ -92,13 +92,19 @@ type WordEngine interface {
 }
 
 // RecognizeWords runs tesseract in TSV mode and returns the words with their
-// boxes. It implements WordEngine.
+// boxes. It implements WordEngine. The TSV renderer is switched on with a
+// -c variable rather than the "tsv" config file, which minimal installs
+// (including the bundled runtime) do not ship.
 func (t *Tesseract) RecognizeWords(ctx context.Context, img []byte, ext string) ([]Word, error) {
-	out, err := t.run(ctx, img, ext, "tsv")
+	out, err := t.run(ctx, img, ext, "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0")
 	if err != nil {
 		return nil, err
 	}
-	return parseTSV(out), nil
+	words := parseTSV(out)
+	if len(words) == 0 && !strings.HasPrefix(out, "level\t") {
+		return nil, fmt.Errorf("tesseract did not produce TSV output")
+	}
+	return words, nil
 }
 
 // run executes tesseract on img with the given output config (e.g. "tsv"

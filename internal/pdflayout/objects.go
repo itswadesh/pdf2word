@@ -141,8 +141,8 @@ func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 	}
 	x0, y0, x1, y1 := float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top)
 	w, h := x1-x0, y1-y0
-	if w < ruleMinLength && h < ruleMinLength {
-		return nil // glyph outlines and dots: not rulings
+	if w < ruleMinPiece && h < ruleMinPiece {
+		return nil // dots and specks
 	}
 
 	dm, err := inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj})
@@ -154,56 +154,157 @@ func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 		return nil
 	}
 
-	// Thin shape: treat the whole thing as one rule. Filled shapes need to be
-	// longer than a glyph, because text drawn as outlines ("l", "I", "-")
-	// produces thin filled paths too.
+	// Thin shape: treat the whole thing as one rule. Filled pieces may be
+	// short (cell borders are often drawn per cell, or even per glyph run);
+	// detectTables chains collinear pieces and discards what stays short.
 	minLen := ruleMinLength
 	if !dm.Stroke {
-		minLen = ruleMinFillLength
+		minLen = ruleMinPiece
 	}
 	if h <= ruleMaxThick && w >= minLen {
-		return []rule{{vertical: false, pos: (y0 + y1) / 2, from: x0, to: x1, color: col}}
+		return []rule{{vertical: false, pos: (y0 + y1) / 2, from: x0, to: x1, color: col, stroke: dm.Stroke}}
 	}
 	if w <= ruleMaxThick && h >= minLen {
-		return []rule{{vertical: true, pos: (x0 + x1) / 2, from: y0, to: y1, color: col}}
+		return []rule{{vertical: true, pos: (x0 + x1) / 2, from: y0, to: y1, color: col, stroke: dm.Stroke}}
 	}
 
-	// Otherwise look at the segments: axis-aligned strokes and rectangles.
-	if !dm.Stroke {
-		return nil
-	}
+	// Otherwise look at the segments. Their points are in the path's own
+	// space; the object matrix maps them onto the page.
 	cnt, err := inst.FPDFPath_CountSegments(&requests.FPDFPath_CountSegments{PageObject: obj})
-	if err != nil || cnt.Count < 2 || cnt.Count > 64 {
+	if err != nil || cnt.Count < 2 || cnt.Count > 128 {
 		return nil
 	}
-	var rules []rule
-	var px, py float64
-	have := false
+	ma, mb, mc, md, me, mf := 1.0, 0.0, 0.0, 1.0, 0.0, 0.0
+	if m, err := inst.FPDFPageObj_GetMatrix(&requests.FPDFPageObj_GetMatrix{PageObject: obj}); err == nil {
+		ma, mb, mc, md, me, mf = float64(m.Matrix.A), float64(m.Matrix.B), float64(m.Matrix.C), float64(m.Matrix.D), float64(m.Matrix.E), float64(m.Matrix.F)
+	}
+	pts := make([]pathPoint, 0, cnt.Count)
 	for i := 0; i < cnt.Count; i++ {
 		seg, err := inst.FPDFPath_GetPathSegment(&requests.FPDFPath_GetPathSegment{PageObject: obj, Index: i})
 		if err != nil {
-			return rules
+			return nil
 		}
 		pt, err := inst.FPDFPathSegment_GetPoint(&requests.FPDFPathSegment_GetPoint{PathSegment: seg.PathSegment})
 		if err != nil {
-			return rules
+			return nil
 		}
 		st, err := inst.FPDFPathSegment_GetType(&requests.FPDFPathSegment_GetType{PathSegment: seg.PathSegment})
 		if err != nil {
-			return rules
+			return nil
 		}
 		x, y := float64(pt.X), float64(pt.Y)
-		if st.Type == enums.FPDF_SEGMENT_LINETO && have {
+		pts = append(pts, pathPoint{x: ma*x + mc*y + me, y: mb*x + md*y + mf, kind: st.Type})
+	}
+
+	var rules []rule
+	if dm.Stroke {
+		// Axis-aligned stroked segments are rulings.
+		for i := 1; i < len(pts); i++ {
+			p, q := pts[i-1], pts[i]
+			if q.kind != enums.FPDF_SEGMENT_LINETO {
+				continue
+			}
 			switch {
-			case math.Abs(y-py) <= ruleTol && math.Abs(x-px) >= ruleMinLength:
-				rules = append(rules, rule{pos: (y + py) / 2, from: math.Min(x, px), to: math.Max(x, px), color: col})
-			case math.Abs(x-px) <= ruleTol && math.Abs(y-py) >= ruleMinLength:
-				rules = append(rules, rule{vertical: true, pos: (x + px) / 2, from: math.Min(y, py), to: math.Max(y, py), color: col})
+			case math.Abs(q.y-p.y) <= ruleTol && math.Abs(q.x-p.x) >= ruleMinLength:
+				rules = append(rules, rule{pos: (q.y + p.y) / 2, from: math.Min(q.x, p.x), to: math.Max(q.x, p.x), color: col, stroke: true})
+			case math.Abs(q.x-p.x) <= ruleTol && math.Abs(q.y-p.y) >= ruleMinLength:
+				rules = append(rules, rule{vertical: true, pos: (q.x + p.x) / 2, from: math.Min(q.y, p.y), to: math.Max(q.y, p.y), color: col, stroke: true})
 			}
 		}
-		px, py, have = x, y, true
+		return rules
+	}
+
+	// Filled path made of several axis-aligned rectangles: a table "frame"
+	// (outer box plus cell boxes filled even-odd, as Word's PDF output does).
+	// Every rectangle edge is then a ruling. A single filled rectangle is a
+	// background, not a border.
+	rects := rectSubpaths(pts)
+	if len(rects) < 2 {
+		return nil
+	}
+	for _, r := range rects {
+		if r.x1-r.x0 >= ruleMinPiece {
+			rules = append(rules,
+				rule{pos: r.y0, from: r.x0, to: r.x1, color: col},
+				rule{pos: r.y1, from: r.x0, to: r.x1, color: col})
+		}
+		if r.y1-r.y0 >= ruleMinPiece {
+			rules = append(rules,
+				rule{vertical: true, pos: r.x0, from: r.y0, to: r.y1, color: col},
+				rule{vertical: true, pos: r.x1, from: r.y0, to: r.y1, color: col})
+		}
 	}
 	return rules
+}
+
+type pathPoint struct {
+	x, y float64
+	kind enums.FPDF_SEGMENT
+}
+
+type rect struct{ x0, y0, x1, y1 float64 }
+
+// rectSubpaths splits a path at MoveTo segments and returns the bounding
+// boxes of the sub-paths that are axis-aligned rectangles (4 corners, with
+// or without a closing point, straight segments only).
+func rectSubpaths(pts []pathPoint) []rect {
+	var rects []rect
+	var cur []pathPoint
+	curved := false
+	flush := func() {
+		if !curved {
+			if r, ok := asRect(cur); ok {
+				rects = append(rects, r)
+			}
+		}
+		cur, curved = cur[:0], false
+	}
+	for _, p := range pts {
+		if p.kind == enums.FPDF_SEGMENT_MOVETO && len(cur) > 0 {
+			flush()
+		}
+		if p.kind == enums.FPDF_SEGMENT_BEZIERTO {
+			curved = true
+		}
+		cur = append(cur, p)
+	}
+	if len(cur) > 0 {
+		flush()
+	}
+	return rects
+}
+
+func asRect(pts []pathPoint) (rect, bool) {
+	const eps = 0.15
+	// Drop a closing point that repeats the first one.
+	if n := len(pts); n == 5 && math.Abs(pts[4].x-pts[0].x) < eps && math.Abs(pts[4].y-pts[0].y) < eps {
+		pts = pts[:4]
+	}
+	if len(pts) != 4 {
+		return rect{}, false
+	}
+	r := rect{x0: math.Inf(1), y0: math.Inf(1), x1: math.Inf(-1), y1: math.Inf(-1)}
+	for _, p := range pts {
+		r.x0, r.x1 = math.Min(r.x0, p.x), math.Max(r.x1, p.x)
+		r.y0, r.y1 = math.Min(r.y0, p.y), math.Max(r.y1, p.y)
+	}
+	if r.x1-r.x0 < eps || r.y1-r.y0 < eps {
+		return rect{}, false
+	}
+	// Every point must sit on a corner of the bounding box, and consecutive
+	// points must share an x or a y (axis-aligned edges).
+	for i, p := range pts {
+		onX := math.Abs(p.x-r.x0) < eps || math.Abs(p.x-r.x1) < eps
+		onY := math.Abs(p.y-r.y0) < eps || math.Abs(p.y-r.y1) < eps
+		if !onX || !onY {
+			return rect{}, false
+		}
+		next := pts[(i+1)%4]
+		if math.Abs(p.x-next.x) > eps && math.Abs(p.y-next.y) > eps {
+			return rect{}, false
+		}
+	}
+	return r, true
 }
 
 // pathColor returns the drawing colour of a path as RRGGBB and whether the

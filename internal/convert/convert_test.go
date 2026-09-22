@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -435,6 +436,44 @@ func TestBuildDocument_OCRWordsAreLaidOut(t *testing.T) {
 		t.Errorf("document setup should come from the OCR'd page: %+v", doc.Setup)
 	}
 }
+
+func TestOCRWords_FiltersNoiseAndSnapsSizes(t *testing.T) {
+	mk := func(text string, left, top, w, h, lineH int, conf float64) ocr.Word {
+		return ocr.Word{Text: text, Left: left, Top: top, Width: w, Height: h, LineTop: top, LineHeight: lineH, Block: 1, Par: 1, Line: top, Conf: conf}
+	}
+	in := []ocr.Word{
+		mk("Body", 100, 100, 80, 40, 44, 95),
+		mk("text", 200, 100, 80, 36, 44, 95),
+		mk("here", 100, 160, 80, 42, 46, 95),        // 46 vs median 44: same size
+		mk("BIG", 100, 300, 120, 60, 62, 95),        // clearly larger: own size
+		mk("cccceeeecc", 400, 160, 300, 30, 46, 80), // dotted leader junk
+		mk("......", 700, 160, 100, 10, 46, 80),     // dots
+		mk("x", 900, 160, 20, 30, 46, 10),           // low confidence
+		mk("|", 50, 50, 6, 3000, 3100, 95),          // page border: line box far too tall
+	}
+	got := ocrWords(in, 2550, 3300, 612, 792)
+	var texts []string
+	for _, w := range got {
+		texts = append(texts, w.Text)
+	}
+	if strings.Join(texts, " ") != "Body text here BIG" {
+		t.Fatalf("kept words = %q", texts)
+	}
+	scale := 612.0 / 2550
+	// Median over words: 44,44,46,46,46,46 (junk words still count for the
+	// median before they are dropped) -> 46.
+	if got[0].Size != got[2].Size || !near(got[0].Size, 46*scale*ocrFontFactor, 0.01) {
+		t.Errorf("body sizes should snap to the median line height: %.2f vs %.2f", got[0].Size, got[2].Size)
+	}
+	if !near(got[3].Size, 62*scale*ocrFontFactor, 0.01) {
+		t.Errorf("BIG should keep its own size, got %.2f", got[3].Size)
+	}
+	if !near(got[0].X0, 100*scale, 0.01) || !near(got[0].Y1, 792-100*scale, 0.01) || !near(got[0].Y0, 792-144*scale, 0.01) {
+		t.Errorf("geometry wrong: %+v", got[0])
+	}
+}
+
+func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 
 func describeBlocks(bs []model.Block) string {
 	var sb strings.Builder

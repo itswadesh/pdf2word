@@ -6,9 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -459,8 +462,71 @@ func (s *session) ocrPage(ctx context.Context, page *model.Page) pageResult {
 	return res
 }
 
-// ocrFontFactor converts a Tesseract line-box height to a font size.
-const ocrFontFactor = 1.05
+// OCR word filtering and sizing.
+const (
+	ocrFontFactor  = 1.05 // line-box height -> font size
+	ocrMinConf     = 20.0 // Tesseract confidence below which a word is noise
+	ocrSizeJitter  = 0.25 // lines within this of the page median take the median size
+	ocrMinFontSize = 5.0
+	ocrMaxFontSize = 40.0
+)
+
+// leaderJunk matches what Tesseract makes of dotted leaders and rules:
+// strings of dots, dashes or the letters c/e/o it mistakes them for.
+var leaderJunk = regexp.MustCompile("^[.·…:;,'`~_\\-]{3,}$|^[ceoCEO.·…:;,'`~_\\-]{6,}$")
+
+// ocrWords converts Tesseract words (pixels, origin top-left) into layout
+// words (points, origin bottom-left), dropping noise: low-confidence words,
+// dotted leaders, and boxes that are not text-shaped. Font sizes snap to the
+// page's median line height so cells and headings do not jitter.
+func ocrWords(words []ocr.Word, imgW, imgH int, pageW, pageH float64) []pdflayout.Word {
+	scale := pageW / float64(imgW) // points per pixel
+
+	// Median line height over words (so long body lines dominate), ignoring
+	// boxes that cannot be text lines.
+	var hs []float64
+	for _, wd := range words {
+		if wd.Text != "" && wd.LineHeight > 0 && float64(wd.LineHeight) <= 0.12*float64(imgH) {
+			hs = append(hs, float64(wd.LineHeight))
+		}
+	}
+	sort.Float64s(hs)
+	median := 0.0
+	if len(hs) > 0 {
+		median = hs[len(hs)/2]
+	}
+
+	out := make([]pdflayout.Word, 0, len(words))
+	for _, wd := range words {
+		if wd.Text == "" || (wd.Conf >= 0 && wd.Conf < ocrMinConf) || leaderJunk.MatchString(wd.Text) {
+			continue
+		}
+		lh := float64(wd.LineHeight)
+		if lh <= 0 || lh > 0.12*float64(imgH) {
+			continue // a line box spanning a big part of the page is not text
+		}
+		if median > 0 && float64(wd.Height) > 3*median && wd.Width < wd.Height {
+			continue // tall thin box: border or vertical rule read as a word
+		}
+		size := lh
+		if median > 0 && math.Abs(lh-median) <= ocrSizeJitter*median {
+			size = median
+		}
+		sizePt := clamp(size*scale*ocrFontFactor, ocrMinFontSize, ocrMaxFontSize)
+		out = append(out, pdflayout.Word{
+			Text:  wd.Text,
+			X0:    float64(wd.Left) * scale,
+			X1:    float64(wd.Left+wd.Width) * scale,
+			Y1:    pageH - float64(wd.LineTop)*scale,
+			Y0:    pageH - float64(wd.LineTop+wd.LineHeight)*scale,
+			Size:  sizePt,
+			Group: wd.Block*10000 + wd.Par,
+		})
+	}
+	return out
+}
+
+func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
 // ocrLayout recognises words with their boxes on a rendered page image,
 // converts the boxes to page points and assembles a laid-out page.
@@ -476,21 +542,7 @@ func (s *session) ocrLayout(ctx context.Context, we ocr.WordEngine, page *model.
 	if w <= 0 || h <= 0 {
 		return nil, 0, 0, nil, errors.New("page size unknown")
 	}
-	scale := w / float64(img.Width) // points per pixel
-	pw := make([]pdflayout.Word, 0, len(words))
-	for _, wd := range words {
-		if wd.Text == "" {
-			continue
-		}
-		pw = append(pw, pdflayout.Word{
-			Text: wd.Text,
-			X0:   float64(wd.Left) * scale,
-			X1:   float64(wd.Left+wd.Width) * scale,
-			Y1:   h - float64(wd.LineTop)*scale,
-			Y0:   h - float64(wd.LineTop+wd.LineHeight)*scale,
-			Size: float64(wd.LineHeight) * scale * ocrFontFactor,
-		})
-	}
+	pw := ocrWords(words, img.Width, img.Height, w, h)
 	laid, setup := pdflayout.AssembleOCR(page.Number, w, h, pw, assets)
 	return laid.Blocks, w, h, setup, nil
 }

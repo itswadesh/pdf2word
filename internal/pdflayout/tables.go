@@ -13,12 +13,14 @@ type rule struct {
 	pos      float64 // x for vertical, y for horizontal
 	from, to float64 // extent along the other axis
 	color    string  // RRGGBB
+	stroke   bool    // drawn as a stroke (true) or a thin filled shape (false)
 }
 
 const (
 	ruleTol           = 1.5  // pt: rules this close are the same grid line
 	ruleMinLength     = 6.0  // pt: shorter strokes are not rulings
-	ruleMinFillLength = 15.0 // pt: thin filled shapes shorter than this are glyphs
+	ruleMinPiece      = 3.0  // pt: shortest filled piece worth chaining
+	ruleMinFillLength = 15.0 // pt: chained filled pieces shorter than this are glyph stems
 	ruleMaxThick      = 2.0  // pt: thicker filled shapes are not rulings
 )
 
@@ -27,6 +29,7 @@ type gridLine struct {
 	pos      float64
 	from, to float64
 	color    string
+	stroke   bool // at least one piece was a stroke
 }
 
 func (g gridLine) covers(from, to float64) bool {
@@ -48,11 +51,21 @@ func cluster(rules []rule) []gridLine {
 		if n := len(out); n > 0 && math.Abs(out[n-1].pos-r.pos) <= ruleTol && r.from <= out[n-1].to+2*ruleTol {
 			out[n-1].to = math.Max(out[n-1].to, r.to)
 			out[n-1].pos = (out[n-1].pos + r.pos) / 2
+			out[n-1].stroke = out[n-1].stroke || r.stroke
 			continue
 		}
-		out = append(out, gridLine{pos: r.pos, from: r.from, to: r.to, color: r.color})
+		out = append(out, gridLine{pos: r.pos, from: r.from, to: r.to, color: r.color, stroke: r.stroke})
 	}
-	return out
+	// Text drawn as outlines yields short thin filled shapes ("l", "I", "-");
+	// real rulings made of filled pieces chain into something longer.
+	kept := out[:0]
+	for _, g := range out {
+		if !g.stroke && g.to-g.from < ruleMinFillLength {
+			continue
+		}
+		kept = append(kept, g)
+	}
+	return kept
 }
 
 // cellSlot is one (possibly merged) cell of a table row.
@@ -80,7 +93,7 @@ func (t table) contains(x, y float64) bool {
 func detectTables(rules []rule) []table {
 	var vs, hs []rule
 	for _, r := range rules {
-		if r.to-r.from < ruleMinLength {
+		if r.to-r.from < ruleMinPiece || (r.stroke && r.to-r.from < ruleMinLength) {
 			continue
 		}
 		if r.vertical {
@@ -150,6 +163,9 @@ func detectTables(rules []rule) []table {
 		ys := dedupe(m.ys, false)
 		if len(xs) < 2 || len(ys) < 2 {
 			continue
+		}
+		if len(xs) == 2 && len(ys) == 2 {
+			continue // a single box (page frame, boxed note) is not a table
 		}
 		t := table{x0: xs[0], x1: xs[len(xs)-1], y1: ys[0], y0: ys[len(ys)-1], cols: xs, rows: ys, vlines: m.vs}
 		if t.x1-t.x0 < 2*ruleMinLength || t.y1-t.y0 < 2*ruleMinLength {
@@ -245,6 +261,8 @@ func assignLines(lines []textLine, tables []table) []textLine {
 	var rest []textLine
 	for _, ln := range lines {
 		var free []segment
+		// Segments of this line that land in the same cell are one cell line.
+		placedIn := map[*cellSlot]int{}
 		for _, s := range ln.segments {
 			cx, cy := (s.x0+s.x1)/2, (ln.y0+ln.y1)/2
 			placed := false
@@ -259,9 +277,15 @@ func assignLines(lines []textLine, tables []table) []textLine {
 				for ri < len(t.rows)-2 && cy < t.rows[ri+1] {
 					ri++
 				}
-				cellLine := textLine{x0: s.x0, x1: s.x1, y0: ln.y0, y1: ln.y1, size: ln.size, bold: ln.bold, segments: []segment{s}}
 				slot := t.slotFor(ri, ci)
-				slot.lines = append(slot.lines, cellLine)
+				if idx, ok := placedIn[slot]; ok {
+					cl := &slot.lines[idx]
+					cl.segments = append(cl.segments, s)
+					cl.x1 = math.Max(cl.x1, s.x1)
+				} else {
+					slot.lines = append(slot.lines, textLine{x0: s.x0, x1: s.x1, y0: ln.y0, y1: ln.y1, size: ln.size, bold: ln.bold, segments: []segment{s}})
+					placedIn[slot] = len(slot.lines) - 1
+				}
 				placed = true
 				break
 			}
@@ -301,11 +325,16 @@ func tableBlock(t table, ct content) model.Block {
 			cell := model.Cell{Span: slot.span}
 			centered, righted := len(lines) > 0, len(lines) > 0
 			for _, l := range lines {
-				var segs []model.Segment
-				for _, s := range l.segments {
-					segs = append(segs, model.Segment{X: math.Max(0, s.x0-cellLeft), Runs: s.runs})
+				// Several segments inside one cell are just words of one
+				// line: join them with spaces instead of tab stops.
+				var runs []model.Run
+				for i, s := range l.segments {
+					if i > 0 && len(runs) > 0 && len(s.runs) > 0 {
+						runs[len(runs)-1].Text += " "
+					}
+					runs = append(runs, s.runs...)
 				}
-				cell.Lines = append(cell.Lines, model.Line{Segments: segs})
+				cell.Lines = append(cell.Lines, model.Line{Segments: []model.Segment{{X: math.Max(0, l.x0-cellLeft), Runs: runs}}})
 				mid := (cellLeft + cellRight) / 2
 				if math.Abs((l.x0+l.x1)/2-mid) > 0.08*(cellRight-cellLeft)+1 {
 					centered = false

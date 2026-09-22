@@ -156,13 +156,16 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, *PageAsset
 }
 
 // Word is OCR output in PDF points (origin bottom-left). Y0/Y1 should span
-// the text line, not the glyphs of the individual word.
+// the text line, not the glyphs of the individual word. Group, when not 0,
+// identifies the paragraph the OCR engine assigned the word to; lines from
+// different groups are never merged into one paragraph.
 type Word struct {
 	Text           string
 	X0, Y0, X1, Y1 float64
 	Size           float64 // font size estimate in points
 	Bold, Italic   bool
 	Font           string
+	Group          int
 }
 
 // AssembleOCR lays out OCR words on a page, using the page's rulings and
@@ -173,7 +176,7 @@ func AssembleOCR(number int, width, height float64, words []Word, assets *PageAs
 		if w.Text == "" {
 			continue
 		}
-		c := char{text: w.Text, x0: w.X0, y0: w.Y0, x1: w.X1, y1: w.Y1, size: w.Size, font: fontInfo{Family: w.Font, Bold: w.Bold, Italic: w.Italic}}
+		c := char{text: w.Text, x0: w.X0, y0: w.Y0, x1: w.X1, y1: w.Y1, size: w.Size, font: fontInfo{Family: w.Font, Bold: w.Bold, Italic: w.Italic}, group: w.Group}
 		if c.size <= 0 {
 			c.size = math.Max(1, (w.Y1-w.Y0)*0.8)
 		}
@@ -216,7 +219,11 @@ type element struct {
 func assemble(number int, w, h float64, chars []char, rules []rule, images []placedImage, tol float64, ocr bool) (model.Page, *model.PageSetup) {
 	page := model.Page{Number: number, Source: model.SourceEmpty, Width: w, Height: h}
 
-	lines := groupLines(chars)
+	gap := segmentGapFactor
+	if ocr {
+		gap = ocrSegmentGap
+	}
+	lines := groupLines(chars, gap)
 	tables := detectTables(rules)
 	lines = assignLines(lines, tables)
 
@@ -282,7 +289,6 @@ func assemble(number int, w, h float64, chars []char, rules []rule, images []pla
 	if len(chars) > 0 || len(tables) > 0 {
 		page.Source = model.SourceText
 	}
-	_ = ocr
 	return page, setup
 }
 

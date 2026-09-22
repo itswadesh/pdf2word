@@ -17,6 +17,7 @@ type char struct {
 	x0, y0, x1, y1 float64
 	size           float64
 	font           fontInfo
+	group          int // OCR paragraph id (0 = unknown)
 }
 
 func (c char) width() float64  { return c.x1 - c.x0 }
@@ -51,6 +52,7 @@ type textLine struct {
 	x1, y1   float64
 	size     float64 // dominant font size
 	bold     bool    // every non-space char bold
+	group    int     // dominant OCR paragraph id (0 = unknown)
 	segments []segment
 }
 
@@ -60,8 +62,10 @@ func (l textLine) width() float64  { return l.x1 - l.x0 }
 // Layout thresholds (multiples of the font size unless noted).
 const (
 	segmentGapFactor = 1.0  // horizontal gap that separates columns on a line
+	ocrSegmentGap    = 1.6  // same for OCR words, whose spacing is noisier
 	wordGapFactor    = 0.25 // gap that separates words when no space char exists
 	paragraphGap     = 1.6  // vertical gap that separates paragraphs
+	ocrParagraphGap  = 2.2  // same, within one OCR-detected paragraph (1.5/2.0 line spacing)
 	sizeChangeRatio  = 0.15
 	heading1Ratio    = 1.6
 	heading2Ratio    = 1.25
@@ -71,8 +75,9 @@ const (
 )
 
 // groupLines clusters characters into lines by vertical overlap and sorts
-// each line by x. Lines are returned top-to-bottom.
-func groupLines(chars []char) []textLine {
+// each line by x. Lines are returned top-to-bottom. gapFactor is the
+// horizontal gap (in font sizes) that splits a line into columns.
+func groupLines(chars []char, gapFactor float64) []textLine {
 	if len(chars) == 0 {
 		return nil
 	}
@@ -106,7 +111,7 @@ func groupLines(chars []char) []textLine {
 		}
 	}
 	for i := range lines {
-		finishLine(&lines[i])
+		finishLine(&lines[i], gapFactor)
 	}
 	sort.SliceStable(lines, func(i, j int) bool { return lines[i].y1 > lines[j].y1 })
 	return lines
@@ -114,7 +119,7 @@ func groupLines(chars []char) []textLine {
 
 // finishLine sorts a line's chars, computes its extent, dominant size, and
 // splits it into segments and runs.
-func finishLine(ln *textLine) {
+func finishLine(ln *textLine, gapFactor float64) {
 	sort.SliceStable(ln.chars, func(i, j int) bool { return ln.chars[i].x0 < ln.chars[j].x0 })
 	sizes := map[float64]int{}
 	ln.bold = true
@@ -143,7 +148,19 @@ func finishLine(ln *textLine) {
 	if ln.size == 0 {
 		ln.size = ln.chars[0].size
 	}
-	ln.segments = splitSegments(ln.chars, ln.size)
+	groups := map[int]int{}
+	for _, c := range ln.chars {
+		if c.group != 0 {
+			groups[c.group]++
+		}
+	}
+	best := 0
+	for g, n := range groups {
+		if n > best {
+			best, ln.group = n, g
+		}
+	}
+	ln.segments = splitSegments(ln.chars, ln.size, gapFactor)
 }
 
 func modeSize(counts map[float64]int) float64 {
@@ -160,7 +177,10 @@ func modeSize(counts map[float64]int) float64 {
 // segment into runs at formatting changes. Spaces are normalised: runs of
 // whitespace collapse, and a space is inserted where glyphs are apart but no
 // space character exists.
-func splitSegments(chars []char, size float64) []segment {
+func splitSegments(chars []char, size, gapFactor float64) []segment {
+	if gapFactor <= 0 {
+		gapFactor = segmentGapFactor
+	}
 	var segs []segment
 	var cur *segment
 	var prev *char
@@ -192,7 +212,7 @@ func splitSegments(chars []char, size float64) []segment {
 		if c.size > 0 {
 			refSize = math.Max(size, c.size)
 		}
-		if cur == nil || gap > segmentGapFactor*refSize {
+		if cur == nil || gap > gapFactor*refSize {
 			// New segment (also the first one).
 			if cur != nil {
 				flushRun(cur, run)
@@ -361,10 +381,18 @@ func canMerge(p *paragraph, ln textLine, ct content) bool {
 		return false
 	}
 	// Baseline-to-baseline distance: wrapped prose sits at ~1.2 x size,
-	// paragraph gaps are clearly larger.
+	// paragraph gaps are clearly larger. When the OCR engine grouped both
+	// lines into one paragraph, trust it up to double spacing.
 	delta := prev.y0 - ln.y0
 	ref := math.Max(prev.size, ln.size)
-	if delta <= 0.3*ref || delta > paragraphGap*ref {
+	gapLimit := paragraphGap
+	if prev.group != 0 && ln.group != 0 {
+		if prev.group != ln.group {
+			return false
+		}
+		gapLimit = ocrParagraphGap
+	}
+	if delta <= 0.3*ref || delta > gapLimit*ref {
 		return false
 	}
 	if math.Abs(ln.size-prev.size) > sizeChangeRatio*prev.size {
