@@ -3,3 +3,6 @@
 *.docx binary
 *.png binary
 *.jpg binary
+*.dll binary
+*.exe binary
+*.traineddata binary

@@ -20,9 +20,19 @@ import (
 	"time"
 
 	"pdf2word/internal/convert"
+	"pdf2word/internal/ocr"
 	"pdf2word/internal/render"
+	"pdf2word/internal/tessbundle"
 	"pdf2word/internal/web"
 )
+
+func init() {
+	// Use the Tesseract runtime shipped inside the executable unless the
+	// user points elsewhere with -tesseract or TESSERACT_CMD.
+	if tessbundle.Available() {
+		ocr.Bundled = tessbundle.Path
+	}
+}
 
 // version is overridable at build time:
 //

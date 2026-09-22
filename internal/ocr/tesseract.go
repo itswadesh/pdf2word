@@ -128,12 +128,19 @@ func exeName() string {
 	return "tesseract"
 }
 
+// Bundled, when set, returns the path of a Tesseract runtime shipped inside
+// the program (see internal/tessbundle). It is consulted after explicit
+// settings and before PATH, so a bundled copy is the default but the user can
+// still point at another installation.
+var Bundled func() (string, error)
+
 // Find locates the Tesseract executable. Resolution order:
 //
 //  1. explicit (a path, or a bare command name looked up on PATH)
 //  2. the TESSERACT_CMD environment variable
-//  3. "tesseract" on PATH
-//  4. well-known installation directories
+//  3. the bundled runtime, if this build has one
+//  4. "tesseract" on PATH
+//  5. well-known installation directories
 //
 // It returns ErrNotFound (possibly wrapped) when nothing is found.
 func Find(explicit string) (string, error) {
@@ -142,6 +149,11 @@ func Find(explicit string) (string, error) {
 	}
 	if env := os.Getenv("TESSERACT_CMD"); env != "" {
 		return resolve(env)
+	}
+	if Bundled != nil {
+		if p, err := Bundled(); err == nil && isFile(p) {
+			return p, nil
+		}
 	}
 	if p, err := exec.LookPath("tesseract"); err == nil {
 		return p, nil

@@ -303,6 +303,24 @@ with drag-and-drop, a progress bar, and the Word file downloaded when done.
   README says to use it on a trusted network and how to open the Windows
   firewall port.
 
+## 11.3 Bundled Tesseract (2026-09-22, user request)
+
+The user copied the exe to another server and got "tesseract executable not
+found". `internal/tessbundle` now embeds (`go:embed`, Windows builds only)
+the runtime closure of the UB Mannheim Tesseract 5.4.0 build: `tesseract.exe`,
+its 26 DLLs and `tessdata/eng.traineddata`, about 27 MB. `libtesseract-5.dll`
+is stripped of 98 MB of DWARF debug sections with `tools/pestrip` (a small
+PE rewriter, since no binutils exist on the box); the closure was computed
+with `tools/peinfo` from PE import tables. ICU, Pango/Cairo/GLib and the
+training tools are not needed at runtime and are omitted.
+
+`tessbundle.Path()` unpacks the tree once per user into
+`%LOCALAPPDATA%\pdf2word\tesseract-<Version>\` (temp dir + rename, stamp
+file) and returns the exe path. `ocr.Find` consults a `Bundled` hook after
+`-tesseract`/`TESSERACT_CMD` and before PATH, so the bundle is the default
+but remains overridable. Non-Windows builds compile the same API with
+`Available() == false`. Licences are listed in `win64/NOTICE.md`.
+
 ## 12. Dependencies
 
 | Module | Purpose | Licence |

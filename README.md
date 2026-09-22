@@ -11,8 +11,9 @@ PDFs on the page that opens, and save the Word files it gives back.
   outlines (for example "Microsoft: Print To PDF").
 - Page breaks are preserved so the Word document follows the PDF's pagination.
 - Live progress: a page counter and bar while it works, per file.
-- One executable, no installer, no cgo. The PDF renderer (PDFium) is built in
-  as WebAssembly; only Tesseract is external.
+- One executable, no installer, no cgo. The PDF renderer (PDFium, as
+  WebAssembly) and, on Windows, the Tesseract OCR runtime with English
+  language data are built in. Copy the exe to another machine and it works.
 
 ## Using the app
 
@@ -71,21 +72,20 @@ or wrap it in a service manager such as NSSM.
 
 | Purpose | Requirement |
 |---|---|
-| Run | Windows, macOS or Linux; a browser |
-| OCR (scanned pages) | Tesseract 4 or 5 on your `PATH`, or pass `-tesseract path\to\tesseract.exe` |
+| Run on Windows x64 | Nothing else: Tesseract 5.4 (English) is inside the exe |
+| Run on macOS / Linux | Tesseract 4 or 5 on your `PATH` (`brew install tesseract`, `apt install tesseract-ocr`) |
 | Build from source | Go 1.27 or newer |
 
-Text-only PDFs convert without Tesseract. If a page needs OCR and Tesseract
-cannot be found, the file fails with a clear message rather than producing an
-empty document.
+On Windows the bundled Tesseract is unpacked on first start to
+`%LOCALAPPDATA%\pdf2word\tesseract-<version>\` (about 27 MB) and reused
+afterwards. To use a different Tesseract, for example one with more
+languages installed, pass `-tesseract path\to\tesseract.exe` or set
+`TESSERACT_CMD`; those always win over the bundled copy. Extra languages for
+the bundled copy: put their `.traineddata` files into that folder's
+`tessdata` subfolder and start with `-lang eng+hin`.
 
-Installing Tesseract:
-
-- **Windows** – installer from <https://github.com/UB-Mannheim/tesseract/wiki>.
-  pdf2word also looks in `%LOCALAPPDATA%\Programs\Tesseract-OCR`,
-  `C:\Program Files\Tesseract-OCR` and `C:\tools\Tesseract-OCR`.
-- **macOS** – `brew install tesseract`
-- **Debian/Ubuntu** – `sudo apt install tesseract-ocr`
+Licences for the bundled runtime are in
+`internal/tessbundle/win64/NOTICE.md`. Text-only PDFs never use Tesseract.
 
 ## Command line
 

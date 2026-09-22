@@ -61,9 +61,40 @@ func isolate(t *testing.T) {
 	t.Helper()
 	t.Setenv("TESSERACT_CMD", "")
 	t.Setenv("PATH", t.TempDir())
-	old := knownDirs
+	oldDirs, oldBundled := knownDirs, Bundled
 	knownDirs = nil
-	t.Cleanup(func() { knownDirs = old })
+	Bundled = nil
+	t.Cleanup(func() { knownDirs, Bundled = oldDirs, oldBundled })
+}
+
+func TestFind_BundledBeatsPathButNotEnv(t *testing.T) {
+	isolate(t)
+	bundled := stubExe(t, t.TempDir(), "tesseract")
+	Bundled = func() (string, error) { return bundled, nil }
+
+	pathDir := t.TempDir()
+	onPath := stubExe(t, pathDir, "tesseract")
+	t.Setenv("PATH", pathDir)
+	if got, err := Find(""); err != nil || got != bundled {
+		t.Fatalf("Find(\"\") = %q, %v; want bundled %q over PATH %q", got, err, bundled, onPath)
+	}
+
+	envExe := stubExe(t, t.TempDir(), "tess-env")
+	t.Setenv("TESSERACT_CMD", envExe)
+	if got, err := Find(""); err != nil || got != envExe {
+		t.Fatalf("Find(\"\") = %q, %v; TESSERACT_CMD must override the bundle", got, err)
+	}
+}
+
+func TestFind_BundleFailureFallsThrough(t *testing.T) {
+	isolate(t)
+	Bundled = func() (string, error) { return "", errors.New("unpack failed") }
+	pathDir := t.TempDir()
+	onPath := stubExe(t, pathDir, "tesseract")
+	t.Setenv("PATH", pathDir)
+	if got, err := Find(""); err != nil || got != onPath {
+		t.Fatalf("Find(\"\") = %q, %v; want PATH copy when the bundle fails", got, err)
+	}
 }
 
 func TestFind_ExplicitPath(t *testing.T) {

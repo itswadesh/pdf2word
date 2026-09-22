@@ -166,6 +166,16 @@
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
+  .notice {
+    margin: -4px auto 0;
+    max-width: 34em;
+    text-align: center;
+    color: var(--alert);
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+  .notice.hidden { display: none; }
+
   .files { list-style: none; margin: 36px 0 0; padding: 0; }
   .file {
     border-top: 1px solid var(--desk-deep);
@@ -245,8 +255,9 @@
       </span>
     </button>
     <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
-    <p id="sheet-hint" class="visually-hidden">Press Enter to choose files, or drag PDF files anywhere onto this page.</p>
+    <p id="sheet-hint" class="visually-hidden">Press Enter to choose files, or drag PDF files anywhere onto this page. Only PDF files are accepted.</p>
   </div>
+  <p class="notice hidden" id="notice" role="status" aria-live="polite"></p>
 
   <ol class="files" id="files" aria-live="polite"></ol>
 </main>
@@ -274,8 +285,27 @@
   document.addEventListener('drop', (e) => { e.preventDefault(); endDrag(); queueFiles(e.dataTransfer.files); });
   function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); sheet.classList.remove('over'); }
 
+  // Only PDFs are accepted. Anything else is skipped with a short notice
+  // (the server checks the file signature again on upload).
+  function isPDF(f) {
+    return /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
+  }
   function queueFiles(list) {
-    for (const f of Array.from(list)) upload(f);
+    const skipped = [];
+    for (const f of Array.from(list)) {
+      if (isPDF(f)) upload(f); else skipped.push(f.name);
+    }
+    showNotice(skipped.length
+      ? 'Only PDF files are accepted. Skipped: ' + skipped.join(', ')
+      : '');
+  }
+  let noticeTimer = null;
+  function showNotice(text) {
+    const n = $('notice');
+    n.textContent = text;
+    n.classList.toggle('hidden', !text);
+    clearTimeout(noticeTimer);
+    if (text) noticeTimer = setTimeout(() => n.classList.add('hidden'), 8000);
   }
 
   // --- uploading -------------------------------------------------------------
