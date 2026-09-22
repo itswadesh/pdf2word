@@ -18,10 +18,12 @@ const DefaultLang = "eng"
 // ErrNotFound is returned by Find when no Tesseract executable can be located.
 var ErrNotFound = errors.New("tesseract executable not found")
 
-// Tesseract runs the tesseract command-line program.
+// Tesseract runs the tesseract command-line program. It is safe for
+// concurrent use; each Recognize call is an independent process.
 type Tesseract struct {
-	Path string // executable path; empty means "tesseract" on PATH
-	Lang string // language(s), e.g. "eng" or "eng+deu"; empty means DefaultLang
+	Path    string // executable path; empty means "tesseract" on PATH
+	Lang    string // language(s), e.g. "eng" or "eng+deu"; empty means DefaultLang
+	Threads int    // OpenMP threads per process (OMP_THREAD_LIMIT); 0 leaves the default
 }
 
 // Name implements Engine.
@@ -81,6 +83,9 @@ func (t *Tesseract) Recognize(ctx context.Context, img []byte, ext string) (stri
 	}
 
 	cmd := exec.CommandContext(ctx, t.path(), t.args(file)...)
+	if t.Threads > 0 {
+		cmd.Env = append(os.Environ(), fmt.Sprintf("OMP_THREAD_LIMIT=%d", t.Threads))
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

@@ -59,6 +59,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		tess        = fs.String("tesseract", "", "path to the tesseract executable (default: auto-detect)")
 		minText     = fs.Int("min-text", convert.DefaultMinTextChars, "text-layer characters below which a page counts as scanned")
 		dpi         = fs.Int("dpi", render.DefaultDPI, "resolution used to render pages before OCR")
+		jobs        = fs.Int("jobs", convert.DefaultJobs(), "pages to OCR at the same time")
 		verbose     = fs.Bool("v", false, "verbose: one progress line per page plus diagnostics")
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator (command line)")
 		addr        = fs.String("addr", "127.0.0.1:0", "address for the browser page (0 picks a free port)")
@@ -84,6 +85,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	base := convert.Options{
 		MinTextChars:  *minText,
 		DPI:           *dpi,
+		Jobs:          *jobs,
 		Lang:          *lang,
 		TesseractPath: *tess,
 	}

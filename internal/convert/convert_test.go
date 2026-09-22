@@ -4,10 +4,13 @@ import (
 	"archive/zip"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"pdf2word/internal/model"
 	"pdf2word/internal/ocr"
@@ -292,6 +295,95 @@ func TestBuildDocument_HonoursCancelledContext(t *testing.T) {
 	cancel()
 	if _, _, err := BuildDocument(ctx, fixture("text.pdf"), Options{OpenImages: opener(&fakeImages{})}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+// slowEngine returns the image payload as text after a delay and records how
+// many Recognize calls overlapped.
+type slowEngine struct {
+	mu      sync.Mutex
+	active  int
+	maxSeen int
+	delay   time.Duration
+}
+
+func (e *slowEngine) Name() string { return "slow" }
+func (e *slowEngine) Recognize(_ context.Context, img []byte, _ string) (string, error) {
+	e.mu.Lock()
+	e.active++
+	if e.active > e.maxSeen {
+		e.maxSeen = e.active
+	}
+	e.mu.Unlock()
+	time.Sleep(e.delay)
+	e.mu.Lock()
+	e.active--
+	e.mu.Unlock()
+	return string(img), nil
+}
+
+// pageTaggedImages returns one image per page whose bytes name the page, so
+// results can be checked against the page they belong to.
+type pageTaggedImages struct{}
+
+func (pageTaggedImages) PageImages(page int) ([]pdfimage.Image, error) {
+	return []pdfimage.Image{{Data: []byte(fmt.Sprintf("text of page %d", page)), Ext: "png", Width: 10, Height: 10}}, nil
+}
+func (pageTaggedImages) Close() error { return nil }
+
+func TestBuildDocument_OCRRunsPagesInParallelAndKeepsOrder(t *testing.T) {
+	eng := &slowEngine{delay: 120 * time.Millisecond}
+	var events []Progress
+	start := time.Now()
+	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{
+		OCR:        OCRForce,
+		Jobs:       2,
+		Engine:     eng,
+		OpenImages: func(string) (ImageSource, error) { return pageTaggedImages{}, nil },
+		OnProgress: func(p Progress) { events = append(events, p) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	elapsed := time.Since(start)
+	if eng.maxSeen != 2 {
+		t.Errorf("max concurrent OCR calls = %d, want 2", eng.maxSeen)
+	}
+	if elapsed > 220*time.Millisecond {
+		t.Errorf("two 120ms pages took %v; they should overlap", elapsed)
+	}
+	for i, p := range doc.Pages {
+		want := fmt.Sprintf("text of page %d", i+1)
+		if p.Source != model.SourceOCR || pageText(p) != want {
+			t.Errorf("page %d = %+v, want OCR text %q", i+1, p, want)
+		}
+	}
+	if rep.OCRPages != 2 || len(events) != 2 {
+		t.Fatalf("report = %+v events = %+v", rep, events)
+	}
+	for i, e := range events {
+		if e.Done != i+1 || e.Total != 2 || !e.OCR {
+			t.Errorf("event %d = %+v; Done must count up regardless of page order", i, e)
+		}
+	}
+}
+
+func TestBuildDocument_ParallelMissingEngineStillFailsFast(t *testing.T) {
+	t.Setenv("TESSERACT_CMD", "")
+	_, _, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{
+		OCR:           OCRForce,
+		Jobs:          4,
+		TesseractPath: filepath.Join(t.TempDir(), "nope-tesseract"),
+		OpenImages:    func(string) (ImageSource, error) { return pageTaggedImages{}, nil },
+	})
+	if !errors.Is(err, ocr.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDefaultJobs(t *testing.T) {
+	if n := DefaultJobs(); n < 1 || n > 8 {
+		t.Fatalf("DefaultJobs() = %d, want 1..8", n)
 	}
 }
 

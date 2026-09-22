@@ -4,10 +4,13 @@ package convert
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"pdf2word/internal/docx"
 	"pdf2word/internal/model"
@@ -47,15 +50,30 @@ func ParseOCRMode(s string) (OCRMode, error) {
 // as scanned in OCRAuto mode.
 const DefaultMinTextChars = 20
 
+// DefaultJobs is the default number of pages OCR'd concurrently: one
+// Tesseract process per CPU, capped so a big machine does not thrash.
+func DefaultJobs() int {
+	n := runtime.NumCPU()
+	if n > 8 {
+		n = 8
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
 // ImageSource yields the images to OCR for a page (1-based). The default is
 // a full-page render (render.Renderer); pdfimage.Reader (embedded images
-// only) is the fallback; tests supply fakes.
+// only) is the fallback; tests supply fakes. Implementations must be safe
+// for concurrent use.
 type ImageSource interface {
 	PageImages(page int) ([]pdfimage.Image, error)
 	Close() error
 }
 
-// Progress is reported after each page has been resolved.
+// Progress is reported after each page has been resolved. Pages that need
+// OCR finish in parallel, so Page is not necessarily increasing; Done is.
 type Progress struct {
 	Done   int // pages finished so far (1..Total)
 	Total  int
@@ -70,21 +88,24 @@ type Options struct {
 	MinTextChars int    // default DefaultMinTextChars
 	Lang         string // Tesseract language(s); empty means ocr.DefaultLang
 	DPI          int    // resolution for rendering pages before OCR; default render.DefaultDPI
+	Jobs         int    // pages OCR'd concurrently; default DefaultJobs()
 
 	// TesseractPath is an explicit tesseract executable; empty means
 	// auto-detect (see ocr.Find).
 	TesseractPath string
 	// Engine overrides Tesseract entirely. When nil, a Tesseract engine is
-	// created lazily the first time a page needs OCR.
+	// created lazily the first time a page needs OCR. Must be safe for
+	// concurrent use when Jobs > 1.
 	Engine ocr.Engine
 	// OpenImages overrides how page images are obtained. The default renders
 	// each page with PDFium and falls back to embedded images if rendering
 	// is unavailable.
 	OpenImages func(path string) (ImageSource, error)
 
-	// OnProgress, if set, is called once per page as it completes.
+	// OnProgress, if set, is called once per page as it completes (from the
+	// calling goroutine only).
 	OnProgress func(Progress)
-	// Logf, if set, receives verbose diagnostics.
+	// Logf, if set, receives verbose diagnostics (may be called concurrently).
 	Logf func(format string, args ...any)
 }
 
@@ -97,6 +118,9 @@ func (o *Options) applyDefaults() {
 	}
 	if o.DPI <= 0 {
 		o.DPI = render.DefaultDPI
+	}
+	if o.Jobs <= 0 {
+		o.Jobs = DefaultJobs()
 	}
 	if o.OnProgress == nil {
 		o.OnProgress = func(Progress) {}
@@ -172,18 +196,12 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 	}
 	rep.Pages = len(doc.Pages)
 
-	s := &session{opts: opts, in: in, rep: &rep}
+	s := &session{opts: opts, in: in}
 	defer s.close()
 
-	for i := range doc.Pages {
-		if err := ctx.Err(); err != nil {
-			return nil, rep, err
-		}
+	done := 0
+	finish := func(i int, ocrRan bool) {
 		page := &doc.Pages[i]
-		ocrRan, err := s.processPage(ctx, page)
-		if err != nil {
-			return nil, rep, err
-		}
 		switch page.Source {
 		case model.SourceText:
 			rep.TextPages++
@@ -192,7 +210,32 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 		default:
 			rep.EmptyPages++
 		}
-		opts.OnProgress(Progress{Done: i + 1, Total: rep.Pages, Page: page.Number, Source: page.Source, OCR: ocrRan})
+		done++
+		opts.OnProgress(Progress{Done: done, Total: rep.Pages, Page: page.Number, Source: page.Source, OCR: ocrRan})
+	}
+
+	// Pass 1: settle pages that do not need OCR right away.
+	var todo []int
+	for i := range doc.Pages {
+		if err := ctx.Err(); err != nil {
+			return nil, rep, err
+		}
+		page := &doc.Pages[i]
+		if s.needsOCR(page, &rep) {
+			todo = append(todo, i)
+			continue
+		}
+		finish(i, false)
+	}
+
+	// Pass 2: OCR the remaining pages, several at a time.
+	if len(todo) > 0 {
+		if err := s.ocrPages(ctx, doc, todo, &rep, finish); err != nil {
+			return nil, rep, err
+		}
+	}
+	if w := s.imagesOpenWarning(); w != "" {
+		rep.warnf("%s", w)
 	}
 	if s.imagesFailedPages > 0 {
 		rep.warnf("%d page(s) could not be OCR'd because page images were unavailable", s.imagesFailedPages)
@@ -204,12 +247,16 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 type session struct {
 	opts Options
 	in   string
-	rep  *Report
 
-	images            ImageSource
-	imagesErr         error // set once if the image source could not be opened
-	imagesFailedPages int   // pages skipped because of imagesErr
-	engine            ocr.Engine
+	imgOnce   sync.Once
+	images    ImageSource
+	imagesErr error // set once if the image source could not be opened
+
+	engOnce sync.Once
+	engine  ocr.Engine
+	engErr  error
+
+	imagesFailedPages int
 }
 
 func (s *session) close() {
@@ -218,107 +265,195 @@ func (s *session) close() {
 	}
 }
 
-// processPage applies the OCR policy to one page, mutating it in place.
-// It reports whether OCR was attempted. Only a missing/unusable OCR engine is
-// a hard error; everything else becomes a warning.
-func (s *session) processPage(ctx context.Context, page *model.Page) (bool, error) {
+// needsOCR applies the OCR policy to a page's text layer.
+func (s *session) needsOCR(page *model.Page, rep *Report) bool {
 	chars := page.TextChars()
 	hasText := chars >= s.opts.MinTextChars
-
 	switch s.opts.OCR {
 	case OCROff:
 		if chars == 0 {
-			s.rep.warnf("page %d: no text layer and OCR is off", page.Number)
+			rep.warnf("page %d: no text layer and OCR is off", page.Number)
 		}
-		return false, nil
-	case OCRAuto:
-		if hasText {
-			return false, nil
-		}
+		return false
 	case OCRForce:
-		// always try
+		return true
+	default:
+		return !hasText
 	}
+}
+
+// pageResult is what one OCR worker produces for one page.
+type pageResult struct {
+	idx    int
+	blocks []model.Block
+	ocrRan bool
+	warns  []string
+	// imagesUnavailable marks pages skipped because the image source never
+	// opened; they are counted once at the end instead of warned per page.
+	imagesUnavailable bool
+	err               error // hard error (engine missing): aborts the conversion
+}
+
+// ocrPages runs OCR for the given page indexes with opts.Jobs workers and
+// applies the results in completion order.
+func (s *session) ocrPages(ctx context.Context, doc *model.Document, todo []int, rep *Report, finish func(int, bool)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	results := make(chan pageResult)
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, s.opts.Jobs)
+	go func() {
+		for _, idx := range todo {
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				// Emit a cancelled result so the receiver still sees every page.
+				results <- pageResult{idx: idx, err: ctx.Err()}
+				continue
+			}
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				results <- s.ocrPage(ctx, &doc.Pages[idx])
+			}(idx)
+		}
+		wg.Wait()
+		close(results)
+	}()
+
+	var firstErr error
+	for r := range results {
+		if r.err != nil {
+			if firstErr == nil {
+				firstErr = r.err
+				cancel()
+			}
+			continue
+		}
+		if firstErr != nil {
+			continue // draining
+		}
+		page := &doc.Pages[r.idx]
+		if r.imagesUnavailable {
+			s.imagesFailedPages++
+		}
+		for _, w := range r.warns {
+			rep.warnf("%s", w)
+		}
+		if len(r.blocks) > 0 {
+			page.Blocks = r.blocks
+			page.Source = model.SourceOCR
+		}
+		finish(r.idx, r.ocrRan)
+	}
+	return firstErr
+}
+
+// ocrPage renders/extracts a page's images and recognises them. It never
+// mutates the page; the caller applies the result.
+func (s *session) ocrPage(ctx context.Context, page *model.Page) pageResult {
+	res := pageResult{idx: page.Number - 1}
+	hasText := page.TextChars() >= s.opts.MinTextChars
 
 	imgs, err := s.pageImages(page.Number)
 	if err != nil {
-		if s.imagesErr != nil {
-			// Reported once when it happened; just count the affected pages.
-			s.imagesFailedPages++
+		if errors.Is(err, errImagesUnavailable) {
+			res.imagesUnavailable = true
 		} else {
-			s.rep.warnf("page %d: %v", page.Number, err)
+			res.warns = append(res.warns, fmt.Sprintf("page %d: %v", page.Number, err))
 		}
-		return false, nil
+		return res
 	}
 	if len(imgs) == 0 {
 		if !hasText {
-			s.rep.warnf("page %d: no text layer and no images to OCR", page.Number)
+			res.warns = append(res.warns, fmt.Sprintf("page %d: no text layer and no images to OCR", page.Number))
 		}
-		return false, nil
+		return res
 	}
 
 	eng, err := s.ensureEngine(ctx)
 	if err != nil {
-		return false, fmt.Errorf("page %d needs OCR but %w; install Tesseract, pass -tesseract, or use -ocr off", page.Number, err)
+		res.err = fmt.Errorf("page %d needs OCR but %w; install Tesseract, pass -tesseract, or use -ocr off", page.Number, err)
+		return res
 	}
 
 	s.opts.Logf("page %d: running %s on %d image(s)", page.Number, eng.Name(), len(imgs))
-	var blocks []model.Block
+	res.ocrRan = true
 	for i, img := range imgs {
+		if ctx.Err() != nil {
+			res.err = ctx.Err()
+			return res
+		}
 		text, err := eng.Recognize(ctx, img.Data, img.Ext)
 		if err != nil {
-			s.rep.warnf("page %d: image %d: OCR failed: %v", page.Number, i+1, err)
+			if ctx.Err() != nil {
+				res.err = ctx.Err()
+				return res
+			}
+			res.warns = append(res.warns, fmt.Sprintf("page %d: image %d: OCR failed: %v", page.Number, i+1, err))
 			continue
 		}
-		blocks = append(blocks, ocr.TextToBlocks(text)...)
+		res.blocks = append(res.blocks, ocr.TextToBlocks(text)...)
 	}
-	if len(blocks) == 0 {
-		if !hasText {
-			s.rep.warnf("page %d: OCR produced no text", page.Number)
-		}
-		return true, nil
+	if len(res.blocks) == 0 && !hasText {
+		res.warns = append(res.warns, fmt.Sprintf("page %d: OCR produced no text", page.Number))
 	}
-	page.Blocks = blocks
-	page.Source = model.SourceOCR
-	return true, nil
+	return res
 }
 
-// pageImages opens the image source on first use. If opening fails, the
-// failure is reported once and remembered so every later page fails fast.
+var errImagesUnavailable = errors.New("page images unavailable")
+
+// pageImages opens the image source on first use (once, even under
+// concurrency). If opening fails, later calls fail fast with
+// errImagesUnavailable and the failure is reported a single time.
 func (s *session) pageImages(page int) ([]pdfimage.Image, error) {
-	if s.images == nil && s.imagesErr == nil {
+	s.imgOnce.Do(func() {
 		src, err := s.opts.OpenImages(s.in)
 		if err != nil {
-			s.imagesErr = fmt.Errorf("cannot get page images: %w", err)
-			s.rep.warnf("%v; pages that need OCR will be left empty", s.imagesErr)
-		} else {
-			s.images = src
+			s.imagesErr = fmt.Errorf("cannot get page images: %w; pages that need OCR will be left empty", err)
+			return
 		}
-	}
+		s.images = src
+	})
 	if s.imagesErr != nil {
-		return nil, s.imagesErr
+		return nil, errImagesUnavailable
 	}
 	return s.images.PageImages(page)
 }
 
+// imagesOpenWarning returns the one-time open failure, if any.
+func (s *session) imagesOpenWarning() string {
+	if s.imagesErr != nil {
+		return s.imagesErr.Error()
+	}
+	return ""
+}
+
 func (s *session) ensureEngine(ctx context.Context) (ocr.Engine, error) {
-	if s.engine != nil {
-		return s.engine, nil
-	}
-	if s.opts.Engine != nil {
-		s.engine = s.opts.Engine
-		return s.engine, nil
-	}
-	path, err := ocr.Find(s.opts.TesseractPath)
-	if err != nil {
-		return nil, err
-	}
-	t := &ocr.Tesseract{Path: path, Lang: s.opts.Lang}
-	if err := t.Available(ctx); err != nil {
-		return nil, fmt.Errorf("tesseract is not runnable: %w", err)
-	}
-	s.opts.Logf("using %s (lang %s)", path, orDefault(s.opts.Lang, ocr.DefaultLang))
-	s.engine = t
-	return t, nil
+	s.engOnce.Do(func() {
+		if s.opts.Engine != nil {
+			s.engine = s.opts.Engine
+			return
+		}
+		path, err := ocr.Find(s.opts.TesseractPath)
+		if err != nil {
+			s.engErr = err
+			return
+		}
+		t := &ocr.Tesseract{Path: path, Lang: s.opts.Lang}
+		if s.opts.Jobs > 1 {
+			t.Threads = 1 // one process per page; do not also multithread each
+		}
+		if err := t.Available(ctx); err != nil {
+			s.engErr = fmt.Errorf("tesseract is not runnable: %w", err)
+			return
+		}
+		s.opts.Logf("using %s (lang %s, %d parallel page(s))", path, orDefault(s.opts.Lang, ocr.DefaultLang), s.opts.Jobs)
+		s.engine = t
+	})
+	return s.engine, s.engErr
 }
 
 func orDefault(v, def string) string {
