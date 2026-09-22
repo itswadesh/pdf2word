@@ -69,6 +69,7 @@ pdf2word [flags] input.pdf [output.docx]
   -lang string       Tesseract language(s), e.g. eng or eng+deu (default "eng")
   -tesseract string  path to the tesseract executable (default: auto-detect)
   -dpi int           resolution used to render pages before OCR (default 300)
+  -jobs int          pages to OCR at the same time (default: CPUs, at most 8)
   -min-text int      text-layer characters below which a page counts as scanned (default 20)
   -v                 verbose: one progress line per page plus diagnostics
   -no-progress       disable the progress indicator
@@ -95,9 +96,10 @@ Exit codes: `0` success, `1` conversion failed, `2` bad usage.
    unavailable, the images embedded in the page are used instead.
 3. Blocks are written as Word paragraphs; a page break separates pages.
 
-Speed on a typical office PC: rendering takes about 0.1 s per page and OCR
-1 to 2 s per page, so a 250-page scanned document takes several minutes. Text
-PDFs convert in seconds.
+Speed: rendering takes about 0.1 s per page and OCR 1 to 2 s per page per
+process. Pages needing OCR are processed several at a time (`-jobs`, default
+one per CPU up to 8), so a 250-page scanned document takes a couple of
+minutes on a multi-core PC. Text PDFs convert in seconds.
 
 ## Limitations
 

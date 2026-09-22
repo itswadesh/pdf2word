@@ -245,6 +245,17 @@ A 247-page "Microsoft: Print To PDF" tender document exposed three gaps:
 `Progress` gained a `Done` counter so indicators do not depend on pages
 completing in order.
 
+### 11.1.1 Parallel OCR
+
+Sequential OCR of the 247-page file measured about 2 s per page (8 minutes
+total) on a 16-core machine where Tesseract was the bottleneck. `BuildDocument`
+now settles text-layer pages first, then OCRs the remaining pages with
+`Options.Jobs` workers (default `min(NumCPU, 8)`, CLI `-jobs`). Each worker
+renders (the renderer serialises internally; rendering is cheap) and runs its
+own Tesseract process with `OMP_THREAD_LIMIT=1`. Results are applied in
+completion order; `Progress.Done` counts up while `Progress.Page` may not.
+A missing engine still aborts the whole conversion and cancels other workers.
+
 ## 11.2 App mode (2026-09-22, user request)
 
 The user asked for a double-click experience instead of a terminal: a page
