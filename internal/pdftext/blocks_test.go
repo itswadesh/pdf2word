@@ -30,7 +30,7 @@ func concat(parts ...[]Glyph) []Glyph {
 func texts(blocks []model.Block) []string {
 	out := make([]string, 0, len(blocks))
 	for _, b := range blocks {
-		out = append(out, b.Text)
+		out = append(out, b.Text())
 	}
 	return out
 }
@@ -130,10 +130,10 @@ func TestBuildBlocks_HeadingLevelsByFontSize(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 blocks, got %d: %q", len(got), texts(got))
 	}
-	if got[0].Kind != model.Heading || got[0].Level != 1 || got[0].Text != "Title" {
+	if got[0].Kind != model.Heading || got[0].Level != 1 || got[0].Text() != "Title" {
 		t.Errorf("block 0 = %+v, want Heading level 1 'Title'", got[0])
 	}
-	if got[1].Kind != model.Heading || got[1].Level != 2 || got[1].Text != "Subtitle" {
+	if got[1].Kind != model.Heading || got[1].Level != 2 || got[1].Text() != "Subtitle" {
 		t.Errorf("block 1 = %+v, want Heading level 2 'Subtitle'", got[1])
 	}
 	if got[2].Kind != model.Paragraph || got[2].Level != 0 {
@@ -182,7 +182,7 @@ func TestBuildBlocks_OrderIndependent(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("shuffled input produced %q, ordered produced %q", texts(got), texts(want))
 	}
-	if want[0].Text != "Title" || want[1].Text != "alpha beta gamma delta epsilon zeta eta theta" || want[2].Text != "new paragraph here" {
+	if want[0].Text() != "Title" || want[1].Text() != "alpha beta gamma delta epsilon zeta eta theta" || want[2].Text() != "new paragraph here" {
 		t.Fatalf("unexpected block texts: %q", texts(want))
 	}
 }

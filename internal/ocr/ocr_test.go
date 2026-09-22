@@ -33,9 +33,9 @@ func TestTextToBlocks(t *testing.T) {
 			var texts []string
 			for _, b := range got {
 				if b.Kind != model.Paragraph {
-					t.Errorf("block %q has kind %v, want paragraph", b.Text, b.Kind)
+					t.Errorf("block %q has kind %v, want paragraph", b.Text(), b.Kind)
 				}
-				texts = append(texts, b.Text)
+				texts = append(texts, b.Text())
 			}
 			if !reflect.DeepEqual(texts, tc.want) {
 				t.Fatalf("got %q, want %q", texts, tc.want)

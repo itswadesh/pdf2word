@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
@@ -49,7 +50,128 @@ func main() {
 	if err := os.WriteFile(filepath.Join(outDir, "badannot.pdf"), buildBadAnnotPDF(), 0o644); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("wrote text.pdf, scanned.pdf and badannot.pdf in", outDir)
+	if err := os.WriteFile(filepath.Join(outDir, "layout.pdf"), buildLayoutPDF(), 0o644); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("wrote text.pdf, scanned.pdf, badannot.pdf and layout.pdf in", outDir)
+}
+
+// helveticaWidth returns the advance of s in points at the given size using
+// the Helvetica metrics above (good enough to right-align and centre text).
+func helveticaWidth(s string, size float64) float64 {
+	w := 0.0
+	for _, r := range s {
+		if r >= 32 && r <= 126 {
+			w += float64(helveticaWidths[r-32])
+		} else {
+			w += 556
+		}
+	}
+	return w / 1000 * size
+}
+
+// buildLayoutPDF imitates a government form (landscape A4): a centred bold
+// title, an image, a key/value line with the value flush right, a wrapped
+// body paragraph, a short-line list, a ruled 3x2 table drawn with stroked
+// lines, and a footer with items at both edges. It drives the layout tests.
+func buildLayoutPDF() []byte {
+	const pageW, pageH = 842.0, 595.0
+	const left, right = 36.0, 806.0
+	var b bytes.Buffer
+	var offsets []int
+	b.WriteString("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+	add := func(body string) {
+		offsets = append(offsets, b.Len())
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", len(offsets), body)
+	}
+	var widths bytes.Buffer
+	for i, w := range helveticaWidths {
+		if i > 0 {
+			widths.WriteByte(' ')
+		}
+		fmt.Fprintf(&widths, "%d", w)
+	}
+	fontDict := func(base string) string {
+		return fmt.Sprintf("<< /Type /Font /Subtype /Type1 /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [%s] >>", base, widths.String())
+	}
+
+	// 60x60 gray image with a black square in the middle.
+	const iw, ih = 60, 60
+	pix := make([]byte, iw*ih)
+	for y := 0; y < ih; y++ {
+		for x := 0; x < iw; x++ {
+			v := byte(255)
+			if x > 15 && x < 45 && y > 15 && y < 45 {
+				v = 0
+			}
+			pix[y*iw+x] = v
+		}
+	}
+	imgObj := fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8 /Length %d >>\nstream\n%s\nendstream", iw, ih, len(pix), pix)
+
+	var c strings.Builder
+	pdfEscape := strings.NewReplacer(`\`, `\\`, "(", `\(`, ")", `\)`)
+	text := func(font string, size, x, y float64, s string) {
+		fmt.Fprintf(&c, "BT /%s %.1f Tf %.2f %.2f Td (%s) Tj ET\n", font, size, x, y, pdfEscape.Replace(s))
+	}
+	centered := func(font string, size, y float64, s string) {
+		text(font, size, (pageW-helveticaWidth(s, size))/2, y, s)
+	}
+	flushRight := func(font string, size, y float64, s string) {
+		text(font, size, right-helveticaWidth(s, size), y, s)
+	}
+	hline := func(x1, x2, y float64) { fmt.Fprintf(&c, "%.2f %.2f m %.2f %.2f l S\n", x1, y, x2, y) }
+	vline := func(x, y1, y2 float64) { fmt.Fprintf(&c, "%.2f %.2f m %.2f %.2f l S\n", x, y1, x, y2) }
+
+	// Image top centre, title below it.
+	fmt.Fprintf(&c, "q 60 0 0 60 %.2f 520 cm /Im1 Do Q\n", (pageW-60)/2)
+	centered("F2", 14, 495, "Form No. 25")
+	centered("F1", 12, 475, "Nil Certificate Of Encumbrance On Property")
+	// Key/value line: left label, value flush right.
+	text("F1", 9, left, 450, "Application No : 2026039031285")
+	flushRight("F1", 9, 450, "Certificate No : EC0392026027049")
+	// Wrapped body paragraph (two long lines, left aligned).
+	text("F1", 9, left, 425, "Having applied to me for a certificate giving particulars of registered acts and encumbrances, if any in respect of the")
+	text("F1", 9, left, 413, "undermentioned property, I hereby certify that a search has been made in the books and indexes for the said property.")
+	// Short-line list: each line ends well before the right edge.
+	text("F1", 9, left, 390, "a) The applicant has not undertaken the search himself.")
+	text("F1", 9, left, 378, "b) The department will not be responsible for errors.")
+	// Ruled table 3 columns x 2 rows: x 36..336, y 300..340 (rows at 320).
+	fmt.Fprintf(&c, "0.5 w\n")
+	for _, x := range []float64{36, 136, 236, 336} {
+		vline(x, 300, 340)
+	}
+	for _, y := range []float64{340, 320, 300} {
+		hline(36, 136, y)
+		hline(136, 236, y)
+		hline(236, 336, y)
+	}
+	text("F2", 9, 42, 327, "Sl. No.")
+	text("F2", 9, 142, 327, "Village Name")
+	text("F2", 9, 242, 327, "Area")
+	text("F1", 9, 42, 307, "1")
+	text("F1", 9, 142, 307, "Bhanapur - 42")
+	text("F1", 9, 242, 307, "0.0186 Hectare")
+	// Footer: left and right items on one line.
+	text("F1", 9, left, 40, "Regn. Office: KATAKA")
+	flushRight("F1", 9, 40, "Page 1 of 1")
+	content := c.String()
+
+	add("<< /Type /Catalog /Pages 2 0 R >>")
+	add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	add(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.0f %.0f] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 7 0 R >>", pageW, pageH))
+	add(fontDict("Helvetica"))
+	add(fontDict("Helvetica-Bold"))
+	add(imgObj)
+	add(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
+
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(offsets)+1)
+	for _, o := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", o)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets)+1, xref)
+	return b.Bytes()
 }
 
 // buildBadAnnotPDF reproduces a real-world file from "Microsoft: Print To

@@ -229,10 +229,10 @@ func classify(text string, size, body float64) model.Block {
 	if body > 0 && utf8.RuneCountInString(text) <= maxHeadingChars {
 		switch ratio := size / body; {
 		case ratio >= heading1Ratio:
-			return model.Block{Kind: model.Heading, Level: 1, Text: text}
+			return model.HeadingBlock(1, text)
 		case ratio >= heading2Ratio:
-			return model.Block{Kind: model.Heading, Level: 2, Text: text}
+			return model.HeadingBlock(2, text)
 		}
 	}
-	return model.Block{Kind: model.Paragraph, Text: text}
+	return model.Para(text)
 }

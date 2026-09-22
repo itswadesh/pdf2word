@@ -35,7 +35,7 @@ func TextToBlocks(text string) []model.Block {
 	var cur strings.Builder
 	flush := func() {
 		if cur.Len() > 0 {
-			blocks = append(blocks, model.Block{Kind: model.Paragraph, Text: cur.String()})
+			blocks = append(blocks, model.Para(cur.String()))
 			cur.Reset()
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	"pdf2word/internal/model"
 	"pdf2word/internal/ocr"
 	"pdf2word/internal/pdfimage"
+	"pdf2word/internal/pdflayout"
 	"pdf2word/internal/pdftext"
 	"pdf2word/internal/render"
 )
@@ -187,12 +188,9 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 	var rep Report
 
 	opts.Logf("reading text layer of %s", in)
-	doc, warns, err := pdftext.Extract(in)
+	doc, err := extractText(in, &rep, opts.Logf)
 	if err != nil {
 		return nil, rep, err
-	}
-	for _, w := range warns {
-		rep.warnf("%s", w)
 	}
 	rep.Pages = len(doc.Pages)
 
@@ -241,6 +239,28 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 		rep.warnf("%d page(s) could not be OCR'd because page images were unavailable", s.imagesFailedPages)
 	}
 	return doc, rep, nil
+}
+
+// extractText reads the text layer with layout via PDFium and falls back to
+// the plain extractor if PDFium cannot open the file.
+func extractText(in string, rep *Report, logf func(string, ...any)) (*model.Document, error) {
+	doc, warns, err := pdflayout.Extract(in)
+	if err == nil {
+		for _, w := range warns {
+			rep.warnf("%s", w)
+		}
+		return doc, nil
+	}
+	logf("layout extraction failed (%v); falling back to plain text extraction", err)
+	plain, pwarns, perr := pdftext.Extract(in)
+	if perr != nil {
+		return nil, fmt.Errorf("%w (layout extractor: %v)", perr, err)
+	}
+	rep.warnf("layout could not be read (%v); text extracted without formatting", err)
+	for _, w := range pwarns {
+		rep.warnf("%s", w)
+	}
+	return plain, nil
 }
 
 // session holds lazily-created resources for one conversion.

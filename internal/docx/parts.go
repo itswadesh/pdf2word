@@ -1,18 +1,40 @@
 package docx
 
-// Static OOXML package parts. Only the main document part is generated
-// dynamically; everything else is fixed boilerplate that Word requires.
+import (
+	"fmt"
+	"strings"
+)
 
-const contentTypesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+// Static OOXML package parts. Only the main document part and the parts
+// that list images are generated dynamically.
+
+func contentTypesXML(imageExts []string) string {
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+`)
+	for _, ext := range imageExts {
+		fmt.Fprintf(&sb, "  <Default Extension=%q ContentType=%q/>\n", ext, imageContentType(ext))
+	}
+	sb.WriteString(`  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
   <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>
-`
+`)
+	return sb.String()
+}
+
+func imageContentType(ext string) string {
+	switch ext {
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	default:
+		return "image/png"
+	}
+}
 
 const rootRelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -22,11 +44,19 @@ const rootRelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </Relationships>
 `
 
-const documentRelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+// documentRelsXML lists the styles part and one relationship per image.
+func documentRelsXML(images []imagePart) string {
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>
-`
+`)
+	for _, im := range images {
+		fmt.Fprintf(&sb, "  <Relationship Id=%q Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/%s\"/>\n", im.rid, im.name)
+	}
+	sb.WriteString("</Relationships>\n")
+	return sb.String()
+}
 
 // stylesXML defines Normal, Heading1 and Heading2 with sensible defaults
 // (Calibri 11pt body, bold 16pt / 13pt headings).
@@ -83,6 +113,18 @@ const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <w:szCs w:val="26"/>
     </w:rPr>
   </w:style>
+  <w:style w:type="table" w:default="1" w:styleId="TableNormal">
+    <w:name w:val="Normal Table"/>
+    <w:tblPr>
+      <w:tblInd w:w="0" w:type="dxa"/>
+      <w:tblCellMar>
+        <w:top w:w="0" w:type="dxa"/>
+        <w:left w:w="108" w:type="dxa"/>
+        <w:bottom w:w="0" w:type="dxa"/>
+        <w:right w:w="108" w:type="dxa"/>
+      </w:tblCellMar>
+    </w:tblPr>
+  </w:style>
 </w:styles>
 `
 
@@ -101,6 +143,3 @@ const coreXMLTemplate = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <dcterms:modified xsi:type="dcterms:W3CDTF">%s</dcterms:modified>
 </cp:coreProperties>
 `
-
-// sectPrXML sets US Letter with one-inch margins (values in twentieths of a point).
-const sectPrXML = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`

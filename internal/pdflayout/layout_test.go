@@ -1,0 +1,217 @@
+package pdflayout
+
+import (
+	"bytes"
+	"fmt"
+	"image/png"
+	"math"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"pdf2word/internal/model"
+)
+
+func fixture(name string) string {
+	return filepath.Join("..", "..", "testdata", name)
+}
+
+func TestParseFont(t *testing.T) {
+	cases := []struct {
+		name   string
+		weight int
+		flags  int
+		want   fontInfo
+	}{
+		{"Helvetica-Bold", 0, 0x20, fontInfo{"Arial", true, false}},
+		{"Times-Roman", 0, 0x20, fontInfo{"Times New Roman", false, false}},
+		{"Times-BoldItalic", 0, 0, fontInfo{"Times New Roman", true, true}},
+		{"GQUSAY+BalooBhaina2-Regular", 400, 0x80020, fontInfo{"Baloo Bhaina 2", false, false}},
+		{"ABCDEF+Calibri", 700, 0, fontInfo{"Calibri", true, false}},
+		{"Arial,Italic", 0, 0, fontInfo{"Arial", false, true}},
+		{"CourierNewPSMT", 0, 0, fontInfo{"Courier New", false, false}},
+		{"Verdana", 400, 1 << 6, fontInfo{"Verdana", false, true}},
+	}
+	for _, tc := range cases {
+		if got := parseFont(tc.name, tc.weight, tc.flags); got != tc.want {
+			t.Errorf("parseFont(%q, %d, %#x) = %+v, want %+v", tc.name, tc.weight, tc.flags, got, tc.want)
+		}
+	}
+}
+
+func describe(blocks []model.Block) string {
+	var sb strings.Builder
+	for i, b := range blocks {
+		fmt.Fprintf(&sb, "%d: %s align=%s ind=%.1f before=%.1f", i, b.Kind, b.Align, b.IndentLeft, b.SpaceBefore)
+		switch b.Kind {
+		case model.Table:
+			fmt.Fprintf(&sb, " cols=%v rows=%d", b.Table.ColWidths, len(b.Table.Rows))
+		case model.Image:
+			fmt.Fprintf(&sb, " %.0fx%.0f align=%s", b.Image.Width, b.Image.Height, b.Image.Align)
+		default:
+			for _, l := range b.Lines {
+				sb.WriteString(" |")
+				for _, s := range l.Segments {
+					fmt.Fprintf(&sb, " [x=%.0f fr=%v", s.X, s.FlushRight)
+					for _, r := range s.Runs {
+						fmt.Fprintf(&sb, " %q(%s%s%.0f %s)", r.Text, map[bool]string{true: "B", false: ""}[r.Bold], map[bool]string{true: "I", false: ""}[r.Italic], r.Size, r.Font)
+					}
+					sb.WriteString("]")
+				}
+			}
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
+
+func TestExtract_LayoutFixture(t *testing.T) {
+	doc, warns, err := Extract(fixture("layout.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warns) != 0 {
+		t.Errorf("warnings: %v", warns)
+	}
+	if len(doc.Pages) != 1 {
+		t.Fatalf("pages = %d", len(doc.Pages))
+	}
+	p := doc.Pages[0]
+	if p.Source != model.SourceText || !near(p.Width, 842, 0.5) || !near(p.Height, 595, 0.5) {
+		t.Fatalf("page = source %v %.0fx%.0f", p.Source, p.Width, p.Height)
+	}
+	if doc.Setup == nil || !near(doc.Setup.MarginLeft, 36, 2) || !near(doc.Setup.MarginRight, 36, 2) || doc.Setup.Width != 842 {
+		t.Errorf("setup = %+v, want landscape with ~36pt side margins", doc.Setup)
+	}
+	blocks := p.Blocks
+	t.Logf("blocks:\n%s", describe(blocks))
+
+	// Expected order: image, title, subtitle, key/value, body, list a, list b, table, footer.
+	if len(blocks) != 9 {
+		t.Fatalf("got %d blocks, want 9", len(blocks))
+	}
+
+	img := blocks[0]
+	if img.Kind != model.Image || img.Image.Align != model.AlignCenter || !near(img.Image.Width, 60, 1) {
+		t.Errorf("block 0 = image? %+v", img)
+	} else if im, err := png.Decode(bytes.NewReader(img.Image.Data)); err != nil || im.Bounds().Dx() < 30 {
+		t.Errorf("image data not a decodable PNG: %v", err)
+	}
+
+	title := blocks[1]
+	if title.Kind != model.Heading || title.Align != model.AlignCenter || title.Text() != "Form No. 25" {
+		t.Errorf("title = %+v", title)
+	}
+	if r := title.Lines[0].Segments[0].Runs[0]; !r.Bold || !near(r.Size, 14, 0.1) || r.Font != "Arial" {
+		t.Errorf("title run = %+v, want bold 14pt Arial", r)
+	}
+
+	if sub := blocks[2]; sub.Align != model.AlignCenter || sub.Text() != "Nil Certificate Of Encumbrance On Property" {
+		t.Errorf("subtitle = %+v", sub)
+	}
+
+	kv := blocks[3]
+	if len(kv.Lines) != 1 || len(kv.Lines[0].Segments) != 2 {
+		t.Fatalf("key/value block = %+v", kv)
+	}
+	if s := kv.Lines[0].Segments; s[0].Text() != "Application No : 2026039031285" || s[1].Text() != "Certificate No : EC0392026027049" || !s[1].FlushRight || s[0].X > 1 {
+		t.Errorf("key/value segments = %+v", s)
+	}
+
+	body := blocks[4]
+	if len(body.Lines) != 1 || !strings.HasPrefix(body.Text(), "Having applied to me") || !strings.HasSuffix(body.Text(), "for the said property.") || body.Align != model.AlignLeft {
+		t.Errorf("body paragraph should be one wrapped line: %q align=%v (lines=%d)", body.Text(), body.Align, len(body.Lines))
+	}
+	if !strings.Contains(body.Text(), "respect of the undermentioned") {
+		t.Errorf("wrapped lines must be joined with a space: %q", body.Text())
+	}
+
+	if a, b := blocks[5], blocks[6]; !strings.HasPrefix(a.Text(), "a) ") || !strings.HasPrefix(b.Text(), "b) ") {
+		t.Errorf("list items should be separate paragraphs: %q / %q", a.Text(), b.Text())
+	}
+
+	tbl := blocks[7]
+	if tbl.Kind != model.Table {
+		t.Fatalf("block 7 = %v, want table", tbl.Kind)
+	}
+	if len(tbl.Table.ColWidths) != 3 || len(tbl.Table.Rows) != 2 || !near(tbl.Table.ColWidths[0], 100, 2) {
+		t.Errorf("table shape = cols %v rows %d", tbl.Table.ColWidths, len(tbl.Table.Rows))
+	} else {
+		hdr := tbl.Table.Rows[0]
+		if hdr[0].Text() != "Sl. No." || hdr[1].Text() != "Village Name" || hdr[2].Text() != "Area" {
+			t.Errorf("header row = %q %q %q", hdr[0].Text(), hdr[1].Text(), hdr[2].Text())
+		}
+		if !hdr[1].Lines[0].Segments[0].Runs[0].Bold {
+			t.Error("header cell should be bold")
+		}
+		row := tbl.Table.Rows[1]
+		if row[0].Text() != "1" || row[1].Text() != "Bhanapur - 42" || row[2].Text() != "0.0186 Hectare" {
+			t.Errorf("data row = %q %q %q", row[0].Text(), row[1].Text(), row[2].Text())
+		}
+	}
+	if !tbl.Table.Ruled {
+		t.Error("table should be ruled")
+	}
+
+	footer := blocks[8]
+	if len(footer.Lines) != 1 || len(footer.Lines[0].Segments) != 2 || footer.Lines[0].Segments[1].Text() != "Page 1 of 1" || !footer.Lines[0].Segments[1].FlushRight {
+		t.Errorf("footer = %+v", footer)
+	}
+
+	// Table text must not also appear in the flow.
+	for i, b := range blocks {
+		if b.Kind != model.Table && strings.Contains(b.Text(), "Bhanapur") {
+			t.Errorf("table text leaked into block %d: %q", i, b.Text())
+		}
+	}
+	// Spacing: the table sits below the list with a visible gap.
+	if tbl.SpaceBefore <= 0 {
+		t.Errorf("table SpaceBefore = %.1f, want > 0", tbl.SpaceBefore)
+	}
+}
+
+func TestExtract_PlainTextFixtureStillWorks(t *testing.T) {
+	doc, _, err := Extract(fixture("text.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Pages) != 2 {
+		t.Fatalf("pages = %d", len(doc.Pages))
+	}
+	p1 := doc.Pages[0]
+	t.Logf("page 1:\n%s", describe(p1.Blocks))
+	if len(p1.Blocks) != 3 || p1.Blocks[0].Kind != model.Heading || p1.Blocks[0].Text() != "Quarterly Report" {
+		t.Fatalf("page 1 blocks = %s", describe(p1.Blocks))
+	}
+	want := "This is the first paragraph of the document used to test the converter. It has three lines of text."
+	if got := p1.Blocks[1].Text(); got != want {
+		t.Errorf("paragraph 1 = %q\nwant %q", got, want)
+	}
+	if doc.Pages[1].Blocks[0].Text() != "Second page content here." {
+		t.Errorf("page 2 = %s", describe(doc.Pages[1].Blocks))
+	}
+	if doc.Setup == nil || doc.Setup.Width != 612 || doc.Setup.Height != 792 {
+		t.Errorf("setup = %+v", doc.Setup)
+	}
+}
+
+func TestExtract_ScannedPageIsEmpty(t *testing.T) {
+	doc, _, err := Extract(fixture("scanned.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := doc.Pages[0]
+	// The full-page scan image is not embedded (there is no text) but the
+	// page carries no text either.
+	if p.TextChars() != 0 {
+		t.Errorf("scanned page has text: %s", describe(p.Blocks))
+	}
+}
+
+func TestExtract_MissingFile(t *testing.T) {
+	if _, _, err := Extract(fixture("nope.pdf")); err == nil {
+		t.Fatal("expected an error")
+	}
+}

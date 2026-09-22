@@ -1,6 +1,7 @@
 // Package docx serialises a model.Document as a Word .docx file using only
-// the standard library. The output is a minimal but valid OOXML package:
-// paragraphs, two heading styles and page breaks between source pages.
+// the standard library. It emits paragraphs with run formatting, alignment,
+// indents, tab stops and line breaks, ruled tables, inline pictures and a
+// page setup derived from the source PDF.
 package docx
 
 import (
@@ -8,6 +9,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,6 +20,15 @@ import (
 // now is a variable so tests can pin timestamps if they need to.
 var now = func() time.Time { return time.Now().UTC() }
 
+// Default page setup: US Letter, one-inch margins.
+var defaultSetup = model.PageSetup{Width: 612, Height: 792, MarginTop: 72, MarginRight: 72, MarginBottom: 72, MarginLeft: 72}
+
+type imagePart struct {
+	name string // e.g. image1.png
+	rid  string // e.g. rId2
+	data []byte
+}
+
 // Write encodes doc as a .docx package and writes it to w.
 func Write(w io.Writer, doc *model.Document) error {
 	if doc == nil {
@@ -26,24 +37,41 @@ func Write(w io.Writer, doc *model.Document) error {
 	ts := now()
 	stamp := ts.Format(time.RFC3339)
 
+	dw := &docWriter{setup: defaultSetup}
+	if doc.Setup != nil && doc.Setup.Width > 0 && doc.Setup.Height > 0 {
+		dw.setup = *doc.Setup
+	}
+	body := dw.documentXML(doc)
+
+	exts := map[string]bool{}
+	var extList []string
+	for _, im := range dw.images {
+		ext := im.name[strings.LastIndexByte(im.name, '.')+1:]
+		if !exts[ext] {
+			exts[ext] = true
+			extList = append(extList, ext)
+		}
+	}
+
 	parts := []struct{ name, body string }{
-		{"[Content_Types].xml", contentTypesXML},
+		{"[Content_Types].xml", contentTypesXML(extList)},
 		{"_rels/.rels", rootRelsXML},
-		{"word/document.xml", documentXML(doc)},
+		{"word/document.xml", body},
 		{"word/styles.xml", stylesXML},
-		{"word/_rels/document.xml.rels", documentRelsXML},
+		{"word/_rels/document.xml.rels", documentRelsXML(dw.images)},
 		{"docProps/core.xml", fmt.Sprintf(coreXMLTemplate, stamp, stamp)},
 		{"docProps/app.xml", appXML},
 	}
 
 	zw := zip.NewWriter(w)
 	for _, p := range parts {
-		f, err := zw.CreateHeader(&zip.FileHeader{Name: p.name, Method: zip.Deflate, Modified: ts})
-		if err != nil {
-			return fmt.Errorf("docx: create part %s: %w", p.name, err)
+		if err := addPart(zw, p.name, []byte(p.body), ts); err != nil {
+			return err
 		}
-		if _, err := io.WriteString(f, p.body); err != nil {
-			return fmt.Errorf("docx: write part %s: %w", p.name, err)
+	}
+	for _, im := range dw.images {
+		if err := addPart(zw, "word/media/"+im.name, im.data, ts); err != nil {
+			return err
 		}
 	}
 	if err := zw.Close(); err != nil {
@@ -52,30 +80,90 @@ func Write(w io.Writer, doc *model.Document) error {
 	return nil
 }
 
+func addPart(zw *zip.Writer, name string, data []byte, ts time.Time) error {
+	f, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: ts})
+	if err != nil {
+		return fmt.Errorf("docx: create part %s: %w", name, err)
+	}
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("docx: write part %s: %w", name, err)
+	}
+	return nil
+}
+
+// docWriter accumulates document.xml and the images it references.
+type docWriter struct {
+	sb     strings.Builder
+	setup  model.PageSetup
+	images []imagePart
+	nextID int // drawing ids
+}
+
+const (
+	nsW   = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+	nsR   = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+	nsWP  = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+	nsA   = "http://schemas.openxmlformats.org/drawingml/2006/main"
+	nsPic = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+)
+
 const pageBreakXML = `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
 
-// documentXML renders word/document.xml: every block becomes a paragraph and
-// consecutive pages are separated by a page break (even when a page is
-// empty, so page numbering still lines up with the source PDF).
-func documentXML(doc *model.Document) string {
-	var sb strings.Builder
+func twips(pt float64) int { return int(math.Round(pt * 20)) }
+func emu(pt float64) int64 { return int64(math.Round(pt * 12700)) }
+
+// documentXML renders word/document.xml: every block becomes a paragraph,
+// table or picture; consecutive pages are separated by a page break (even
+// when a page is empty, so page numbering still lines up with the source).
+func (dw *docWriter) documentXML(doc *model.Document) string {
+	sb := &dw.sb
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n")
-	sb.WriteString(`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>`)
+	fmt.Fprintf(sb, `<w:document xmlns:w=%q xmlns:r=%q xmlns:wp=%q xmlns:a=%q xmlns:pic=%q><w:body>`, nsW, nsR, nsWP, nsA, nsPic)
+
+	lastWasTable := false
 	for i, page := range doc.Pages {
 		if i > 0 {
 			sb.WriteString(pageBreakXML)
+			lastWasTable = false
 		}
+		layout := page.Width > 0
 		for _, b := range page.Blocks {
-			writeParagraph(&sb, b)
+			if b.Kind == model.Table && lastWasTable {
+				sb.WriteString("<w:p/>") // two tables in a row would merge
+			}
+			dw.writeBlock(b, layout)
+			lastWasTable = b.Kind == model.Table
 		}
 	}
-	sb.WriteString(sectPrXML)
+	if lastWasTable {
+		sb.WriteString("<w:p/>") // the body must not end with a table
+	}
+	dw.writeSectPr()
 	sb.WriteString(`</w:body></w:document>`)
 	return sb.String()
 }
 
-func writeParagraph(sb *strings.Builder, b model.Block) {
-	sb.WriteString("<w:p>")
+func (dw *docWriter) writeBlock(b model.Block, layout bool) {
+	switch b.Kind {
+	case model.Table:
+		if b.Table != nil {
+			dw.writeTable(b)
+		}
+	case model.Image:
+		if b.Image != nil {
+			dw.writeImage(b, layout)
+		}
+	default:
+		dw.writeParagraph(b, layout)
+	}
+}
+
+// paragraphProps writes <w:pPr> for a paragraph or heading. When layout is
+// true the block came from a layout-aware extractor, so spacing is explicit
+// (no style defaults) and positions are honoured.
+func (dw *docWriter) paragraphProps(b model.Block, layout bool) {
+	sb := &dw.sb
+	var props strings.Builder
 	if b.Kind == model.Heading {
 		lvl := b.Level
 		if lvl < 1 {
@@ -84,19 +172,271 @@ func writeParagraph(sb *strings.Builder, b model.Block) {
 		if lvl > 2 {
 			lvl = 2
 		}
-		fmt.Fprintf(sb, `<w:pPr><w:pStyle w:val="Heading%d"/></w:pPr>`, lvl)
+		fmt.Fprintf(&props, `<w:pStyle w:val="Heading%d"/>`, lvl)
 	}
-	if text := sanitize(b.Text); text != "" {
-		sb.WriteString(`<w:r><w:t xml:space="preserve">`)
-		// EscapeText never fails on a strings.Builder.
-		_ = xml.EscapeText(sb, []byte(text))
-		sb.WriteString(`</w:t></w:r>`)
+	// Tab stops for multi-segment lines.
+	if tabs := dw.tabStops(b); tabs != "" {
+		props.WriteString(tabs)
+	}
+	if layout || b.SpaceBefore > 0 {
+		before := twips(math.Max(0, b.SpaceBefore))
+		fmt.Fprintf(&props, `<w:spacing w:before="%d" w:after="0"/>`, before)
+	}
+	if b.IndentLeft > 0.5 || math.Abs(b.FirstIndent) > 0.5 {
+		props.WriteString(`<w:ind`)
+		if b.IndentLeft > 0.5 {
+			fmt.Fprintf(&props, ` w:left="%d"`, twips(b.IndentLeft))
+		}
+		if b.FirstIndent > 0.5 {
+			fmt.Fprintf(&props, ` w:firstLine="%d"`, twips(b.FirstIndent))
+		} else if b.FirstIndent < -0.5 {
+			fmt.Fprintf(&props, ` w:hanging="%d"`, twips(-b.FirstIndent))
+		}
+		props.WriteString(`/>`)
+	}
+	if jc := jcValue(b.Align); jc != "" {
+		fmt.Fprintf(&props, `<w:jc w:val="%s"/>`, jc)
+	}
+	if props.Len() > 0 {
+		sb.WriteString("<w:pPr>")
+		sb.WriteString(props.String())
+		sb.WriteString("</w:pPr>")
+	}
+}
+
+func jcValue(a model.Alignment) string {
+	switch a {
+	case model.AlignCenter:
+		return "center"
+	case model.AlignRight:
+		return "right"
+	case model.AlignJustify:
+		return "both"
+	}
+	return ""
+}
+
+// tabStops returns a <w:tabs> element when any line has more than one
+// segment: a left tab at each segment start, or a right tab at the content
+// edge for segments that end at the right margin.
+func (dw *docWriter) tabStops(b model.Block) string {
+	type stop struct {
+		pos   int
+		right bool
+	}
+	seen := map[stop]bool{}
+	var stops []stop
+	for _, ln := range b.Lines {
+		for j, seg := range ln.Segments {
+			if j == 0 {
+				continue
+			}
+			s := stop{pos: twips(seg.X)}
+			if seg.FlushRight {
+				s = stop{pos: twips(dw.setup.ContentWidth()), right: true}
+			}
+			if s.pos <= 0 || seen[s] {
+				continue
+			}
+			seen[s] = true
+			stops = append(stops, s)
+		}
+	}
+	if len(stops) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("<w:tabs>")
+	for _, s := range stops {
+		kind := "left"
+		if s.right {
+			kind = "right"
+		}
+		fmt.Fprintf(&sb, `<w:tab w:val="%s" w:pos="%d"/>`, kind, s.pos)
+	}
+	sb.WriteString("</w:tabs>")
+	return sb.String()
+}
+
+func (dw *docWriter) writeParagraph(b model.Block, layout bool) {
+	sb := &dw.sb
+	sb.WriteString("<w:p>")
+	dw.paragraphProps(b, layout)
+	for i, ln := range b.Lines {
+		if i > 0 {
+			sb.WriteString("<w:r><w:br/></w:r>")
+		}
+		for j, seg := range ln.Segments {
+			if j > 0 {
+				sb.WriteString("<w:r><w:tab/></w:r>")
+			}
+			for _, r := range seg.Runs {
+				dw.writeRun(r)
+			}
+		}
 	}
 	sb.WriteString("</w:p>")
 }
 
+func (dw *docWriter) writeRun(r model.Run) {
+	text := sanitize(r.Text)
+	if text == "" {
+		return
+	}
+	sb := &dw.sb
+	sb.WriteString("<w:r>")
+	var props strings.Builder
+	if r.Font != "" {
+		f := escapeAttr(r.Font)
+		fmt.Fprintf(&props, `<w:rFonts w:ascii="%s" w:hAnsi="%s" w:cs="%s"/>`, f, f, f)
+	}
+	if r.Bold {
+		props.WriteString("<w:b/><w:bCs/>")
+	}
+	if r.Italic {
+		props.WriteString("<w:i/><w:iCs/>")
+	}
+	if r.Size > 0 {
+		hp := int(math.Round(r.Size * 2))
+		if hp < 2 {
+			hp = 2
+		}
+		fmt.Fprintf(&props, `<w:sz w:val="%d"/><w:szCs w:val="%d"/>`, hp, hp)
+	}
+	if props.Len() > 0 {
+		sb.WriteString("<w:rPr>")
+		sb.WriteString(props.String())
+		sb.WriteString("</w:rPr>")
+	}
+	sb.WriteString(`<w:t xml:space="preserve">`)
+	_ = xml.EscapeText(sb, []byte(text)) // never fails on a strings.Builder
+	sb.WriteString(`</w:t></w:r>`)
+}
+
+func escapeAttr(s string) string {
+	var sb strings.Builder
+	_ = xml.EscapeText(&sb, []byte(s))
+	return sb.String()
+}
+
+// writeTable emits a fixed-layout table with the model's column widths.
+func (dw *docWriter) writeTable(b model.Block) {
+	t := b.Table
+	if len(t.Rows) == 0 || len(t.ColWidths) == 0 {
+		return
+	}
+	sb := &dw.sb
+	total := 0.0
+	for _, w := range t.ColWidths {
+		total += w
+	}
+	sb.WriteString("<w:tbl><w:tblPr>")
+	fmt.Fprintf(sb, `<w:tblW w:w="%d" w:type="dxa"/>`, twips(total))
+	if b.IndentLeft > 0.5 {
+		fmt.Fprintf(sb, `<w:tblInd w:w="%d" w:type="dxa"/>`, twips(b.IndentLeft))
+	}
+	if t.Ruled {
+		sb.WriteString("<w:tblBorders>")
+		for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
+			fmt.Fprintf(sb, `<w:%s w:val="single" w:sz="4" w:space="0" w:color="000000"/>`, side)
+		}
+		sb.WriteString("</w:tblBorders>")
+	}
+	sb.WriteString(`<w:tblLayout w:type="fixed"/>`)
+	sb.WriteString(`<w:tblCellMar><w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar>`)
+	sb.WriteString("</w:tblPr><w:tblGrid>")
+	for _, w := range t.ColWidths {
+		fmt.Fprintf(sb, `<w:gridCol w:w="%d"/>`, twips(w))
+	}
+	sb.WriteString("</w:tblGrid>")
+	for _, row := range t.Rows {
+		sb.WriteString("<w:tr>")
+		for c := range t.ColWidths {
+			sb.WriteString("<w:tc><w:tcPr>")
+			fmt.Fprintf(sb, `<w:tcW w:w="%d" w:type="dxa"/>`, twips(t.ColWidths[c]))
+			sb.WriteString("</w:tcPr>")
+			var cell model.Cell
+			if c < len(row) {
+				cell = row[c]
+			}
+			if len(cell.Lines) == 0 {
+				sb.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>`)
+			}
+			for _, ln := range cell.Lines {
+				sb.WriteString("<w:p><w:pPr>")
+				sb.WriteString(`<w:spacing w:before="0" w:after="0"/>`)
+				if jc := jcValue(cell.Align); jc != "" {
+					fmt.Fprintf(sb, `<w:jc w:val="%s"/>`, jc)
+				}
+				sb.WriteString("</w:pPr>")
+				for j, seg := range ln.Segments {
+					if j > 0 {
+						sb.WriteString("<w:r><w:tab/></w:r>")
+					}
+					for _, r := range seg.Runs {
+						dw.writeRun(r)
+					}
+				}
+				sb.WriteString("</w:p>")
+			}
+			sb.WriteString("</w:tc>")
+		}
+		sb.WriteString("</w:tr>")
+	}
+	sb.WriteString("</w:tbl>")
+}
+
+// writeImage emits an inline picture in its own paragraph.
+func (dw *docWriter) writeImage(b model.Block, layout bool) {
+	im := b.Image
+	if len(im.Data) == 0 || im.Width <= 0 || im.Height <= 0 {
+		return
+	}
+	dw.nextID++
+	id := dw.nextID
+	ext := "png"
+	if im.Ext == "jpg" || im.Ext == "jpeg" {
+		ext = "jpeg"
+	}
+	part := imagePart{name: fmt.Sprintf("image%d.%s", id, ext), rid: fmt.Sprintf("rId%d", 100+id), data: im.Data}
+	dw.images = append(dw.images, part)
+
+	// Keep the picture inside the text area.
+	w, h := im.Width, im.Height
+	if cw := dw.setup.ContentWidth(); cw > 0 && w > cw {
+		h = h * cw / w
+		w = cw
+	}
+
+	sb := &dw.sb
+	sb.WriteString("<w:p>")
+	dw.paragraphProps(model.Block{Align: im.Align, SpaceBefore: b.SpaceBefore, IndentLeft: b.IndentLeft}, layout)
+	fmt.Fprintf(sb, `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/>`, emu(w), emu(h))
+	fmt.Fprintf(sb, `<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="%d" name="Picture %d"/>`, id, id)
+	sb.WriteString(`<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`)
+	sb.WriteString(`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>`)
+	fmt.Fprintf(sb, `<pic:nvPicPr><pic:cNvPr id="%d" name="Picture %d"/><pic:cNvPicPr/></pic:nvPicPr>`, id, id)
+	fmt.Fprintf(sb, `<pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, part.rid)
+	fmt.Fprintf(sb, `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>`, emu(w), emu(h))
+	sb.WriteString(`</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`)
+}
+
+func (dw *docWriter) writeSectPr() {
+	s := dw.setup
+	sb := &dw.sb
+	sb.WriteString("<w:sectPr>")
+	orient := ""
+	if s.Width > s.Height {
+		orient = ` w:orient="landscape"`
+	}
+	fmt.Fprintf(sb, `<w:pgSz w:w="%d" w:h="%d"%s/>`, twips(s.Width), twips(s.Height), orient)
+	fmt.Fprintf(sb, `<w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/>`,
+		twips(s.MarginTop), twips(s.MarginRight), twips(s.MarginBottom), twips(s.MarginLeft))
+	sb.WriteString("</w:sectPr>")
+}
+
 // sanitize removes characters that are illegal in XML 1.0 and normalises
-// line breaks to spaces (blocks are single paragraphs by construction).
+// line breaks to spaces (runs never contain line breaks by construction).
 func sanitize(s string) string {
 	if !utf8.ValidString(s) {
 		s = strings.ToValidUTF8(s, "�")

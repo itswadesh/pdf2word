@@ -65,7 +65,7 @@ func oneImage() []pdfimage.Image {
 func pageText(p model.Page) string {
 	var parts []string
 	for _, b := range p.Blocks {
-		parts = append(parts, b.Text)
+		parts = append(parts, b.Text())
 	}
 	return strings.Join(parts, "\n")
 }

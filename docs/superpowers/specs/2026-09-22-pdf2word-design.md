@@ -321,6 +321,116 @@ file) and returns the exe path. `ocr.Find` consults a `Bundled` hook after
 but remains overridable. Non-Windows builds compile the same API with
 `Available() == false`. Licences are listed in `win64/NOTICE.md`.
 
+## 13. Layout preservation, phase 1: text PDFs (2026-09-22, user request)
+
+The user reported "formatting is not maintained" and chose (a) an editable,
+structured Word document rather than a picture-perfect replica, and (b) text
+PDFs first, scanned pages later. Sample: a one-page government certificate
+(landscape A4) with a centred bold title, a logo and a QR code, left/right
+paired fields, a nine-column ruled table and a footer with items at both
+edges. v1 flattened all of that into plain paragraphs.
+
+### 13.1 Engine
+
+Text-layer extraction moves from `ledongthuc/pdf` to PDFium (go-pdfium,
+already embedded for rendering). Per page PDFium provides: page size and
+rotation; every character with its box, font size, font name, weight and
+flags (`GetPageTextStructured`); page objects with bounds, of which path
+objects expose their segments and draw mode (table rulings) and image
+objects render to bitmaps. A shared `internal/pdfiumx` helper owns the pool
+and document opening for both `render` and the new `internal/pdflayout`.
+`pdftext` (ledongthuc) stays as a fallback when PDFium cannot open a file.
+
+### 13.2 Document model v2 (`internal/model`)
+
+```go
+type Page  struct { Number int; Source PageSource; Width, Height float64 /*pt*/; Blocks []Block }
+type Block struct {
+    Kind BlockKind            // Paragraph, Heading, Table, Image
+    Level int                 // heading level
+    Align Alignment           // Left, Center, Right, Justify
+    IndentLeft, FirstIndent float64 // pt
+    SpaceBefore float64       // pt, vertical gap to the previous block
+    Lines []Line              // Paragraph/Heading content; hard breaks between lines
+    Table *Table
+    Image *Image
+}
+type Line  struct { Segments []Segment }          // >1 segment = tab-separated columns on one line
+type Segment struct { X float64; Runs []Run }      // X: left edge in pt from the page's left margin
+type Run   struct { Text string; Bold, Italic bool; Size float64; Font string }
+type Table struct { ColWidths []float64; Rows [][]Cell; Ruled bool }
+type Cell  struct { Lines []Line; Align Alignment }
+type Image struct { Data []byte; Ext string; Width, Height float64 /*pt*/; Align Alignment }
+```
+`model.Para(text)` builds a plain paragraph; `Block.Text()` joins runs.
+OCR output and the ledongthuc fallback keep producing plain paragraphs.
+
+### 13.3 Reconstruction rules (`internal/pdflayout`)
+
+1. **Chars → lines.** Group characters by baseline (|Δbottom| ≤ 0.5 × size)
+   and sort by x. Split a line into **segments** at horizontal gaps wider
+   than `max(2.5 × space width, 1.2 × size)`; split **runs** on font, size,
+   bold or italic change; insert spaces at gaps > 0.25 × size.
+2. **Fonts.** Strip subset prefixes (`ABCDEF+`); family = name up to `-` or
+   `,`; bold if name contains Bold/Black/Heavy/Semibold or weight ≥ 600;
+   italic if name contains Italic/Oblique or the italic flag is set. Map
+   standard names: Helvetica/Arial → Arial, Times → Times New Roman,
+   Courier → Courier New, Symbol/ZapfDingbats → as is; others pass through.
+3. **Rulings.** Path objects that are thin (≤ 2 pt) and long (≥ 6 pt), or
+   stroked rectangles, become horizontal/vertical rules. Vertical rules are
+   clustered by x, horizontal by y (tolerance 1.5 pt).
+4. **Tables.** A lattice of ≥ 2 vertical and ≥ 2 horizontal rules whose
+   spans overlap forms a table region; distinct rule positions give column
+   and row boundaries; each text segment goes to the cell containing its
+   centre. Cells keep their lines; cell alignment centre/right is inferred
+   like paragraphs. Tables are ruled (`Ruled: true` → borders).
+5. **Images.** Image objects with both sides ≥ 8 pt become Image blocks
+   sized by their bounds (pt) using `FPDFImageObj_GetRenderedBitmap`
+   converted to PNG; an image covering ≥ 90 % of the page on a page that has
+   text is skipped (scanned letterhead backgrounds).
+6. **Flow.** Non-table lines, tables and images are ordered top-to-bottom by
+   their top edge. Multi-column article layouts are not detected (known
+   limitation; reading order becomes row-wise).
+7. **Paragraphs.** Consecutive single-segment lines merge when the vertical
+   gap ≤ 1.6 × size, size changes < 15 %, and the left edges agree within
+   1.5 pt (or the first line is indented). Lines with ≥ 2 segments are
+   paragraphs of their own (columns become tab stops at each segment's X; a
+   last segment ending within 6 pt of the right margin becomes a right tab).
+8. **Alignment.** Per paragraph: centre when every line's centre is within
+   2 % of page width of the content centre and no line spans > 85 % of the
+   content width; right when right edges align within 2 pt to the right
+   margin and left edges vary; justify when ≥ 2 lines have both edges on the
+   content edges; otherwise left. Indent = left edge − left margin.
+9. **Hard breaks.** Inside a paragraph, a non-final line that ends short of
+   the paragraph's widest line by > 30 % ends with a line break (addresses,
+   signature blocks, lists).
+10. **Headings.** As before (size ratio to the page's dominant size), now on
+    top of explicit run formatting; heading paragraphs keep their alignment.
+11. **Spacing.** `SpaceBefore` = vertical gap to the previous block minus
+    one line height, clamped to [0, 60] pt, so vertical rhythm survives.
+12. **Page setup.** Page size from the first page; landscape when width >
+    height; margins = the smallest text/table/image edge offsets over all
+    pages, clamped to [0.3 in, 1.25 in]. Running headers/footers are not
+    separated out (they remain body paragraphs).
+
+### 13.4 DOCX writer additions
+
+Run properties (`rFonts`, `b`, `i`, `sz`), paragraph properties (`jc`,
+`ind`, `spacing` before/after, `tabs`), `<w:br/>` for hard breaks, fixed
+layout tables with grid, cell widths and single borders, inline pictures
+(`w:drawing`/`wp:inline` with `media/imageN.png`, relationship and content
+type), and `sectPr` with size, orientation and margins. Element order follows
+the OOXML schema. A paragraph always follows a table.
+
+### 13.5 Verification
+
+Unit tests on synthetic fixtures generated by `tools/genfixtures`
+(`layout.pdf`: centred bold title, key/value line, ruled 3×2 table, image,
+footer with left/right items, landscape) read back through PDFium; docx
+tests parse the XML for `jc`, `b`, `tbl`, `drawing`, `pgSz`. Manual check on
+the certificate; if LibreOffice can be obtained, render the .docx to PDF and
+compare visually.
+
 ## 12. Dependencies
 
 | Module | Purpose | Licence |
