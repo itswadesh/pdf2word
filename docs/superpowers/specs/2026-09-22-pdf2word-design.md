@@ -124,9 +124,12 @@ type Engine interface {
   `C:\tools\Tesseract-OCR`, `/usr/local/bin`, `/opt/homebrew/bin`).
 - `TextToBlocks(text string) []model.Block` splits OCR output on blank lines,
   joins wrapped lines with spaces, trims, drops empty results.
-- `pdfimage.PageImages(path string, page int) ([]Image, error)` uses pdfcpu
-  `ExtractImagesRaw` and returns `{Data []byte, Ext string, Width, Height}`.
-  Images smaller than 50 px on either side are skipped (rules, icons).
+- `pdfimage.Open(path) (*Reader, error)` parses the PDF once;
+  `Reader.PageImages(page int) ([]Image, error)` uses pdfcpu
+  `ExtractPageImages` and returns `{Data []byte, Ext string, Width, Height}`.
+  When pdfcpu leaves the dimensions at zero they are read from the image
+  header (`image.DecodeConfig`). Images known to be smaller than 50 px on
+  either side are skipped (rules, icons); unknown sizes are kept.
 
 ### 6.1 OCR decision per page (`internal/convert`)
 
@@ -227,7 +230,7 @@ dependency).
 |---|---|---|
 | `github.com/ledongthuc/pdf` | text-layer extraction (pure Go) | MIT |
 | `github.com/pdfcpu/pdfcpu` v0.15.0 | image extraction; fixture generation | Apache-2.0 |
-| `golang.org/x/image` | fixture rendering only | BSD-3 |
+| `golang.org/x/image` | TIFF header decoding at runtime; fixture rendering | BSD-3 |
 | Tesseract ≥ 4 (external binary) | OCR at runtime, optional | Apache-2.0 |
 
 Go 1.27, no cgo.
