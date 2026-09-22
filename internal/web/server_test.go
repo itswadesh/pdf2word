@@ -212,6 +212,16 @@ func TestRejectsNonPDF(t *testing.T) {
 	if !strings.Contains(e["error"], "not a PDF") {
 		t.Errorf("error = %q", e["error"])
 	}
+	// A rejected upload must not linger as a job on the page.
+	list, err := ts.Client().Get(ts.URL + "/api/jobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobs []JobView
+	decode(t, list, &jobs)
+	if len(jobs) != 0 {
+		t.Errorf("rejected upload left %d job(s): %+v", len(jobs), jobs)
+	}
 }
 
 func TestRejectsMissingFile(t *testing.T) {

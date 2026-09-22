@@ -213,6 +213,18 @@ func (s *jobStore) create(filename string, ocr convert.OCRMode, lang string) (*j
 	return j, nil
 }
 
+// remove forgets a job and deletes its files (used when an upload fails).
+func (s *jobStore) remove(id string) {
+	s.mu.Lock()
+	j, ok := s.jobs[id]
+	delete(s.jobs, id)
+	s.mu.Unlock()
+	if ok {
+		j.cancel()
+		os.RemoveAll(j.dir)
+	}
+}
+
 func (s *jobStore) get(id string) (*job, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

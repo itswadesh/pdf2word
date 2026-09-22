@@ -324,7 +324,7 @@ func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode co
 	}
 	size, err := saveUpload(j.input, part)
 	if err != nil {
-		os.RemoveAll(j.dir)
+		s.jobs.remove(j.id)
 		var mbe *http.MaxBytesError
 		switch {
 		case errors.As(err, &mbe):
@@ -334,7 +334,6 @@ func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode co
 		default:
 			writeError(w, http.StatusBadRequest, "upload failed: "+err.Error())
 		}
-		j.finish(convert.Report{}, err)
 		return
 	}
 	j.size = size
