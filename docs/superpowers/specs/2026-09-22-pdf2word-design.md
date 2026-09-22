@@ -321,7 +321,7 @@ file) and returns the exe path. `ocr.Find` consults a `Bundled` hook after
 but remains overridable. Non-Windows builds compile the same API with
 `Available() == false`. Licences are listed in `win64/NOTICE.md`.
 
-## 13. Layout preservation, phase 1: text PDFs (2026-09-22, user request)
+## 13. Layout preservation, phase 1: text PDFs (2026-09-22, user request) — implemented
 
 The user reported "formatting is not maintained" and chose (a) an editable,
 structured Word document rather than a picture-perfect replica, and (b) text

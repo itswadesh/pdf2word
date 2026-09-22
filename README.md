@@ -3,8 +3,11 @@
 Turn PDF files into Word (`.docx`) documents. Double-click the program, drop
 PDFs on the page that opens, and save the Word files it gives back.
 
-- **Text PDFs** – the text layer is read directly and rebuilt into paragraphs
-  and headings (headings are detected from font size).
+- **Text PDFs** – the text layer is read with its layout: fonts, bold and
+  italic, sizes, centred/right alignment, indents, left/right field pairs
+  (as tab stops), ruled tables (as real Word tables), embedded images, and the
+  page size and margins of the original. Headings are detected from font
+  size.
 - **Scanned PDFs and print-to-PDF outlines** – pages without selectable text
   are rendered and read with [Tesseract](https://github.com/tesseract-ocr/tesseract)
   OCR. This includes files where a print driver turned the text into vector
@@ -119,12 +122,19 @@ Exit codes: `0` success, `1` conversion failed, `2` bad usage.
 
 ## How a page is handled
 
-1. The text layer is extracted and rebuilt into lines, paragraphs and
-   headings.
+1. The text layer is read through PDFium: every character with its position
+   and font, every image with its placement, and the lines that draw table
+   borders. Characters become lines, lines become paragraphs (wrapped prose is
+   re-joined, list items and labels stay separate), and each paragraph gets
+   its alignment, indent and spacing from the original geometry. Grids of
+   ruling lines become Word tables with the text assigned to cells. Images
+   are embedded at their original size.
 2. If the page has fewer than `-min-text` characters (or OCR is forced), the
-   page is rendered at `-dpi` and passed to Tesseract. If rendering is
-   unavailable, the images embedded in the page are used instead.
-3. Blocks are written as Word paragraphs; a page break separates pages.
+   page is rendered at `-dpi` and passed to Tesseract. OCR'd pages come out
+   as plain paragraphs for now.
+3. Blocks are written as Word paragraphs, tables and pictures; a page break
+   separates pages. The Word page size, orientation and margins follow the
+   PDF.
 
 Speed: rendering takes about 0.1 s per page and OCR 1 to 2 s per page per
 process. Pages needing OCR are processed several at a time (`-jobs`, default
@@ -133,9 +143,11 @@ minutes on a multi-core PC. Text PDFs convert in seconds.
 
 ## Limitations
 
-- Layout is "readable document", not a pixel-perfect replica: tables,
-  multi-column layouts, footnotes, images, fonts and colours are not
-  reproduced.
+- The result is an editable document that follows the original's structure,
+  not a pixel-perfect replica. Not yet handled: tables without ruling lines,
+  merged cells, multi-column article layouts (read row by row), text colours,
+  running headers and footers (they stay in the body), and formatting on
+  OCR'd pages.
 - OCR quality depends on scan quality and language data; dotted leaders and
   tables of contents produce noise.
 - Encrypted PDFs are not supported.
