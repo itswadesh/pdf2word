@@ -224,12 +224,64 @@ dependency).
   binary is found (`t.Skip` otherwise) and asserts the OCR'd text contains the
   fixture's known words.
 
+## 11.1 Revision (2026-09-22, after first real-world file)
+
+A 247-page "Microsoft: Print To PDF" tender document exposed three gaps:
+
+1. **Vector-outline pages.** The file had no fonts and no page images: the
+   print driver emitted the text as vector paths, so neither the text layer
+   nor embedded-image OCR applied. §7's limitation is now removed:
+   `internal/render` rasterises pages with PDFium compiled to WebAssembly
+   (go-pdfium + wazero, no cgo) and the render is OCR'd. This is now the
+   primary OCR path; `pdfimage` embedded extraction is the fallback when the
+   renderer cannot start. `convert.Options.DPI` (default 300) controls it.
+2. **pdfcpu validation.** Even relaxed validation rejected the whole file over
+   `/Redact` annotations with `/OC [1 0 0]`. `pdfimage.Open` now reads and
+   optimises without validating and computes the page count directly.
+   Fixture `testdata/badannot.pdf` reproduces the defect.
+3. **Warning spam.** A failure to open the image source was reported once per
+   page. It is now reported once, with a summary count at the end.
+
+`Progress` gained a `Done` counter so indicators do not depend on pages
+completing in order.
+
+## 11.2 App mode (2026-09-22, user request)
+
+The user asked for a double-click experience instead of a terminal: a page
+with drag-and-drop, a progress bar, and the Word file downloaded when done.
+
+- Running the executable with **no arguments** starts `internal/web` on
+  `127.0.0.1:<free port>` and opens the default browser. Arguments keep the
+  command-line behaviour. Flags: `-addr`, `-no-browser`, `-no-auto-exit`.
+- **API** (JSON): `GET /` page; `GET /api/info` version + OCR availability;
+  `POST /api/convert` multipart (`ocr`, `lang`, then `file`) → 202 job;
+  `GET /api/jobs`, `GET /api/jobs/{id}`; `POST /api/jobs/{id}/cancel`;
+  `GET /api/jobs/{id}/download` (attachment, original name with `.docx`).
+  Uploads are streamed to a per-job temp dir after a `%PDF-` signature
+  check; non-PDFs get 415, oversize 413 (limit 2 GiB).
+- **Jobs** run one at a time (semaphore); others show as queued. Finished
+  jobs and their files are pruned after an hour and on exit.
+- **Page** (`internal/web/static/index.html`, embedded, no external
+  assets): a paper-sheet drop target that becomes the live progress display
+  (page counter, highlighter-yellow scan band, fill proportional to
+  `done/total`); per-file rows with status sentence, thin bar, Stop,
+  "Save Word file" and collapsible notes (warnings). Files uploaded from the
+  page download automatically when done; files discovered after a reload
+  only offer the button. Polling every 0.5 s while active, 4 s otherwise,
+  which doubles as the keep-alive.
+- **Lifecycle**: the process exits on its own when the page has been silent
+  for 45 s and no job is running, or after 5 minutes if the page never
+  opened; `-no-auto-exit` disables this. Ctrl+C always works.
+- **Security**: loopback bind; requests whose `Host` is not loopback get 403;
+  non-GET requests with a foreign `Origin` get 403; `Cache-Control: no-store`.
+
 ## 12. Dependencies
 
 | Module | Purpose | Licence |
 |---|---|---|
 | `github.com/ledongthuc/pdf` | text-layer extraction (pure Go) | MIT |
-| `github.com/pdfcpu/pdfcpu` v0.15.0 | image extraction; fixture generation | Apache-2.0 |
+| `github.com/klippa-app/go-pdfium` v1.20 | page rendering (PDFium as WebAssembly via wazero) | MIT (PDFium: BSD-3) |
+| `github.com/pdfcpu/pdfcpu` v0.15.0 | embedded image extraction (fallback); fixture generation | Apache-2.0 |
 | `golang.org/x/image` | TIFF header decoding at runtime; fixture rendering | BSD-3 |
 | Tesseract ≥ 4 (external binary) | OCR at runtime, optional | Apache-2.0 |
 

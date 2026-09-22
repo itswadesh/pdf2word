@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>PDF to Word</title>
+<style>
+  :root {
+    --desk: #E4E8EC;
+    --desk-deep: #C9D1D8;
+    --paper: #FFFFFE;
+    --paper-fold: #ECEBE4;
+    --paper-shadow: rgba(27, 39, 51, .22);
+    --ink: #1B2733;
+    --ink-soft: #5B6873;
+    --ink-on-paper: #1B2733;
+    --ink-soft-on-paper: #6B7680;
+    --mark: #F7D648;
+    --mark-wash: rgba(247, 214, 72, .28);
+    --mark-deep: #8F7607;
+    --ok: #2F7E5B;
+    --alert: #B5453A;
+    --focus: #2B5FD9;
+    --display: "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+    --body: "Cambria", "Charter", "Georgia", "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --desk: #1D252B;
+      --desk-deep: #33404A;
+      --paper-shadow: rgba(0, 0, 0, .55);
+      --ink: #E9EDF0;
+      --ink-soft: #A3AEB7;
+      --mark-deep: #E6C63C;
+      --ok: #74C79E;
+      --alert: #EE8E84;
+      --focus: #8FB0FF;
+    }
+  }
+  :root[data-theme="dark"] {
+    --desk: #1D252B;
+    --desk-deep: #33404A;
+    --paper-shadow: rgba(0, 0, 0, .55);
+    --ink: #E9EDF0;
+    --ink-soft: #A3AEB7;
+    --mark-deep: #E6C63C;
+    --ok: #74C79E;
+    --alert: #EE8E84;
+    --focus: #8FB0FF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--desk);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body.dragging { background: color-mix(in srgb, var(--desk) 88%, var(--mark)); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 48px 16px 40px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(34px, 6vw, 46px);
+    letter-spacing: -0.01em;
+    line-height: 1;
+    margin: 0 0 12px;
+  }
+  .lede {
+    margin: 0 0 32px;
+    color: var(--ink-soft);
+    max-width: 34em;
+  }
+
+  /* The sheet: drop target and live progress display in one. */
+  .sheet-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
+  .sheet {
+    position: relative;
+    width: min(340px, 78vw);
+    aspect-ratio: 8.5 / 11;
+    background: var(--paper);
+    color: var(--ink-on-paper);
+    border: 0;
+    border-radius: 2px;
+    box-shadow: 0 1px 2px var(--paper-shadow), 0 12px 30px -12px var(--paper-shadow);
+    cursor: pointer;
+    overflow: hidden;
+    padding: 0;
+    font: inherit;
+    text-align: center;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .sheet:hover, .sheet.over {
+    transform: translateY(-4px);
+    box-shadow: 0 2px 3px var(--paper-shadow), 0 24px 40px -14px var(--paper-shadow);
+  }
+  .sheet:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .sheet.over { outline: 3px solid var(--mark); outline-offset: -3px; }
+  .sheet::before { /* folded corner */
+    content: "";
+    position: absolute; top: 0; right: 0;
+    width: 38px; height: 38px;
+    background: linear-gradient(to bottom left, var(--desk) 50%, var(--paper-fold) 50%);
+    z-index: 3;
+  }
+  .fill {
+    position: absolute; left: 0; right: 0; top: 0;
+    height: 0;
+    background: var(--mark-wash);
+    transition: height .4s linear;
+  }
+  .band {
+    position: absolute; left: 0; right: 0;
+    top: 0;
+    height: 6px;
+    margin-top: -3px;
+    background: var(--mark);
+    box-shadow: 0 0 14px 2px var(--mark);
+    opacity: 0;
+    transition: top .4s linear, opacity .3s ease;
+  }
+  .sheet.busy .band { opacity: 1; }
+  .sheet.busy.indeterminate .band { animation: sweep 2.4s ease-in-out infinite; }
+  @keyframes sweep {
+    0%   { top: 4%; }
+    50%  { top: 96%; }
+    100% { top: 4%; }
+  }
+  .sheet-content {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px;
+    padding: 24px;
+    z-index: 2;
+  }
+  .sheet-content.hidden { display: none; }
+  .sheet-idle strong {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 24px;
+    line-height: 1.15;
+  }
+  .sheet-idle span { color: var(--ink-soft-on-paper); font-size: 16px; }
+  .count {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 64px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .count small { font-size: 26px; font-weight: 400; color: var(--ink-soft-on-paper); margin-left: 4px; }
+  .sheet-status { font-size: 17px; }
+  .sheet-file {
+    font-size: 14px; color: var(--ink-soft-on-paper);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .options {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 14px 28px;
+    margin: 0 0 36px;
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  .options label { display: inline-flex; align-items: center; gap: 8px; }
+  .options select, .options input {
+    font: inherit; font-size: 15px;
+    color: var(--ink);
+    background: transparent;
+    border: 0; border-bottom: 1.5px solid var(--desk-deep);
+    padding: 2px 2px 3px;
+    border-radius: 0;
+  }
+  .options input { width: 6.5em; }
+  .options select:focus-visible, .options input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .files { list-style: none; margin: 0; padding: 0; }
+  .file {
+    border-top: 1px solid var(--desk-deep);
+    padding: 16px 0 18px;
+  }
+  .file:last-child { border-bottom: 1px solid var(--desk-deep); }
+  .file-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+  .name {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .size { color: var(--ink-soft); font-size: 15px; white-space: nowrap; }
+  .file-status { margin-top: 4px; }
+  .file.error .file-status { color: var(--alert); }
+  .file.done .file-status { color: var(--ok); }
+  .bar {
+    height: 4px; margin-top: 10px;
+    background: var(--desk-deep);
+    border-radius: 2px; overflow: hidden;
+  }
+  .bar > span { display: block; height: 100%; width: 0; background: var(--mark); transition: width .4s linear; }
+  .file.done .bar > span { background: var(--ok); }
+  .file.error .bar > span, .file.cancelled .bar > span { background: var(--desk-deep); }
+  .file-actions { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 12px; }
+  .file-actions:empty { display: none; }
+  .btn, .link {
+    font: inherit; font-size: 15px;
+    cursor: pointer;
+  }
+  .btn {
+    background: var(--ink); color: var(--desk);
+    border: 0; border-radius: 3px;
+    padding: 8px 16px;
+    text-decoration: none;
+    font-family: var(--display); font-weight: 600; letter-spacing: .01em;
+  }
+  .btn:hover { filter: brightness(1.15); }
+  .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .link {
+    background: none; border: 0; padding: 0;
+    color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px;
+  }
+  .notes { margin: 10px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 14px; line-height: 1.45; }
+  .notes.hidden { display: none; }
+  .notes li { margin: 2px 0; overflow-wrap: anywhere; }
+
+  footer {
+    margin-top: 40px;
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    color: var(--ink-soft); font-size: 14px;
+  }
+  footer .warn { color: var(--alert); }
+
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sheet, .fill, .band, .bar > span { transition: none; }
+    .sheet.busy.indeterminate .band { animation: none; top: 50%; }
+    .sheet:hover, .sheet.over { transform: none; }
+  }
+  @media (max-width: 480px) {
+    main { padding-top: 32px; }
+    .count { font-size: 52px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>PDF to Word</h1>
+  <p class="lede">Drop a PDF and get a Word document back. Pages without selectable text are read with OCR, so scans work too.</p>
+
+  <div class="sheet-wrap">
+    <button class="sheet" id="sheet" type="button" aria-describedby="sheet-hint">
+      <span class="fill" id="fill"></span>
+      <span class="band" id="band"></span>
+      <span class="sheet-content sheet-idle" id="sheet-idle">
+        <strong>Drop PDF files here</strong>
+        <span>or click to choose</span>
+      </span>
+      <span class="sheet-content sheet-busy hidden" id="sheet-busy" aria-live="polite">
+        <span class="count" id="count"></span>
+        <span class="sheet-status" id="sheet-status"></span>
+        <span class="sheet-file" id="sheet-file"></span>
+      </span>
+    </button>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+    <p id="sheet-hint" class="visually-hidden">Press Enter to choose files, or drag PDF files anywhere onto this page.</p>
+  </div>
+
+  <form class="options" id="options" onsubmit="return false">
+    <label>Text recognition
+      <select name="ocr">
+        <option value="auto" selected>only where needed</option>
+        <option value="off">off</option>
+        <option value="force">every page</option>
+      </select>
+    </label>
+    <label>Language
+      <input name="lang" value="eng" spellcheck="false" autocomplete="off" aria-describedby="lang-hint">
+    </label>
+    <span id="lang-hint" class="visually-hidden">Tesseract language codes, for example eng or eng+hin.</span>
+  </form>
+
+  <ol class="files" id="files" aria-live="polite"></ol>
+
+  <footer>
+    <span id="engine">Checking the OCR engine…</span>
+    <span id="version"></span>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const sheet = $('sheet'), fill = $('fill'), sheetIdle = $('sheet-idle'), sheetBusy = $('sheet-busy');
+  const count = $('count'), sheetStatus = $('sheet-status'), sheetFile = $('sheet-file');
+  const fileInput = $('file'), filesList = $('files'), form = $('options');
+
+  // Local rows: server jobs keyed by id, plus uploads that have no id yet.
+  const rows = new Map();      // key -> { el, view, downloaded, notesOpen }
+  let uploadSeq = 0;
+  let pollTimer = null;
+
+  // --- picking files -------------------------------------------------------
+  sheet.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { queueFiles(fileInput.files); fileInput.value = ''; });
+
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); sheet.classList.add('over'); });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  document.addEventListener('dragleave', () => { if (--dragDepth <= 0) endDrag(); });
+  document.addEventListener('drop', (e) => { e.preventDefault(); endDrag(); queueFiles(e.dataTransfer.files); });
+  function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); sheet.classList.remove('over'); }
+
+  function queueFiles(list) {
+    for (const f of Array.from(list)) upload(f);
+  }
+
+  // --- uploading -------------------------------------------------------------
+  async function upload(file) {
+    const key = 'upload-' + (++uploadSeq);
+    const row = addRow(key, { filename: file.name, size: file.size, state: 'uploading', done: 0, total: 0 });
+    const data = new FormData();
+    data.append('ocr', form.elements.ocr.value);
+    data.append('lang', form.elements.lang.value.trim() || 'eng');
+    data.append('file', file, file.name);
+    try {
+      const res = await fetch('/api/convert', { method: 'POST', body: data });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || ('server answered ' + res.status));
+      // Re-key the row under the server job id.
+      rows.delete(key);
+      row.el.dataset.id = body.id;
+      rows.set(body.id, row);
+      applyView(row, body);
+      schedulePoll(0);
+    } catch (err) {
+      applyView(row, { filename: file.name, size: file.size, state: 'error', message: err.message || String(err), done: 0, total: 0 });
+    }
+  }
+
+  // --- polling -----------------------------------------------------------------
+  function anyActive() {
+    for (const r of rows.values()) if (!isTerminal(r.view.state)) return true;
+    return false;
+  }
+  function isTerminal(s) { return s === 'done' || s === 'error' || s === 'cancelled'; }
+
+  function schedulePoll(delay) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, delay);
+  }
+  async function poll() {
+    try {
+      const res = await fetch('/api/jobs');
+      if (res.ok) {
+        const views = await res.json();
+        // The server lists newest first; rows are prepended, so walk oldest
+        // first to keep the newest file at the top.
+        for (const v of views.slice().reverse()) {
+          let row = rows.get(v.id);
+          if (!row) {
+            row = addRow(v.id, v);
+            // Not uploaded from this page (e.g. after a reload): offer the
+            // file, but do not start a download on its own.
+            row.downloaded = true;
+          }
+          applyView(row, v);
+        }
+      }
+    } catch (_) { /* server may be shutting down; keep trying */ }
+    renderSheet();
+    // Fast while something is running; slow otherwise (this also tells the
+    // server the page is still open).
+    schedulePoll(anyActive() ? 500 : 4000);
+  }
+
+  // --- rendering -----------------------------------------------------------------
+  function addRow(key, view) {
+    const el = document.createElement('li');
+    el.className = 'file';
+    el.innerHTML =
+      '<div class="file-head"><span class="name"></span><span class="size"></span></div>' +
+      '<div class="file-status"></div>' +
+      '<div class="bar" role="progressbar" aria-valuemin="0"><span></span></div>' +
+      '<div class="file-actions"></div>' +
+      '<ul class="notes hidden"></ul>';
+    filesList.prepend(el);
+    const row = { el, view, downloaded: false, notesOpen: false };
+    rows.set(key, row);
+    return row;
+  }
+
+  function applyView(row, v) {
+    row.view = v;
+    const el = row.el;
+    el.className = 'file ' + v.state;
+    el.querySelector('.name').textContent = v.filename;
+    el.querySelector('.size').textContent = fmtSize(v.size);
+    el.querySelector('.file-status').textContent = statusText(v);
+
+    const bar = el.querySelector('.bar');
+    const pct = v.total > 0 ? Math.round(100 * v.done / v.total) : (v.state === 'done' ? 100 : 0);
+    bar.setAttribute('aria-valuemax', v.total || 100);
+    bar.setAttribute('aria-valuenow', v.total ? v.done : pct);
+    bar.firstElementChild.style.width = pct + '%';
+
+    const actions = el.querySelector('.file-actions');
+    actions.textContent = '';
+    if (v.state === 'queued' || v.state === 'running') {
+      const stop = button('Stop', 'link', () => fetch('/api/jobs/' + v.id + '/cancel', { method: 'POST' }));
+      actions.appendChild(stop);
+    }
+    if (v.state === 'done' && v.download) {
+      const a = document.createElement('a');
+      a.className = 'btn';
+      a.href = v.download;
+      a.textContent = 'Save Word file';
+      a.setAttribute('download', '');
+      actions.appendChild(a);
+      if (!row.downloaded) { row.downloaded = true; a.click(); }
+    }
+    const notes = (v.report && v.report.warnings) || [];
+    const notesEl = el.querySelector('.notes');
+    if (notes.length) {
+      const toggle = button((row.notesOpen ? 'Hide ' : 'Show ') + notes.length + (notes.length === 1 ? ' note' : ' notes'), 'link', () => {
+        row.notesOpen = !row.notesOpen; applyView(row, row.view);
+      });
+      actions.appendChild(toggle);
+      notesEl.textContent = '';
+      for (const n of notes) { const li = document.createElement('li'); li.textContent = n; notesEl.appendChild(li); }
+      notesEl.classList.toggle('hidden', !row.notesOpen);
+    } else {
+      notesEl.classList.add('hidden');
+    }
+  }
+
+  function button(label, cls, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function statusText(v) {
+    switch (v.state) {
+      case 'uploading': return 'Uploading';
+      case 'queued': return 'Waiting for its turn';
+      case 'running':
+        if (!v.total) return 'Reading the text layer';
+        return 'Reading page ' + v.page + ' of ' + v.total + (v.stage === 'ocr' ? ' with OCR' : '');
+      case 'done': {
+        const r = v.report || {};
+        let s = 'Done: ' + plural(r.pages, 'page');
+        const parts = [];
+        if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with OCR');
+        if (r.emptyPages) parts.push(plural(r.emptyPages, 'page') + ' came out empty');
+        if (parts.length) s += ' (' + parts.join(', ') + ')';
+        if (v.elapsedMs > 1500) s += ' in ' + fmtDuration(v.elapsedMs);
+        return s;
+      }
+      case 'cancelled': return 'Stopped';
+      case 'error': return "Couldn't convert: " + (v.message || 'unknown error');
+    }
+    return '';
+  }
+
+  function renderSheet() {
+    let active = null;
+    for (const r of rows.values()) if (r.view.state === 'running') { active = r.view; break; }
+    if (!active) for (const r of rows.values()) if (r.view.state === 'uploading' || r.view.state === 'queued') { active = r.view; break; }
+    if (!active) {
+      sheet.classList.remove('busy', 'indeterminate');
+      sheetBusy.classList.add('hidden');
+      sheetIdle.classList.remove('hidden');
+      fill.style.height = '0';
+      $('band').style.top = '0';
+      return;
+    }
+    sheet.classList.add('busy');
+    sheetIdle.classList.add('hidden');
+    sheetBusy.classList.remove('hidden');
+    sheetFile.textContent = active.filename;
+    if (active.state === 'running' && active.total > 0) {
+      sheet.classList.remove('indeterminate');
+      const pct = 100 * active.done / active.total;
+      fill.style.height = pct + '%';
+      $('band').style.top = pct + '%';
+      count.innerHTML = '';
+      count.append(String(active.done));
+      const small = document.createElement('small'); small.textContent = '/ ' + active.total; count.appendChild(small);
+      sheetStatus.textContent = active.stage === 'ocr' ? 'Reading with OCR' : 'Reading';
+    } else {
+      sheet.classList.add('indeterminate');
+      fill.style.height = '0';
+      count.textContent = '';
+      sheetStatus.textContent = active.state === 'uploading' ? 'Uploading' : (active.state === 'queued' ? 'Waiting' : 'Reading the text layer');
+    }
+  }
+
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+  function fmtSize(b) {
+    if (!b && b !== 0) return '';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+  function fmtDuration(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return s + ' s';
+    return Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
+  }
+
+  // --- environment ---------------------------------------------------------------------
+  fetch('/api/info').then(r => r.json()).then(info => {
+    $('version').textContent = info.version ? 'pdf2word ' + info.version : '';
+    const e = $('engine');
+    if (info.ocr && info.ocr.available) {
+      e.textContent = 'OCR ready (' + (info.ocr.version || 'engine found') + ')';
+    } else {
+      e.className = 'warn';
+      e.textContent = 'OCR engine not found: scanned pages will fail. Install Tesseract and restart.';
+    }
+  }).catch(() => { $('engine').textContent = ''; });
+
+  poll();
+})();
+</script>
+</body>
+</html>

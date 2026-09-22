@@ -2,10 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"pdf2word/internal/convert"
 	"pdf2word/internal/model"
@@ -17,7 +21,6 @@ func fixture(name string) string {
 
 func TestRun_UsageErrors(t *testing.T) {
 	cases := [][]string{
-		{},                                     // no input
 		{"a.pdf", "b.docx", "c"},               // too many positionals
 		{"-ocr", "bogus", fixture("text.pdf")}, // bad mode
 	}
@@ -75,6 +78,55 @@ func TestRun_MissingInputIsConversionError(t *testing.T) {
 	code := run([]string{"-no-progress", "-o", filepath.Join(t.TempDir(), "x.docx"), fixture("nope.pdf")}, &stdout, &stderr)
 	if code != 1 || !strings.Contains(stderr.String(), "pdf2word:") {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+// With no file argument the program serves the browser page.
+func TestServe_ServesPageAndStopsOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var stdout, stderr bytes.Buffer
+	gotURL := make(chan string, 1)
+	done := make(chan int, 1)
+	go func() {
+		done <- serve(ctx, serveOptions{
+			addr:        "127.0.0.1:0",
+			openBrowser: false,
+			autoExit:    false,
+			ready:       func(u string) { gotURL <- u },
+		}, &stdout, &stderr)
+	}()
+
+	var url string
+	select {
+	case url = <-gotURL:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("server did not start; stderr=%s", stderr.String())
+	}
+	if !strings.HasPrefix(url, "http://127.0.0.1:") {
+		t.Fatalf("unexpected url %q", url)
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(body), "Drop PDF files here") {
+		t.Fatalf("status %d; page missing drop zone", resp.StatusCode)
+	}
+
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("serve exited with %d; stderr=%s", code, stderr.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not stop after cancel")
+	}
+	if !strings.Contains(stdout.String(), "Open http://127.0.0.1:") {
+		t.Errorf("banner missing from stdout: %q", stdout.String())
 	}
 }
 

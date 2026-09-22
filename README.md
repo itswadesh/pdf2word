@@ -1,31 +1,53 @@
 # pdf2word
 
-Convert PDF files to Word (`.docx`) from the command line, in Go.
+Turn PDF files into Word (`.docx`) documents. Double-click the program, drop
+PDFs on the page that opens, and save the Word files it gives back.
 
 - **Text PDFs** – the text layer is read directly and rebuilt into paragraphs
   and headings (headings are detected from font size).
-- **Scanned PDFs** – pages that are only images are run through
-  [Tesseract](https://github.com/tesseract-ocr/tesseract) OCR.
+- **Scanned PDFs and print-to-PDF outlines** – pages without selectable text
+  are rendered and read with [Tesseract](https://github.com/tesseract-ocr/tesseract)
+  OCR. This includes files where a print driver turned the text into vector
+  outlines (for example "Microsoft: Print To PDF").
 - Page breaks are preserved so the Word document follows the PDF's pagination.
-- Pure Go build (`CGO_ENABLED=0`), single binary, Windows / macOS / Linux.
-- Live progress indicator while converting.
+- Live progress: a page counter and bar while it works, per file.
+- One executable, no installer, no cgo. The PDF renderer (PDFium) is built in
+  as WebAssembly; only Tesseract is external.
 
-```
-$ pdf2word report.pdf
-[##############################] 100%  page 12/12  ocr
-converted 12 page(s) (9 text, 3 via OCR, 0 empty) in 4.812s -> report.docx
-```
+## Using the app
+
+1. Start `pdf2word.exe` (double-click). A console window shows the address and
+   your browser opens `http://127.0.0.1:<port>/`.
+2. Drop one or more PDFs onto the page (or click the sheet to choose files).
+3. Watch the counter. When a file is done its Word document downloads by
+   itself; the "Save Word file" button downloads it again.
+4. Close the browser tab when finished. The program exits on its own shortly
+   after (pass `-no-auto-exit` to keep it running).
+
+Options on the page:
+
+| Option | Meaning |
+|---|---|
+| Text recognition: *only where needed* (default) | OCR pages with fewer than 20 characters of real text. |
+| Text recognition: *off* | Never OCR. Scanned pages come out empty, with a note. |
+| Text recognition: *every page* | OCR every page and prefer the OCR text. |
+| Language | Tesseract language codes, e.g. `eng`, `eng+hin`. Extra languages need their `traineddata` files installed. |
+
+Everything runs locally. The server listens on the loopback address only,
+refuses requests from other hosts or origins, and stores uploads in a
+temporary folder that is removed when the program exits.
 
 ## Requirements
 
 | Purpose | Requirement |
 |---|---|
-| Build | Go 1.27 or newer |
-| OCR (scanned pages only) | Tesseract 4 or 5 on your `PATH` (or point to it with `-tesseract`) |
+| Run | Windows, macOS or Linux; a browser |
+| OCR (scanned pages) | Tesseract 4 or 5 on your `PATH`, or pass `-tesseract path\to\tesseract.exe` |
+| Build from source | Go 1.27 or newer |
 
 Text-only PDFs convert without Tesseract. If a page needs OCR and Tesseract
-cannot be found, pdf2word stops with a clear message instead of producing an
-empty document (use `-ocr off` to convert anyway).
+cannot be found, the file fails with a clear message rather than producing an
+empty document; the page footer also warns up front.
 
 Installing Tesseract:
 
@@ -35,18 +57,9 @@ Installing Tesseract:
 - **macOS** – `brew install tesseract`
 - **Debian/Ubuntu** – `sudo apt install tesseract-ocr`
 
-Extra languages are Tesseract `traineddata` files; pass them with
-`-lang eng+deu`.
+## Command line
 
-## Build
-
-```sh
-git clone <this repo> pdf2word
-cd pdf2word
-go build -o bin/pdf2word ./cmd/pdf2word        # bin/pdf2word.exe on Windows
-```
-
-## Usage
+The same executable converts from a terminal when given a file:
 
 ```
 pdf2word [flags] input.pdf [output.docx]
@@ -55,74 +68,74 @@ pdf2word [flags] input.pdf [output.docx]
   -ocr string        OCR mode: auto, off or force (default "auto")
   -lang string       Tesseract language(s), e.g. eng or eng+deu (default "eng")
   -tesseract string  path to the tesseract executable (default: auto-detect)
+  -dpi int           resolution used to render pages before OCR (default 300)
   -min-text int      text-layer characters below which a page counts as scanned (default 20)
   -v                 verbose: one progress line per page plus diagnostics
   -no-progress       disable the progress indicator
+  -addr string       address for the browser page (default "127.0.0.1:0", a free port)
+  -no-browser        app mode: do not open the browser automatically
+  -no-auto-exit      app mode: keep running after the browser page is closed
   -version           print version and exit
 ```
 
-Examples:
-
 ```sh
-pdf2word invoice.pdf                     # -> invoice.docx
-pdf2word -o out/report.docx report.pdf
+pdf2word invoice.pdf                      # -> invoice.docx
 pdf2word -ocr force -lang eng+fra scan.pdf
-pdf2word -tesseract "C:\Tools\Tesseract-OCR\tesseract.exe" scan.pdf
+pdf2word -addr 127.0.0.1:8080 -no-browser # app mode on a fixed port
 ```
 
 Exit codes: `0` success, `1` conversion failed, `2` bad usage.
 
-### How the OCR decision works
+## How a page is handled
 
-For each page pdf2word counts the characters in the PDF text layer:
+1. The text layer is extracted and rebuilt into lines, paragraphs and
+   headings.
+2. If the page has fewer than `-min-text` characters (or OCR is forced), the
+   page is rendered at `-dpi` and passed to Tesseract. If rendering is
+   unavailable, the images embedded in the page are used instead.
+3. Blocks are written as Word paragraphs; a page break separates pages.
 
-| `-ocr` | Behaviour |
-|---|---|
-| `auto` (default) | OCR a page when it has fewer than `-min-text` characters **and** contains at least one embedded image. |
-| `off` | Never OCR. Scanned pages come out empty and a warning is printed. |
-| `force` | OCR every page that has images and use the OCR text; pages without images fall back to the text layer. |
-
-### Progress indicator
-
-On an interactive terminal a single-line bar is redrawn in place. With `-v`
-one line per page is printed instead so diagnostics are never overwritten.
-When stderr is not a terminal (for example in CI logs) the indicator is
-silent unless `-v` is given. `-no-progress` turns it off entirely. The final
-summary always goes to stdout; warnings go to stderr.
+Speed on a typical office PC: rendering takes about 0.1 s per page and OCR
+1 to 2 s per page, so a 250-page scanned document takes several minutes. Text
+PDFs convert in seconds.
 
 ## Limitations
 
 - Layout is "readable document", not a pixel-perfect replica: tables,
   multi-column layouts, footnotes, images, fonts and colours are not
   reproduced.
-- Scanned pages are OCR'd from the images embedded in the PDF. A page that is
-  pure vector drawing with no text layer cannot be OCR'd (no rasteriser is
-  bundled); it is reported as a warning.
+- OCR quality depends on scan quality and language data; dotted leaders and
+  tables of contents produce noise.
 - Encrypted PDFs are not supported.
 
 ## Development
 
 ```sh
-go test ./...            # unit tests; the real-Tesseract test skips if it is not installed
+go test ./...                # unit tests; real-Tesseract tests skip if it is not installed
 go vet ./...
-go run ./tools/genfixtures   # regenerate testdata/text.pdf and testdata/scanned.pdf
+go build -o bin/pdf2word.exe ./cmd/pdf2word
+go run ./tools/genfixtures   # regenerate testdata/*.pdf
 ```
 
 Project layout:
 
 ```
-cmd/pdf2word/        CLI (flags, exit codes, progress indicator)
-internal/model/      shared document model (Document, Page, Block)
+cmd/pdf2word/        executable: app mode (server + browser) and command line
+internal/web/        HTTP API, job queue and the embedded page (static/index.html)
+internal/convert/    pipeline orchestration and OCR policy
 internal/pdftext/    text-layer extraction and glyph -> line -> paragraph rebuild
-internal/pdfimage/   embedded image extraction (pdfcpu)
+internal/render/     page rasteriser (PDFium via WebAssembly, no cgo)
+internal/pdfimage/   embedded image extraction (pdfcpu), fallback for OCR
 internal/ocr/        Engine interface, Tesseract CLI wrapper, binary discovery
 internal/docx/       .docx writer (standard library only)
-internal/convert/    pipeline orchestration and OCR policy
+internal/model/      shared document model (Document, Page, Block)
 tools/genfixtures/   generates the PDF fixtures used by tests
 docs/superpowers/    design spec and implementation plan
 ```
 
 Dependencies: [`github.com/ledongthuc/pdf`](https://github.com/ledongthuc/pdf)
-(text layer, MIT), [`github.com/pdfcpu/pdfcpu`](https://github.com/pdfcpu/pdfcpu)
-(images, Apache-2.0), `golang.org/x/image` (TIFF header decoding and fixture
-rendering, BSD-3). Tesseract is invoked as an external process; no cgo.
+(text layer, MIT), [`github.com/klippa-app/go-pdfium`](https://github.com/klippa-app/go-pdfium)
+(PDFium rendering through wazero, MIT/BSD),
+[`github.com/pdfcpu/pdfcpu`](https://github.com/pdfcpu/pdfcpu) (embedded
+images, Apache-2.0), `golang.org/x/image` (TIFF header decoding and fixture
+rendering, BSD-3). Tesseract is invoked as an external process.

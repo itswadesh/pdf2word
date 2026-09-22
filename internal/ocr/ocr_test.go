@@ -142,6 +142,27 @@ func TestTesseract_RecognizeBadBinary(t *testing.T) {
 	}
 }
 
+func TestTesseract_VersionBadBinary(t *testing.T) {
+	tess := &Tesseract{Path: filepath.Join(t.TempDir(), "nope-tesseract")}
+	if _, err := tess.Version(context.Background()); err == nil {
+		t.Fatal("expected an error when the binary does not exist")
+	}
+	if err := tess.Available(context.Background()); err == nil {
+		t.Fatal("Available must fail when the binary does not exist")
+	}
+}
+
+func TestTesseract_VersionReal(t *testing.T) {
+	p, err := Find("")
+	if err != nil {
+		t.Skipf("tesseract not installed: %v", err)
+	}
+	v, err := (&Tesseract{Path: p}).Version(context.Background())
+	if err != nil || !strings.HasPrefix(strings.ToLower(v), "tesseract") {
+		t.Fatalf("Version() = %q, %v", v, err)
+	}
+}
+
 func TestTesseract_Name(t *testing.T) {
 	if (&Tesseract{}).Name() != "tesseract" {
 		t.Fatal("unexpected engine name")

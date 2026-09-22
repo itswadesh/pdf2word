@@ -48,11 +48,18 @@ func (t *Tesseract) args(file string) []string {
 
 // Available checks that the executable runs by invoking `--version`.
 func (t *Tesseract) Available(ctx context.Context) error {
+	_, err := t.Version(ctx)
+	return err
+}
+
+// Version runs `--version` and returns its first line, e.g.
+// "tesseract v5.4.0.20240606".
+func (t *Tesseract) Version(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, t.path(), "--version").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s --version: %w: %s", t.path(), err, firstLine(out))
+		return "", fmt.Errorf("%s --version: %w: %s", t.path(), err, firstLine(out))
 	}
-	return nil
+	return firstLine(out), nil
 }
 
 // Recognize implements Engine by writing img to a temporary file and running
@@ -87,7 +94,7 @@ func firstLine(b []byte) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]
 	}
-	return s
+	return strings.TrimSpace(s) // drops a trailing \r from Windows output
 }
 
 // knownDirs lists installation directories checked after PATH. It is a
