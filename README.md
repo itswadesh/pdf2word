@@ -11,7 +11,10 @@ PDFs on the page that opens, and save the Word files it gives back.
 - **Scanned PDFs and print-to-PDF outlines** – pages without selectable text
   are rendered and read with [Tesseract](https://github.com/tesseract-ocr/tesseract)
   OCR. This includes files where a print driver turned the text into vector
-  outlines (for example "Microsoft: Print To PDF").
+  outlines (for example "Microsoft: Print To PDF"). Word positions from OCR
+  go through the same layout step, so headings, centring, justified text,
+  indents and spacing are kept, and tables are rebuilt where the PDF still
+  contains their ruling lines. Bold and italic cannot be recovered from OCR.
 - Page breaks are preserved so the Word document follows the PDF's pagination.
 - Live progress: a page counter and bar while it works, per file.
 - One executable, no installer, no cgo. The PDF renderer (PDFium, as
@@ -130,8 +133,10 @@ Exit codes: `0` success, `1` conversion failed, `2` bad usage.
    ruling lines become Word tables with the text assigned to cells. Images
    are embedded at their original size.
 2. If the page has fewer than `-min-text` characters (or OCR is forced), the
-   page is rendered at `-dpi` and passed to Tesseract. OCR'd pages come out
-   as plain paragraphs for now.
+   page is rendered at `-dpi` and passed to Tesseract, which returns every
+   word with its position. Those positions, together with any ruling lines
+   and images the PDF still has, go through the same layout step as text
+   pages.
 3. Blocks are written as Word paragraphs, tables and pictures; a page break
    separates pages. The Word page size, orientation and margins follow the
    PDF.
@@ -147,7 +152,8 @@ minutes on a multi-core PC. Text PDFs convert in seconds.
   not a pixel-perfect replica. Not yet handled: tables without ruling lines,
   cells merged vertically, multi-column article layouts (read row by row),
   text colours, running headers and footers (they stay in the body), vector
-  drawings other than table rulings, and formatting on OCR'd pages.
+  drawings other than table rulings, bold/italic on OCR'd pages, and tables
+  on raster scans (no ruling lines to read).
 - OCR quality depends on scan quality and language data; dotted leaders and
   tables of contents produce noise.
 - Encrypted PDFs are not supported.

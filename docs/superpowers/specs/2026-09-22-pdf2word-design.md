@@ -450,6 +450,34 @@ tests parse the XML for `jc`, `b`, `tbl`, `drawing`, `pgSz`. Manual check on
 the certificate; if LibreOffice can be obtained, render the .docx to PDF and
 compare visually.
 
+## 14. Layout preservation, phase 2: OCR'd pages (2026-09-22) — implemented
+
+Running the 247-page tender ("HMA insourcing.pdf", vector-outline text) after
+phase 1 still gave plain paragraphs, because OCR pages bypassed the layout
+pipeline. Phase 2 feeds OCR output through the same assembly:
+
+- **Word boxes.** `ocr.Tesseract.RecognizeWords` runs Tesseract with the
+  `tsv` config and parses level-4 (line) and level-5 (word) rows into
+  `ocr.Word{Text, Left, Top, Width, Height, LineTop, LineHeight, Conf}`.
+  Engines that can do this implement `ocr.WordEngine`.
+- **Shared assembly.** `pdflayout.assemble` is the page builder for both
+  sources. `ExtractAll` returns, for pages without a text layer, their
+  `PageAssets` (size, rulings, images), and `AssembleOCR(page, w, h, words,
+  assets)` lays OCR words out with them. Vector rulings therefore still
+  yield tables on outline PDFs (page 1 of the tender: 80 rulings, one
+  table); on raster scans there are none (image-based line detection is a
+  future step). Full-page scan images are never embedded.
+- **Geometry.** `convert.ocrLayout` maps pixel boxes to points with
+  `scale = pageWidth / imageWidth`, uses the *line* box for the vertical
+  extent of every word (word boxes vary with ascenders), and estimates the
+  font size as `lineHeight × 1.05`. OCR uses a 5 pt edge tolerance instead
+  of 2 pt. Bold/italic are not available from Tesseract and stay off.
+- **Glyph outlines vs rulings.** Text drawn as paths produces thin filled
+  shapes ("l", "I", "-"); filled shapes now need ≥ 15 pt of length to count
+  as rulings (stroked lines keep 6 pt).
+- **Fallback.** Engines without word boxes, or pages whose size is
+  unknown, keep the plain `TextToBlocks` path.
+
 ## 12. Dependencies
 
 | Module | Purpose | Licence |
