@@ -3,6 +3,7 @@ module pdf2word
 go 1.27.1
 
 require (
+	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/pdfcpu/pdfcpu v0.15.0
 	golang.org/x/image v0.46.0
 )
