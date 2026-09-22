@@ -24,14 +24,11 @@ PDFs on the page that opens, and save the Word files it gives back.
 4. Close the browser tab when finished. The program exits on its own shortly
    after (pass `-no-auto-exit` to keep it running).
 
-Options on the page:
-
-| Option | Meaning |
-|---|---|
-| Text recognition: *only where needed* (default) | OCR pages with fewer than 20 characters of real text. |
-| Text recognition: *off* | Never OCR. Scanned pages come out empty, with a note. |
-| Text recognition: *every page* | OCR every page and prefer the OCR text. |
-| Language | Tesseract language codes, e.g. `eng`, `eng+hin`. Extra languages need their `traineddata` files installed. |
+The page has no settings: pages with fewer than 20 characters of real text
+are read with OCR, in English. To change that for the app, start it with the
+corresponding flags, e.g. `pdf2word.exe -lang eng+hin` or
+`pdf2word.exe -min-text 50` (extra languages need their Tesseract
+`traineddata` files installed).
 
 Everything runs locally. The server listens on the loopback address only,
 refuses requests from other hosts or origins, and stores uploads in a
