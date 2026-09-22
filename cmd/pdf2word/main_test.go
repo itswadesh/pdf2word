@@ -82,8 +82,8 @@ func TestIndicator_VerbosePrintsOneLinePerPage(t *testing.T) {
 	var buf bytes.Buffer
 	ind := newIndicator(&buf, true, true)
 	ind.start("in.pdf")
-	ind.update(convert.Progress{Page: 1, Total: 2, Source: model.SourceText})
-	ind.update(convert.Progress{Page: 2, Total: 2, Source: model.SourceOCR, OCR: true})
+	ind.update(convert.Progress{Done: 1, Page: 1, Total: 2, Source: model.SourceText})
+	ind.update(convert.Progress{Done: 2, Page: 2, Total: 2, Source: model.SourceOCR, OCR: true})
 	ind.finish()
 	want := "reading in.pdf ...\npage 1/2: text\npage 2/2: ocr\n"
 	if buf.String() != want {
@@ -95,8 +95,8 @@ func TestIndicator_BarRedrawsInPlace(t *testing.T) {
 	var buf bytes.Buffer
 	ind := &indicator{w: &buf, mode: indicatorBar}
 	ind.start("in.pdf")
-	ind.update(convert.Progress{Page: 1, Total: 2, Source: model.SourceText})
-	ind.update(convert.Progress{Page: 2, Total: 2, Source: model.SourceOCR, OCR: true})
+	ind.update(convert.Progress{Done: 1, Page: 1, Total: 2, Source: model.SourceText})
+	ind.update(convert.Progress{Done: 2, Page: 2, Total: 2, Source: model.SourceOCR, OCR: true})
 	ind.finish()
 	got := buf.String()
 	if strings.Count(got, "\r") != 3 || !strings.HasSuffix(got, "\n") {
@@ -115,7 +115,7 @@ func TestIndicator_DisabledOrNonTerminalIsSilent(t *testing.T) {
 		var buf bytes.Buffer
 		ind := newIndicator(&buf, enabled, false) // bytes.Buffer is not a terminal
 		ind.start("in.pdf")
-		ind.update(convert.Progress{Page: 1, Total: 1, Source: model.SourceText})
+		ind.update(convert.Progress{Done: 1, Page: 1, Total: 1, Source: model.SourceText})
 		ind.finish()
 		if buf.Len() != 0 {
 			t.Errorf("enabled=%v: expected no output, got %q", enabled, buf.String())

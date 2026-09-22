@@ -228,7 +228,7 @@ func TestBuildDocument_ReportsProgressPerPage(t *testing.T) {
 		t.Fatalf("got %d progress events, want 2: %+v", len(got), got)
 	}
 	for i, p := range got {
-		if p.Page != i+1 || p.Total != 2 || p.Source != model.SourceText || p.OCR {
+		if p.Done != i+1 || p.Page != i+1 || p.Total != 2 || p.Source != model.SourceText || p.OCR {
 			t.Errorf("event %d = %+v", i, p)
 		}
 	}
@@ -239,8 +239,51 @@ func TestBuildDocument_ReportsProgressPerPage(t *testing.T) {
 	if _, _, err := BuildDocument(context.Background(), fixture("scanned.pdf"), Options{OnProgress: record, Engine: eng, OpenImages: opener(fi)}); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0] != (Progress{Page: 1, Total: 1, Source: model.SourceOCR, OCR: true}) {
+	if len(got) != 1 || got[0] != (Progress{Done: 1, Total: 1, Page: 1, Source: model.SourceOCR, OCR: true}) {
 		t.Errorf("scanned progress = %+v", got)
+	}
+}
+
+// A 247-page file once produced 247 copies of the same "cannot open images"
+// warning. The failure must be reported once, plus one summary line.
+func TestBuildDocument_ImageOpenFailureIsReportedOnce(t *testing.T) {
+	eng := &fakeEngine{text: "unused"}
+	boom := func(string) (ImageSource, error) { return nil, errors.New("renderer exploded") }
+	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: eng, OpenImages: boom})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eng.calls != 0 {
+		t.Errorf("engine should not run without images, ran %d times", eng.calls)
+	}
+	if len(rep.Warnings) != 2 {
+		t.Fatalf("want exactly 2 warnings (failure + summary), got %d: %q", len(rep.Warnings), rep.Warnings)
+	}
+	if !strings.Contains(rep.Warnings[0], "renderer exploded") || !strings.Contains(rep.Warnings[1], "2 page(s)") {
+		t.Errorf("warnings = %q", rep.Warnings)
+	}
+	// Text layer is still used when OCR cannot run.
+	if doc.Pages[0].Source != model.SourceText || rep.TextPages != 2 {
+		t.Errorf("pages should fall back to the text layer: %+v", rep)
+	}
+}
+
+// Rendering a page that has a text layer but no embedded images, then
+// OCR-ing the render, is the path that vector-outline PDFs rely on.
+func TestBuildDocument_ForceOCRRendersPagesWithRealTesseract(t *testing.T) {
+	if _, err := ocr.Find(""); err != nil {
+		t.Skipf("tesseract not available: %v", err)
+	}
+	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, DPI: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.OCRPages != 2 || len(rep.Warnings) != 0 {
+		t.Fatalf("report = %+v", rep)
+	}
+	text := strings.ToLower(pageText(doc.Pages[0]))
+	if !strings.Contains(text, "quarterly report") || !strings.Contains(text, "first paragraph") {
+		t.Errorf("OCR of rendered page 1 = %q", text)
 	}
 }
 

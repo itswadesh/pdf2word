@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"pdf2word/internal/convert"
+	"pdf2word/internal/render"
 )
 
 // version is overridable at build time:
@@ -49,6 +50,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		lang        = fs.String("lang", "eng", "Tesseract language(s), e.g. eng or eng+deu")
 		tess        = fs.String("tesseract", "", "path to the tesseract executable (default: auto-detect)")
 		minText     = fs.Int("min-text", convert.DefaultMinTextChars, "text-layer characters below which a page counts as scanned")
+		dpi         = fs.Int("dpi", render.DefaultDPI, "resolution used to render pages before OCR")
 		verbose     = fs.Bool("v", false, "verbose: one progress line per page plus diagnostics")
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator")
 		showVersion = fs.Bool("version", false, "print version and exit")
@@ -98,6 +100,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	opts := convert.Options{
 		OCR:           mode,
 		MinTextChars:  *minText,
+		DPI:           *dpi,
 		Lang:          *lang,
 		TesseractPath: *tess,
 		OnProgress:    ind.update,

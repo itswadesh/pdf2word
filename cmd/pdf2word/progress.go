@@ -66,8 +66,8 @@ func (ind *indicator) update(p convert.Progress) {
 		filled := 0
 		pct := 0
 		if p.Total > 0 {
-			filled = barWidth * p.Page / p.Total
-			pct = 100 * p.Page / p.Total
+			filled = barWidth * p.Done / p.Total
+			pct = 100 * p.Done / p.Total
 		}
 		bar := strings.Repeat("#", filled) + strings.Repeat("-", barWidth-filled)
 		ind.redraw(fmt.Sprintf("[%s] %3d%%  page %d/%d  %s", bar, pct, p.Page, p.Total, label))

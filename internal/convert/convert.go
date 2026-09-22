@@ -14,6 +14,7 @@ import (
 	"pdf2word/internal/ocr"
 	"pdf2word/internal/pdfimage"
 	"pdf2word/internal/pdftext"
+	"pdf2word/internal/render"
 )
 
 // OCRMode controls when OCR is used.
@@ -24,8 +25,8 @@ const (
 	OCRAuto OCRMode = "auto"
 	// OCROff never runs OCR.
 	OCROff OCRMode = "off"
-	// OCRForce runs OCR on every page that has images, preferring the OCR
-	// result over the text layer.
+	// OCRForce runs OCR on every page, preferring the OCR result over the
+	// text layer.
 	OCRForce OCRMode = "force"
 )
 
@@ -46,8 +47,9 @@ func ParseOCRMode(s string) (OCRMode, error) {
 // as scanned in OCRAuto mode.
 const DefaultMinTextChars = 20
 
-// ImageSource yields the images of a page (1-based). pdfimage.Reader
-// satisfies it; tests supply fakes.
+// ImageSource yields the images to OCR for a page (1-based). The default is
+// a full-page render (render.Renderer); pdfimage.Reader (embedded images
+// only) is the fallback; tests supply fakes.
 type ImageSource interface {
 	PageImages(page int) ([]pdfimage.Image, error)
 	Close() error
@@ -55,8 +57,9 @@ type ImageSource interface {
 
 // Progress is reported after each page has been resolved.
 type Progress struct {
-	Page   int // 1-based page just finished
+	Done   int // pages finished so far (1..Total)
 	Total  int
+	Page   int              // 1-based page just finished
 	Source model.PageSource // how the page's text was obtained
 	OCR    bool             // true when OCR was attempted on this page
 }
@@ -66,6 +69,7 @@ type Options struct {
 	OCR          OCRMode
 	MinTextChars int    // default DefaultMinTextChars
 	Lang         string // Tesseract language(s); empty means ocr.DefaultLang
+	DPI          int    // resolution for rendering pages before OCR; default render.DefaultDPI
 
 	// TesseractPath is an explicit tesseract executable; empty means
 	// auto-detect (see ocr.Find).
@@ -73,7 +77,9 @@ type Options struct {
 	// Engine overrides Tesseract entirely. When nil, a Tesseract engine is
 	// created lazily the first time a page needs OCR.
 	Engine ocr.Engine
-	// OpenImages overrides how page images are obtained (default pdfimage).
+	// OpenImages overrides how page images are obtained. The default renders
+	// each page with PDFium and falls back to embedded images if rendering
+	// is unavailable.
 	OpenImages func(path string) (ImageSource, error)
 
 	// OnProgress, if set, is called once per page as it completes.
@@ -89,20 +95,35 @@ func (o *Options) applyDefaults() {
 	if o.MinTextChars <= 0 {
 		o.MinTextChars = DefaultMinTextChars
 	}
-	if o.OpenImages == nil {
-		o.OpenImages = func(path string) (ImageSource, error) {
-			r, err := pdfimage.Open(path)
-			if err != nil {
-				return nil, err
-			}
-			return r, nil
-		}
+	if o.DPI <= 0 {
+		o.DPI = render.DefaultDPI
 	}
 	if o.OnProgress == nil {
 		o.OnProgress = func(Progress) {}
 	}
 	if o.Logf == nil {
 		o.Logf = func(string, ...any) {}
+	}
+	if o.OpenImages == nil {
+		o.OpenImages = defaultOpenImages(o.DPI, o.Logf)
+	}
+}
+
+// defaultOpenImages renders pages with PDFium; if that cannot be set up it
+// falls back to extracting the images embedded in each page.
+func defaultOpenImages(dpi int, logf func(string, ...any)) func(string) (ImageSource, error) {
+	return func(path string) (ImageSource, error) {
+		r, rerr := render.Open(path, dpi)
+		if rerr == nil {
+			logf("rendering pages at %d dpi for OCR", dpi)
+			return r, nil
+		}
+		logf("page renderer unavailable (%v); falling back to embedded images", rerr)
+		e, err := pdfimage.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("%w (renderer: %v)", err, rerr)
+		}
+		return e, nil
 	}
 }
 
@@ -171,7 +192,10 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 		default:
 			rep.EmptyPages++
 		}
-		opts.OnProgress(Progress{Page: page.Number, Total: rep.Pages, Source: page.Source, OCR: ocrRan})
+		opts.OnProgress(Progress{Done: i + 1, Total: rep.Pages, Page: page.Number, Source: page.Source, OCR: ocrRan})
+	}
+	if s.imagesFailedPages > 0 {
+		rep.warnf("%d page(s) could not be OCR'd because page images were unavailable", s.imagesFailedPages)
 	}
 	return doc, rep, nil
 }
@@ -182,9 +206,10 @@ type session struct {
 	in   string
 	rep  *Report
 
-	images    ImageSource
-	imagesErr error
-	engine    ocr.Engine
+	images            ImageSource
+	imagesErr         error // set once if the image source could not be opened
+	imagesFailedPages int   // pages skipped because of imagesErr
+	engine            ocr.Engine
 }
 
 func (s *session) close() {
@@ -216,7 +241,12 @@ func (s *session) processPage(ctx context.Context, page *model.Page) (bool, erro
 
 	imgs, err := s.pageImages(page.Number)
 	if err != nil {
-		s.rep.warnf("page %d: %v", page.Number, err)
+		if s.imagesErr != nil {
+			// Reported once when it happened; just count the affected pages.
+			s.imagesFailedPages++
+		} else {
+			s.rep.warnf("page %d: %v", page.Number, err)
+		}
 		return false, nil
 	}
 	if len(imgs) == 0 {
@@ -252,11 +282,14 @@ func (s *session) processPage(ctx context.Context, page *model.Page) (bool, erro
 	return true, nil
 }
 
+// pageImages opens the image source on first use. If opening fails, the
+// failure is reported once and remembered so every later page fails fast.
 func (s *session) pageImages(page int) ([]pdfimage.Image, error) {
 	if s.images == nil && s.imagesErr == nil {
 		src, err := s.opts.OpenImages(s.in)
 		if err != nil {
-			s.imagesErr = fmt.Errorf("open images: %w", err)
+			s.imagesErr = fmt.Errorf("cannot get page images: %w", err)
+			s.rep.warnf("%v; pages that need OCR will be left empty", s.imagesErr)
 		} else {
 			s.images = src
 		}

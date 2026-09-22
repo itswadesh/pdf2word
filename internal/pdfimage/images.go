@@ -51,8 +51,20 @@ func Open(path string) (*Reader, error) {
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
 	conf.Cmd = model.EXTRACTIMAGES
-	ctx, err := api.ReadValidateAndOptimize(f, conf)
+	ctx, err := api.ReadContext(f, conf)
 	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("open pdf for image extraction: %w", err)
+	}
+	// Deliberately no api.ValidateContext here: even relaxed validation
+	// rejects whole files over harmless defects (e.g. a /Redact annotation
+	// whose /OC is an array), and we only need the page images. Validation
+	// is also what normally fills in PageCount, so compute it directly.
+	if err := ctx.EnsurePageCount(); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("open pdf for image extraction: page count: %w", err)
+	}
+	if err := api.OptimizeContext(ctx); err != nil {
 		f.Close()
 		return nil, fmt.Errorf("open pdf for image extraction: %w", err)
 	}

@@ -3,6 +3,7 @@ package pdfimage
 import (
 	"bytes"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -67,6 +68,32 @@ func TestPageImages_PageOutOfRange(t *testing.T) {
 		t.Fatal("expected an error for page 0")
 	}
 }
+
+// A malformed /Redact annotation (/OC given as an array) must not prevent
+// image extraction; strict validation rejected a real 247-page file this way.
+func TestOpen_ToleratesInvalidAnnotation(t *testing.T) {
+	r := openFixture(t, "badannot.pdf")
+	if r.PageCount() != 1 {
+		t.Fatalf("page count = %d, want 1", r.PageCount())
+	}
+	imgs, err := r.PageImages(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(imgs) != 1 || imgs[0].Width != 60 || imgs[0].Height != 60 {
+		t.Fatalf("got %d images %+v, want one 60x60 image", len(imgs), summarize(imgs))
+	}
+}
+
+func summarize(imgs []Image) []string {
+	var out []string
+	for _, im := range imgs {
+		out = append(out, im.Ext+" "+itoa(im.Width)+"x"+itoa(im.Height))
+	}
+	return out
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
 
 func TestOpen_MissingFile(t *testing.T) {
 	if _, err := Open(fixture("nope.pdf")); err == nil {

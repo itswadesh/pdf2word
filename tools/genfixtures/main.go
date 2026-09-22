@@ -46,7 +46,56 @@ func main() {
 	if err := os.WriteFile(filepath.Join(outDir, "scanned.pdf"), scanned, 0o644); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("wrote", filepath.Join(outDir, "text.pdf"), "and", filepath.Join(outDir, "scanned.pdf"))
+	if err := os.WriteFile(filepath.Join(outDir, "badannot.pdf"), buildBadAnnotPDF(), 0o644); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("wrote text.pdf, scanned.pdf and badannot.pdf in", outDir)
+}
+
+// buildBadAnnotPDF reproduces a real-world file from "Microsoft: Print To
+// PDF": a page whose only content is an image, plus a /Redact annotation
+// whose /OC entry is an array instead of a dictionary. Strict validators
+// reject the whole file because of that annotation; we must still be able to
+// pull the page image out for OCR.
+func buildBadAnnotPDF() []byte {
+	var b bytes.Buffer
+	var offsets []int
+	b.WriteString("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
+	add := func(body string) {
+		offsets = append(offsets, b.Len())
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", len(offsets), body)
+	}
+
+	// 60x60 8-bit grayscale image: white with a black bar across the middle.
+	const w, h = 60, 60
+	pix := make([]byte, w*h)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			v := byte(255)
+			if y > 25 && y < 35 {
+				v = 0
+			}
+			pix[y*w+x] = v
+		}
+	}
+	imgObj := fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8 /Length %d >>\nstream\n%s\nendstream", w, h, len(pix), pix)
+	content := "q 300 0 0 300 150 400 cm /Im1 Do Q\n"
+
+	add("<< /Type /Catalog /Pages 2 0 R >>")
+	add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>")
+	add(imgObj)
+	add(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
+	// The offending annotation: /OC must be a dict (OCG/OCMD) but is an array here.
+	add("<< /Type /Annot /Subtype /Redact /Rect [100 100 200 200] /F 4 /OC [1 0 0] >>")
+
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(offsets)+1)
+	for _, o := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", o)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets)+1, xref)
+	return b.Bytes()
 }
 
 // helveticaWidths holds the standard Helvetica AFM advance widths for
