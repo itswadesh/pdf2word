@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -67,6 +68,42 @@ func (t *Tesseract) Version(ctx context.Context) (string, error) {
 // Recognize implements Engine by writing img to a temporary file and running
 // tesseract on it.
 func (t *Tesseract) Recognize(ctx context.Context, img []byte, ext string) (string, error) {
+	return t.run(ctx, img, ext)
+}
+
+// Word is one recognised word with its box in image pixels (origin top-left).
+type Word struct {
+	Text       string
+	Left, Top  int
+	Width      int
+	Height     int
+	LineTop    int // box of the text line the word belongs to
+	LineHeight int
+	Block      int // Tesseract block, paragraph and line ids (for grouping)
+	Par        int
+	Line       int
+	Conf       float64
+}
+
+// WordEngine is implemented by engines that can report word positions.
+type WordEngine interface {
+	Engine
+	RecognizeWords(ctx context.Context, img []byte, ext string) ([]Word, error)
+}
+
+// RecognizeWords runs tesseract in TSV mode and returns the words with their
+// boxes. It implements WordEngine.
+func (t *Tesseract) RecognizeWords(ctx context.Context, img []byte, ext string) ([]Word, error) {
+	out, err := t.run(ctx, img, ext, "tsv")
+	if err != nil {
+		return nil, err
+	}
+	return parseTSV(out), nil
+}
+
+// run executes tesseract on img with the given output config (e.g. "tsv"
+// or none for plain text) and returns stdout.
+func (t *Tesseract) run(ctx context.Context, img []byte, ext string, configs ...string) (string, error) {
 	dir, err := os.MkdirTemp("", "pdf2word-ocr-")
 	if err != nil {
 		return "", err
@@ -81,8 +118,8 @@ func (t *Tesseract) Recognize(ctx context.Context, img []byte, ext string) (stri
 	if err := os.WriteFile(file, img, 0o600); err != nil {
 		return "", err
 	}
-
-	cmd := exec.CommandContext(ctx, t.path(), t.args(file)...)
+	args := append(t.args(file), configs...)
+	cmd := exec.CommandContext(ctx, t.path(), args...)
 	if t.Threads > 0 {
 		cmd.Env = append(os.Environ(), fmt.Sprintf("OMP_THREAD_LIMIT=%d", t.Threads))
 	}
@@ -92,6 +129,56 @@ func (t *Tesseract) Recognize(ctx context.Context, img []byte, ext string) (stri
 		return "", fmt.Errorf("%s: %w: %s", t.path(), err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.ReplaceAll(stdout.String(), "\r\n", "\n"), nil
+}
+
+// parseTSV reads Tesseract's TSV output (level page block par line word
+// left top width height conf text). Level 4 rows carry line boxes, level 5
+// rows words.
+func parseTSV(tsv string) []Word {
+	type lineKey struct{ block, par, line int }
+	type lineBox struct{ top, height int }
+	lineBoxes := map[lineKey]lineBox{}
+	var words []Word
+	for i, row := range strings.Split(tsv, "\n") {
+		f := strings.Split(row, "\t")
+		if i == 0 || len(f) < 12 {
+			continue
+		}
+		level := atoi(f[0])
+		key := lineKey{atoi(f[2]), atoi(f[3]), atoi(f[4])}
+		switch level {
+		case 4:
+			lineBoxes[key] = lineBox{top: atoi(f[7]), height: atoi(f[9])}
+		case 5:
+			text := strings.TrimSpace(f[11])
+			if text == "" {
+				continue
+			}
+			words = append(words, Word{
+				Text: text, Left: atoi(f[6]), Top: atoi(f[7]), Width: atoi(f[8]), Height: atoi(f[9]),
+				Block: key.block, Par: key.par, Line: key.line, Conf: atof(f[10]),
+			})
+		}
+	}
+	for i := range words {
+		w := &words[i]
+		if lb, ok := lineBoxes[lineKey{w.Block, w.Par, w.Line}]; ok && lb.height > 0 {
+			w.LineTop, w.LineHeight = lb.top, lb.height
+		} else {
+			w.LineTop, w.LineHeight = w.Top, w.Height
+		}
+	}
+	return words
+}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	return n
+}
+
+func atof(s string) float64 {
+	v, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	return v
 }
 
 func firstLine(b []byte) string {

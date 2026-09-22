@@ -242,6 +242,41 @@ func TestExtract_ScannedPageIsEmpty(t *testing.T) {
 	}
 }
 
+func TestAssembleOCR_SyntheticWords(t *testing.T) {
+	// Letter page; words in points, y up. A centred heading, a justified
+	// two-line paragraph and a right-aligned footer.
+	mk := func(text string, x0, x1, top, size float64) Word {
+		return Word{Text: text, X0: x0, X1: x1, Y1: top, Y0: top - 1.2*size, Size: size}
+	}
+	words := []Word{
+		mk("BID", 260, 290, 700, 14), mk("INVITATION", 296, 352, 700, 14), // centre ≈ 306 = 612/2
+		mk("The", 72, 92, 650, 11), mk("quick", 96, 126, 650, 11), mk("brown", 130, 540, 650, 11),
+		mk("fox", 72, 92, 636, 11), mk("jumps", 96, 130, 636, 11), mk("over", 134, 540, 636, 11),
+		mk("end.", 72, 100, 622, 11),
+		mk("30", 528, 540, 60, 10),
+	}
+	page, setup := AssembleOCR(30, 612, 792, words, nil)
+	t.Logf("blocks:\n%s", describe(page.Blocks))
+	if page.Source != model.SourceOCR || page.Number != 30 || page.Width != 612 {
+		t.Fatalf("page = %+v", page)
+	}
+	if setup == nil || !near(setup.MarginLeft, 72, 1) || !near(setup.MarginRight, 72, 1) {
+		t.Errorf("setup = %+v, want 72pt side margins", setup)
+	}
+	if len(page.Blocks) != 3 {
+		t.Fatalf("got %d blocks, want 3", len(page.Blocks))
+	}
+	if h := page.Blocks[0]; h.Kind != model.Heading || h.Align != model.AlignCenter || h.Text() != "BID INVITATION" {
+		t.Errorf("heading = %+v", h)
+	}
+	if p := page.Blocks[1]; p.Align != model.AlignJustify || p.Text() != "The quick brown fox jumps over end." || !near(p.Leading, 14, 0.5) {
+		t.Errorf("paragraph = align %v %q leading %.1f", p.Align, p.Text(), p.Leading)
+	}
+	if f := page.Blocks[2]; f.Align != model.AlignRight || f.Text() != "30" {
+		t.Errorf("footer = %+v", f)
+	}
+}
+
 func TestExtract_MissingFile(t *testing.T) {
 	if _, _, err := Extract(fixture("nope.pdf")); err == nil {
 		t.Fatal("expected an error")

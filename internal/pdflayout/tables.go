@@ -16,9 +16,10 @@ type rule struct {
 }
 
 const (
-	ruleTol       = 1.5 // pt: rules this close are the same grid line
-	ruleMinLength = 6.0 // pt: shorter strokes are not rulings
-	ruleMaxThick  = 2.0 // pt: thicker filled shapes are not rulings
+	ruleTol           = 1.5  // pt: rules this close are the same grid line
+	ruleMinLength     = 6.0  // pt: shorter strokes are not rulings
+	ruleMinFillLength = 15.0 // pt: thin filled shapes shorter than this are glyphs
+	ruleMaxThick      = 2.0  // pt: thicker filled shapes are not rulings
 )
 
 // gridLine is a run of touching collinear rules.

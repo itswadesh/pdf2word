@@ -381,6 +381,69 @@ func TestBuildDocument_ParallelMissingEngineStillFailsFast(t *testing.T) {
 	}
 }
 
+// wordEngine returns fixed word boxes in a 100x100 px image: a centred title
+// line, two body lines, and a page number at the bottom right.
+type wordEngine struct{ calls int }
+
+func (e *wordEngine) Name() string { return "fake-words" }
+func (e *wordEngine) Recognize(context.Context, []byte, string) (string, error) {
+	return "should not be used", nil
+}
+func (e *wordEngine) RecognizeWords(context.Context, []byte, string) ([]ocr.Word, error) {
+	e.calls++
+	w := func(text string, left, top, width, height, line int) ocr.Word {
+		return ocr.Word{Text: text, Left: left, Top: top, Width: width, Height: height, LineTop: top, LineHeight: height, Block: 1, Par: 1, Line: line, Conf: 90}
+	}
+	return []ocr.Word{
+		w("TITLE", 42, 10, 16, 5, 1), // centred: 42..58 of 100
+		w("body", 10, 30, 10, 3, 2), w("text", 22, 30, 10, 3, 2), w("line", 34, 30, 10, 3, 2),
+		w("second", 10, 34, 14, 3, 3), w("line", 26, 34, 10, 3, 3),
+		w("42", 84, 90, 6, 3, 4), // bottom right
+	}, nil
+}
+
+func TestBuildDocument_OCRWordsAreLaidOut(t *testing.T) {
+	eng := &wordEngine{}
+	// A 100x130 px "render" of the Letter-sized text fixture (scale ~6.1 pt/px);
+	// OCR is forced so the word boxes are used on a normal page size.
+	img := []pdfimage.Image{{Data: []byte("fake-png"), Ext: "png", Width: 100, Height: 130}}
+	fi := &fakeImages{pages: map[int][]pdfimage.Image{1: img, 2: img}}
+	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: eng, OpenImages: opener(fi)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := doc.Pages[0]
+	if eng.calls != 2 || p.Source != model.SourceOCR || rep.OCRPages != 2 {
+		t.Fatalf("calls=%d source=%v report=%+v", eng.calls, p.Source, rep)
+	}
+	if p.Width <= 0 || p.Height <= 0 {
+		t.Fatalf("OCR page should carry the page size, got %.0fx%.0f", p.Width, p.Height)
+	}
+	if len(p.Blocks) != 3 {
+		t.Fatalf("blocks = %d, want title, paragraph, page number:\n%s", len(p.Blocks), describeBlocks(p.Blocks))
+	}
+	if p.Blocks[0].Text() != "TITLE" || p.Blocks[0].Align != model.AlignCenter {
+		t.Errorf("block 0 = %q align %v, want centred TITLE", p.Blocks[0].Text(), p.Blocks[0].Align)
+	}
+	if got := p.Blocks[1].Text(); got != "body text line second line" || p.Blocks[1].Leading <= 0 {
+		t.Errorf("block 1 = %q leading %.1f; want the two lines joined with measured leading", got, p.Blocks[1].Leading)
+	}
+	if p.Blocks[2].Text() != "42" || p.Blocks[2].Align != model.AlignRight {
+		t.Errorf("block 2 = %q align %v, want right-aligned page number", p.Blocks[2].Text(), p.Blocks[2].Align)
+	}
+	if doc.Setup == nil || doc.Setup.Width != p.Width {
+		t.Errorf("document setup should come from the OCR'd page: %+v", doc.Setup)
+	}
+}
+
+func describeBlocks(bs []model.Block) string {
+	var sb strings.Builder
+	for i, b := range bs {
+		fmt.Fprintf(&sb, "%d: %s align=%v %q\n", i, b.Kind, b.Align, b.Text())
+	}
+	return sb.String()
+}
+
 func TestDefaultJobs(t *testing.T) {
 	if n := DefaultJobs(); n < 1 || n > 8 {
 		t.Fatalf("DefaultJobs() = %d, want 1..8", n)

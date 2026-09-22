@@ -1,8 +1,12 @@
 package ocr
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,6 +16,20 @@ import (
 
 	"pdf2word/internal/model"
 )
+
+func whitePNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewGray(image.Rect(0, 0, w, h))
+	for i := range img.Pix {
+		img.Pix[i] = 255
+	}
+	_ = color.White
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
 
 func TestTextToBlocks(t *testing.T) {
 	cases := []struct {
@@ -192,6 +210,44 @@ func TestTesseract_VersionReal(t *testing.T) {
 	if err != nil || !strings.HasPrefix(strings.ToLower(v), "tesseract") {
 		t.Fatalf("Version() = %q, %v", v, err)
 	}
+}
+
+func TestParseTSV(t *testing.T) {
+	tsv := "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n" +
+		"1\t1\t0\t0\t0\t0\t0\t0\t2550\t3300\t-1\t\n" +
+		"4\t1\t1\t1\t1\t0\t100\t200\t800\t40\t-1\t\n" +
+		"5\t1\t1\t1\t1\t1\t100\t205\t150\t30\t96.5\tHello\n" +
+		"5\t1\t1\t1\t1\t2\t270\t200\t200\t40\t91.0\tWorld\n" +
+		"5\t1\t1\t1\t1\t3\t480\t210\t20\t20\t10.0\t \n" + // blank text: skipped
+		"4\t1\t1\t1\t2\t0\t100\t260\t300\t44\t-1\t\n" +
+		"5\t1\t1\t1\t2\t1\t100\t262\t300\t40\t88.2\tSecond\n"
+	words := parseTSV(tsv)
+	if len(words) != 3 {
+		t.Fatalf("got %d words: %+v", len(words), words)
+	}
+	if w := words[0]; w.Text != "Hello" || w.Left != 100 || w.Top != 205 || w.Width != 150 || w.Height != 30 || w.LineTop != 200 || w.LineHeight != 40 || w.Line != 1 || w.Conf != 96.5 {
+		t.Errorf("word 0 = %+v", w)
+	}
+	if w := words[2]; w.Text != "Second" || w.LineTop != 260 || w.LineHeight != 44 || w.Line != 2 {
+		t.Errorf("word 2 = %+v", w)
+	}
+}
+
+func TestTesseract_RecognizeWordsReal(t *testing.T) {
+	p, err := Find("")
+	if err != nil {
+		t.Skipf("tesseract not installed: %v", err)
+	}
+	// A tiny image with no text still exercises the TSV path end to end.
+	img := whitePNG(t, 120, 60)
+	words, err := (&Tesseract{Path: p}).RecognizeWords(context.Background(), img, "png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(words) != 0 {
+		t.Errorf("blank image produced words: %+v", words)
+	}
+	var _ WordEngine = (*Tesseract)(nil)
 }
 
 func TestTesseract_Name(t *testing.T) {

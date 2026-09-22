@@ -2,23 +2,17 @@
 // PDFium: characters with fonts and positions, table rulings drawn as paths,
 // and placed images. It produces model pages with paragraphs, headings,
 // alignment, tab-separated columns, tables and pictures.
+//
+// Pages without a text layer keep their rulings and images as PageAssets so
+// that OCR output (word boxes) can be laid out the same way via AssembleOCR.
 package pdflayout
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"math"
 	"sort"
-	"strings"
-	"unicode"
 
-	"github.com/klippa-app/go-pdfium/enums"
-	"github.com/klippa-app/go-pdfium/references"
 	"github.com/klippa-app/go-pdfium/requests"
-	"github.com/klippa-app/go-pdfium/structs"
 
 	"pdf2word/internal/model"
 	"pdf2word/internal/pdfiumx"
@@ -39,45 +33,171 @@ const (
 	maxGap    = 400  // pt: largest vertical gap reproduced between blocks
 )
 
+// Geometry tolerances in points: PDFium positions are exact, OCR boxes are not.
+const (
+	tolText = 2.0
+	tolOCR  = 5.0
+)
+
+// PageAssets holds what a page offers besides its text layer: size, table
+// rulings and images. Kept for pages that need OCR.
+type PageAssets struct {
+	Width, Height float64
+	rules         []rule
+	images        []placedImage
+}
+
+// Result is the outcome of ExtractAll.
+type Result struct {
+	Doc      *model.Document
+	Warnings []Warning
+	// Assets by 1-based page number, for pages that have no text layer.
+	Assets map[int]*PageAssets
+}
+
 // Extract reads every page of the PDF at path.
 func Extract(path string) (*model.Document, []Warning, error) {
-	d, err := pdfiumx.Open(path)
+	res, err := ExtractAll(path)
 	if err != nil {
 		return nil, nil, err
+	}
+	return res.Doc, res.Warnings, nil
+}
+
+// ExtractAll reads every page and also returns the assets of text-less pages.
+func ExtractAll(path string) (*Result, error) {
+	d, err := pdfiumx.Open(path)
+	if err != nil {
+		return nil, err
 	}
 	defer d.Close()
 	return extractDoc(d)
 }
 
-func extractDoc(d *pdfiumx.Doc) (*model.Document, []Warning, error) {
+func extractDoc(d *pdfiumx.Doc) (*Result, error) {
 	d.Mu.Lock()
 	defer d.Mu.Unlock()
 
-	doc := &model.Document{}
-	var warns []Warning
+	res := &Result{Doc: &model.Document{}, Assets: map[int]*PageAssets{}}
 	var setup *model.PageSetup
 	for n := 1; n <= d.Pages; n++ {
-		page, margins, err := layoutPage(d, n)
+		page, margins, assets, err := layoutPage(d, n)
 		if err != nil {
-			warns = append(warns, Warning{Page: n, Msg: err.Error()})
+			res.Warnings = append(res.Warnings, Warning{Page: n, Msg: err.Error()})
 			page = model.Page{Number: n, Source: model.SourceEmpty}
 		}
-		doc.Pages = append(doc.Pages, page)
-		if margins != nil {
-			if setup == nil {
-				s := *margins
-				setup = &s
-			} else {
-				// Widest content wins: smallest margins over all pages.
-				setup.MarginLeft = math.Min(setup.MarginLeft, margins.MarginLeft)
-				setup.MarginRight = math.Min(setup.MarginRight, margins.MarginRight)
-				setup.MarginTop = math.Min(setup.MarginTop, margins.MarginTop)
-				setup.MarginBottom = math.Min(setup.MarginBottom, margins.MarginBottom)
+		res.Doc.Pages = append(res.Doc.Pages, page)
+		if assets != nil {
+			res.Assets[n] = assets
+		}
+		setup = mergeSetup(setup, margins)
+	}
+	res.Doc.Setup = setup
+	return res, nil
+}
+
+// MergeSetup combines page setups: the first page's size, and the smallest
+// margins seen (widest content wins).
+func MergeSetup(a, b *model.PageSetup) *model.PageSetup { return mergeSetup(a, b) }
+
+func mergeSetup(a, b *model.PageSetup) *model.PageSetup {
+	if b == nil {
+		return a
+	}
+	if a == nil {
+		c := *b
+		return &c
+	}
+	a.MarginLeft = math.Min(a.MarginLeft, b.MarginLeft)
+	a.MarginRight = math.Min(a.MarginRight, b.MarginRight)
+	a.MarginTop = math.Min(a.MarginTop, b.MarginTop)
+	a.MarginBottom = math.Min(a.MarginBottom, b.MarginBottom)
+	return a
+}
+
+func pageSize(d *pdfiumx.Doc, n int) (float64, float64, error) {
+	size, err := d.Instance.FPDF_GetPageSizeByIndexF(&requests.FPDF_GetPageSizeByIndexF{Document: d.Ref, Index: n - 1})
+	if err != nil {
+		return 0, 0, fmt.Errorf("page size: %w", err)
+	}
+	w, h := float64(size.Size.Width), float64(size.Size.Height)
+	if w <= 0 || h <= 0 {
+		return 0, 0, fmt.Errorf("page has no size")
+	}
+	return w, h, nil
+}
+
+// layoutPage builds one page from its text layer. For a page without text
+// it returns the page's assets so OCR can be laid out later.
+func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, *PageAssets, error) {
+	page := model.Page{Number: n, Source: model.SourceEmpty}
+	w, h, err := pageSize(d, n)
+	if err != nil {
+		return page, nil, nil, err
+	}
+	page.Width, page.Height = w, h
+
+	chars, err := readChars(d, n)
+	if err != nil {
+		return page, nil, nil, err
+	}
+	rules, images, objWarns := readObjects(d, n, w, h, len(chars) > 0)
+	if len(chars) == 0 {
+		// Nothing to lay out yet; keep what OCR will need.
+		assets := &PageAssets{Width: w, Height: h, rules: rules, images: images}
+		var werr error
+		if len(objWarns) > 0 {
+			werr = fmt.Errorf("%v", objWarns)
+		}
+		return page, nil, assets, werr
+	}
+	p, setup := assemble(n, w, h, chars, rules, images, tolText, false)
+	return p, setup, nil, nil
+}
+
+// Word is OCR output in PDF points (origin bottom-left). Y0/Y1 should span
+// the text line, not the glyphs of the individual word.
+type Word struct {
+	Text           string
+	X0, Y0, X1, Y1 float64
+	Size           float64 // font size estimate in points
+	Bold, Italic   bool
+	Font           string
+}
+
+// AssembleOCR lays out OCR words on a page, using the page's rulings and
+// images (assets may be nil). Full-page scan images are not embedded.
+func AssembleOCR(number int, width, height float64, words []Word, assets *PageAssets) (model.Page, *model.PageSetup) {
+	chars := make([]char, 0, len(words))
+	for _, w := range words {
+		if w.Text == "" {
+			continue
+		}
+		c := char{text: w.Text, x0: w.X0, y0: w.Y0, x1: w.X1, y1: w.Y1, size: w.Size, font: fontInfo{Family: w.Font, Bold: w.Bold, Italic: w.Italic}}
+		if c.size <= 0 {
+			c.size = math.Max(1, (w.Y1-w.Y0)*0.8)
+		}
+		chars = append(chars, c)
+	}
+	var rules []rule
+	var images []placedImage
+	if assets != nil {
+		rules = assets.rules
+		for _, im := range assets.images {
+			if (im.x1-im.x0)*(im.y1-im.y0) >= 0.5*width*height {
+				continue // the scan itself
 			}
+			images = append(images, im)
+		}
+		if assets.Width > 0 && assets.Height > 0 {
+			width, height = assets.Width, assets.Height
 		}
 	}
-	doc.Setup = setup
-	return doc, warns, nil
+	page, setup := assemble(number, width, height, chars, rules, images, tolOCR, true)
+	if len(page.Blocks) > 0 {
+		page.Source = model.SourceOCR
+	}
+	return page, setup
 }
 
 // element is anything placed in the page flow. top/bottom are the edges Word
@@ -90,33 +210,18 @@ type element struct {
 	image       *placedImage // set for single images (may be grouped)
 }
 
-// layoutPage builds one page. The returned setup carries the page size and
-// the margins implied by its content.
-func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
-	inst := d.Instance
-	page := model.Page{Number: n, Source: model.SourceEmpty}
-
-	size, err := inst.FPDF_GetPageSizeByIndexF(&requests.FPDF_GetPageSizeByIndexF{Document: d.Ref, Index: n - 1})
-	if err != nil {
-		return page, nil, fmt.Errorf("page size: %w", err)
-	}
-	page.Width, page.Height = float64(size.Size.Width), float64(size.Size.Height)
-	if page.Width <= 0 || page.Height <= 0 {
-		return page, nil, fmt.Errorf("page has no size")
-	}
-
-	chars, err := readChars(d, n)
-	if err != nil {
-		return page, nil, err
-	}
-	rules, images, objWarns := readObjects(d, n, page.Width, page.Height, len(chars) > 0)
+// assemble is the shared page builder: it groups characters into lines and
+// paragraphs, detects tables from rulings, places images, derives margins
+// and vertical spacing, and returns the page with its setup.
+func assemble(number int, w, h float64, chars []char, rules []rule, images []placedImage, tol float64, ocr bool) (model.Page, *model.PageSetup) {
+	page := model.Page{Number: number, Source: model.SourceEmpty, Width: w, Height: h}
 
 	lines := groupLines(chars)
 	tables := detectTables(rules)
 	lines = assignLines(lines, tables)
 
 	// Content box from everything on the page.
-	ct := content{left: math.Inf(1), right: math.Inf(-1), top: math.Inf(-1), bottom: math.Inf(1), pageW: page.Width}
+	ct := content{left: math.Inf(1), right: math.Inf(-1), top: math.Inf(-1), bottom: math.Inf(1), pageW: w, tol: tol}
 	extend := func(x0, y0, x1, y1 float64) {
 		ct.left = math.Min(ct.left, x0)
 		ct.right = math.Max(ct.right, x1)
@@ -133,18 +238,18 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
 		extend(im.x0, im.y0, im.x1, im.y1)
 	}
 	if math.IsInf(ct.left, 1) {
-		return page, nil, nil // nothing on the page
+		return page, nil // nothing on the page
 	}
 	setup := &model.PageSetup{
-		Width: page.Width, Height: page.Height,
+		Width: w, Height: h,
 		MarginLeft:   clamp(ct.left, minMargin, maxMargin),
-		MarginRight:  clamp(page.Width-ct.right, minMargin, maxMargin),
-		MarginTop:    clamp(page.Height-ct.top, minMargin, maxMargin),
+		MarginRight:  clamp(w-ct.right, minMargin, maxMargin),
+		MarginTop:    clamp(h-ct.top, minMargin, maxMargin),
 		MarginBottom: clamp(ct.bottom, minMargin, maxMargin),
 	}
 	// Positions are expressed relative to the margins actually used.
 	ct.left = setup.MarginLeft
-	ct.right = page.Width - setup.MarginRight
+	ct.right = w - setup.MarginRight
 
 	bodySize := dominantSize(chars)
 	var elems []element
@@ -167,7 +272,7 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
 	})
 	elems = groupImageBands(elems, ct)
 
-	prevBottom := page.Height - setup.MarginTop
+	prevBottom := h - setup.MarginTop
 	for _, e := range elems {
 		b := e.block
 		b.SpaceBefore = clamp(prevBottom-e.top, 0, maxGap)
@@ -177,10 +282,8 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
 	if len(chars) > 0 || len(tables) > 0 {
 		page.Source = model.SourceText
 	}
-	if len(objWarns) > 0 && page.Source != model.SourceText {
-		return page, setup, fmt.Errorf("%s", strings.Join(objWarns, "; "))
-	}
-	return page, setup, nil
+	_ = ocr
+	return page, setup
 }
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
@@ -245,56 +348,10 @@ func imageSegment(im placedImage, data *model.ImageData, ct content) model.Segme
 	switch {
 	case math.Abs(center-ct.center()) <= 0.02*ct.pageW:
 		seg.CenterX = center - ct.left
-	case im.x1 >= ct.right-3:
+	case im.x1 >= ct.right-ct.tol-1:
 		seg.FlushRight = true
 	}
 	return seg
-}
-
-// readChars fetches every character with its box and font.
-func readChars(d *pdfiumx.Doc, n int) ([]char, error) {
-	txt, err := d.Instance.GetPageTextStructured(&requests.GetPageTextStructured{
-		Page:                   d.Page(n),
-		Mode:                   requests.GetPageTextStructuredModeChars,
-		CollectFontInformation: true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("text: %w", err)
-	}
-	chars := make([]char, 0, len(txt.Chars))
-	for _, c := range txt.Chars {
-		if c.Text == "" {
-			continue
-		}
-		if c.Text == "\x02" {
-			// PDFium replaces a hyphen at a line end with this marker (it
-			// assumes a hyphenated word). Keep it visible as a hyphen; the
-			// paragraph joiner removes it when the word really continues.
-			c.Text = "-"
-		}
-		box := c.PointPosition
-		x0, x1 := math.Min(box.Left, box.Right), math.Max(box.Left, box.Right)
-		y0, y1 := math.Min(box.Bottom, box.Top), math.Max(box.Bottom, box.Top)
-		control := true
-		for _, r := range c.Text {
-			if !unicode.IsControl(r) {
-				control = false
-			}
-		}
-		if control || (x1-x0 <= 0 && y1-y0 <= 0) {
-			continue // generated line breaks and zero-size marks
-		}
-		ch := char{text: c.Text, x0: x0, y0: y0, x1: x1, y1: y1}
-		if c.FontInformation != nil {
-			ch.size = c.FontInformation.Size
-			ch.font = parseFont(c.FontInformation.Name, c.FontInformation.Weight, c.FontInformation.Flags)
-		}
-		if ch.size <= 0 {
-			ch.size = math.Max(1, y1-y0)
-		}
-		chars = append(chars, ch)
-	}
-	return chars, nil
 }
 
 func dominantSize(chars []char) float64 {
@@ -320,7 +377,7 @@ func (im placedImage) block(ct content) model.Block {
 	switch {
 	case math.Abs(center-ct.center()) <= 0.02*ct.pageW:
 		b.Image.Align = model.AlignCenter
-	case im.x1 >= ct.right-3 && im.x0 > ct.left+0.2*ct.width():
+	case im.x1 >= ct.right-ct.tol-1 && im.x0 > ct.left+0.2*ct.width():
 		b.Image.Align = model.AlignRight
 	default:
 		if ind := im.x0 - ct.left; ind > 1.5 {
@@ -328,224 +385,4 @@ func (im placedImage) block(ct content) model.Block {
 		}
 	}
 	return b
-}
-
-// readObjects walks the page objects (recursing into form XObjects) and
-// collects rulings and images.
-func readObjects(d *pdfiumx.Doc, n int, pageW, pageH float64, hasText bool) ([]rule, []placedImage, []string) {
-	inst := d.Instance
-	pg := d.Page(n)
-	var rules []rule
-	var images []placedImage
-	var warns []string
-
-	count, err := inst.FPDFPage_CountObjects(&requests.FPDFPage_CountObjects{Page: pg})
-	if err != nil {
-		return nil, nil, []string{"page objects: " + err.Error()}
-	}
-	var visit func(obj references.FPDF_PAGEOBJECT, depth int)
-	visit = func(obj references.FPDF_PAGEOBJECT, depth int) {
-		t, err := inst.FPDFPageObj_GetType(&requests.FPDFPageObj_GetType{PageObject: obj})
-		if err != nil {
-			return
-		}
-		switch t.Type {
-		case enums.FPDF_PAGEOBJ_PATH:
-			rules = append(rules, pathRules(d, obj)...)
-		case enums.FPDF_PAGEOBJ_IMAGE:
-			b, err := inst.FPDFPageObj_GetBounds(&requests.FPDFPageObj_GetBounds{PageObject: obj})
-			if err != nil {
-				return
-			}
-			x0, y0, x1, y1 := float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top)
-			w, h := x1-x0, y1-y0
-			if w < 8 || h < 8 {
-				return
-			}
-			if hasText && w*h >= 0.9*pageW*pageH {
-				return // full-page background behind real text
-			}
-			data, err := renderImageObject(d, pg, obj)
-			if err != nil {
-				warns = append(warns, "image: "+err.Error())
-				return
-			}
-			images = append(images, placedImage{x0: x0, y0: y0, x1: x1, y1: y1, data: data})
-		case enums.FPDF_PAGEOBJ_FORM:
-			if depth > 4 {
-				return
-			}
-			c, err := inst.FPDFFormObj_CountObjects(&requests.FPDFFormObj_CountObjects{PageObject: obj})
-			if err != nil {
-				return
-			}
-			for i := 0; i < c.Count; i++ {
-				child, err := inst.FPDFFormObj_GetObject(&requests.FPDFFormObj_GetObject{PageObject: obj, Index: uint64(i)})
-				if err == nil {
-					visit(child.PageObject, depth+1)
-				}
-			}
-		}
-	}
-	for i := 0; i < count.Count; i++ {
-		o, err := inst.FPDFPage_GetObject(&requests.FPDFPage_GetObject{Page: pg, Index: i})
-		if err != nil {
-			continue
-		}
-		visit(o.PageObject, 0)
-	}
-	return rules, images, warns
-}
-
-// pathRules extracts straight horizontal/vertical strokes and thin filled
-// rectangles from a path object. Invisible (white or transparent) shapes are
-// ignored.
-func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
-	inst := d.Instance
-	b, err := inst.FPDFPageObj_GetBounds(&requests.FPDFPageObj_GetBounds{PageObject: obj})
-	if err != nil {
-		return nil
-	}
-	x0, y0, x1, y1 := float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top)
-	w, h := x1-x0, y1-y0
-
-	dm, err := inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj})
-	if err != nil {
-		return nil
-	}
-	col, visible := pathColor(d, obj, dm.Stroke, dm.FillMode != enums.FPDF_FILLMODE_NONE)
-	if !visible {
-		return nil
-	}
-
-	// Thin shape: treat the whole thing as one rule.
-	if h <= ruleMaxThick && w >= ruleMinLength {
-		return []rule{{vertical: false, pos: (y0 + y1) / 2, from: x0, to: x1, color: col}}
-	}
-	if w <= ruleMaxThick && h >= ruleMinLength {
-		return []rule{{vertical: true, pos: (x0 + x1) / 2, from: y0, to: y1, color: col}}
-	}
-
-	// Otherwise look at the segments: axis-aligned strokes and rectangles.
-	if !dm.Stroke {
-		return nil
-	}
-	cnt, err := inst.FPDFPath_CountSegments(&requests.FPDFPath_CountSegments{PageObject: obj})
-	if err != nil || cnt.Count < 2 || cnt.Count > 64 {
-		return nil
-	}
-	var rules []rule
-	var px, py float64
-	have := false
-	for i := 0; i < cnt.Count; i++ {
-		seg, err := inst.FPDFPath_GetPathSegment(&requests.FPDFPath_GetPathSegment{PageObject: obj, Index: i})
-		if err != nil {
-			return rules
-		}
-		pt, err := inst.FPDFPathSegment_GetPoint(&requests.FPDFPathSegment_GetPoint{PathSegment: seg.PathSegment})
-		if err != nil {
-			return rules
-		}
-		st, err := inst.FPDFPathSegment_GetType(&requests.FPDFPathSegment_GetType{PathSegment: seg.PathSegment})
-		if err != nil {
-			return rules
-		}
-		x, y := float64(pt.X), float64(pt.Y)
-		if st.Type == enums.FPDF_SEGMENT_LINETO && have {
-			switch {
-			case math.Abs(y-py) <= ruleTol && math.Abs(x-px) >= ruleMinLength:
-				rules = append(rules, rule{pos: (y + py) / 2, from: math.Min(x, px), to: math.Max(x, px), color: col})
-			case math.Abs(x-px) <= ruleTol && math.Abs(y-py) >= ruleMinLength:
-				rules = append(rules, rule{vertical: true, pos: (x + px) / 2, from: math.Min(y, py), to: math.Max(y, py), color: col})
-			}
-		}
-		px, py, have = x, y, true
-	}
-	return rules
-}
-
-// pathColor returns the drawing colour of a path as RRGGBB and whether the
-// shape is visible at all (not white, not fully transparent).
-func pathColor(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT, stroke, fill bool) (string, bool) {
-	var c structs.FPDF_COLOR
-	got := false
-	if stroke {
-		if res, err := d.Instance.FPDFPageObj_GetStrokeColor(&requests.FPDFPageObj_GetStrokeColor{PageObject: obj}); err == nil {
-			c, got = res.StrokeColor, true
-		}
-	}
-	if !got && fill {
-		if res, err := d.Instance.FPDFPageObj_GetFillColor(&requests.FPDFPageObj_GetFillColor{PageObject: obj}); err == nil {
-			c, got = res.FillColor, true
-		}
-	}
-	if !got {
-		return "000000", true
-	}
-	if c.A == 0 || (c.R >= 250 && c.G >= 250 && c.B >= 250) {
-		return "", false
-	}
-	return fmt.Sprintf("%02X%02X%02X", c.R&0xFF, c.G&0xFF, c.B&0xFF), true
-}
-
-// renderImageObject renders one image object to PNG bytes.
-func renderImageObject(d *pdfiumx.Doc, pg requests.Page, obj references.FPDF_PAGEOBJECT) ([]byte, error) {
-	inst := d.Instance
-	bm, err := inst.FPDFImageObj_GetRenderedBitmap(&requests.FPDFImageObj_GetRenderedBitmap{Document: d.Ref, Page: pg, ImageObject: obj})
-	if err != nil {
-		return nil, err
-	}
-	defer inst.FPDFBitmap_Destroy(&requests.FPDFBitmap_Destroy{Bitmap: bm.Bitmap})
-
-	wres, err := inst.FPDFBitmap_GetWidth(&requests.FPDFBitmap_GetWidth{Bitmap: bm.Bitmap})
-	if err != nil {
-		return nil, err
-	}
-	hres, err := inst.FPDFBitmap_GetHeight(&requests.FPDFBitmap_GetHeight{Bitmap: bm.Bitmap})
-	if err != nil {
-		return nil, err
-	}
-	sres, err := inst.FPDFBitmap_GetStride(&requests.FPDFBitmap_GetStride{Bitmap: bm.Bitmap})
-	if err != nil {
-		return nil, err
-	}
-	fres, err := inst.FPDFBitmap_GetFormat(&requests.FPDFBitmap_GetFormat{Bitmap: bm.Bitmap})
-	if err != nil {
-		return nil, err
-	}
-	bres, err := inst.FPDFBitmap_GetBuffer(&requests.FPDFBitmap_GetBuffer{Bitmap: bm.Bitmap})
-	if err != nil {
-		return nil, err
-	}
-	w, h, stride, buf := wres.Width, hres.Height, sres.Stride, bres.Buffer
-	if w <= 0 || h <= 0 || len(buf) < stride*h {
-		return nil, fmt.Errorf("bitmap %dx%d has %d bytes (stride %d)", w, h, len(buf), stride)
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		row := buf[y*stride:]
-		for x := 0; x < w; x++ {
-			var c color.NRGBA
-			switch fres.Format {
-			case enums.FPDF_BITMAP_FORMAT_GRAY:
-				v := row[x]
-				c = color.NRGBA{R: v, G: v, B: v, A: 255}
-			case enums.FPDF_BITMAP_FORMAT_BGR:
-				p := row[x*3:]
-				c = color.NRGBA{R: p[2], G: p[1], B: p[0], A: 255}
-			case enums.FPDF_BITMAP_FORMAT_BGRA:
-				p := row[x*4:]
-				c = color.NRGBA{R: p[2], G: p[1], B: p[0], A: p[3]}
-			default: // BGRx
-				p := row[x*4:]
-				c = color.NRGBA{R: p[2], G: p[1], B: p[0], A: 255}
-			}
-			img.SetNRGBA(x, y, c)
-		}
-	}
-	var out bytes.Buffer
-	if err := png.Encode(&out, img); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
 }

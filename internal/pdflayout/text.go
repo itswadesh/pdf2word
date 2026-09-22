@@ -249,11 +249,13 @@ func looksLikeListItem(s string) bool {
 	return listMarker.MatchString(strings.TrimSpace(s))
 }
 
-// content is the text area of a page in PDF coordinates.
+// content is the text area of a page in PDF coordinates. tol is the
+// geometric tolerance for edge comparisons (larger for OCR boxes).
 type content struct {
 	left, right float64
 	top, bottom float64
 	pageW       float64
+	tol         float64
 }
 
 func (c content) width() float64  { return c.right - c.left }
@@ -393,25 +395,29 @@ func alignment(p paragraph, ct content) model.Alignment {
 		return model.AlignLeft
 	}
 	tol := 0.02 * ct.pageW
+	edge := ct.tol
+	if edge <= 0 {
+		edge = tolText
+	}
 	centered, rightAligned, justified := true, true, 0
 	minLeft, maxLeft := math.Inf(1), math.Inf(-1)
 	for i, l := range p.lines {
 		if math.Abs(l.center()-ct.center()) > tol || l.width() > 0.85*ct.width() {
 			centered = false
 		}
-		if l.x1 < ct.right-2 {
+		if l.x1 < ct.right-edge {
 			rightAligned = false
 		}
 		minLeft = math.Min(minLeft, l.x0)
 		maxLeft = math.Max(maxLeft, l.x0)
-		if i < len(p.lines)-1 && math.Abs(l.x0-ct.left) <= 2 && l.x1 >= ct.right-2 {
+		if i < len(p.lines)-1 && math.Abs(l.x0-ct.left) <= edge && l.x1 >= ct.right-edge {
 			justified++
 		}
 	}
 	switch {
 	case centered && (len(p.lines) > 1 || p.lines[0].x0 > ct.left+0.1*ct.width()):
 		return model.AlignCenter
-	case rightAligned && (maxLeft-minLeft > 2 || (len(p.lines) == 1 && p.lines[0].x0 > ct.left+0.2*ct.width())):
+	case rightAligned && (maxLeft-minLeft > edge || (len(p.lines) == 1 && p.lines[0].x0 > ct.left+0.2*ct.width())):
 		return model.AlignRight
 	case justified >= 2:
 		return model.AlignJustify
@@ -477,7 +483,7 @@ func toSegment(s segment, l textLine, ct content) model.Segment {
 	if len(l.segments) > 1 {
 		center := (s.x0 + s.x1) / 2
 		switch {
-		case s.x1 >= ct.right-3 && s.x0 > ct.left+0.3*ct.width():
+		case s.x1 >= ct.right-ct.tol-1 && s.x0 > ct.left+0.3*ct.width():
 			seg.FlushRight = true
 		case math.Abs(center-ct.center()) <= 0.02*ct.pageW && s.x0 > ct.left+0.1*ct.width():
 			seg.CenterX = center - ct.left
