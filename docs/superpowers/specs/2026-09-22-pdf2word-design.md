@@ -478,6 +478,30 @@ pipeline. Phase 2 feeds OCR output through the same assembly:
 - **Fallback.** Engines without word boxes, or pages whose size is
   unknown, keep the plain `TextToBlocks` path.
 
+### 14.1 Refinements from the tender comparison
+
+- **Path geometry.** PDFium returns path segment points in the object's own
+  space; they are mapped through `FPDFPageObj_GetMatrix`. Word's PDF output
+  draws table borders as even-odd filled frames (one path per row holding
+  the outer box and cell boxes): filled paths with ≥ 2 rectangular
+  sub-paths contribute every rectangle edge as a ruling. Short filled
+  pieces (down to 3 pt) are chained by `cluster` before fill-only lines
+  shorter than 15 pt are dropped as glyph stems. A lattice of exactly one
+  cell (page frame, boxed note) is not a table.
+- **OCR noise.** `convert.ocrWords` drops words with confidence < 20,
+  dotted-leader garbage (`^[.·…:;,'\x60~_-]{3,}$` or ≥ 6 chars of only
+  `c/e/o`/dots), line boxes taller than 12 % of the page, and tall thin
+  boxes (page borders read as "|"). Sizes snap to the page's median line
+  height (word-weighted) unless a line deviates by more than 25 %, and are
+  clamped to 5–40 pt.
+- **Segmentation.** OCR lines split into columns at gaps > 1.6 × size
+  (text: 1.0); Tesseract's paragraph ids stop merges across paragraphs and
+  allow up to 2.2 × size inside one (1.5/2.0 line spacing). Segments of one
+  line that land in the same table cell are joined with spaces.
+- **Result.** On the 247-page tender: page 1's 10-row key/value table with
+  clean cells, the index with right-aligned page numbers, clause pages with
+  numbered hanging-indent paragraphs and centred page numbers.
+
 ## 12. Dependencies
 
 | Module | Purpose | Licence |

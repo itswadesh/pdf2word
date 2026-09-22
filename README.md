@@ -167,6 +167,13 @@ go build -o bin/pdf2word.exe ./cmd/pdf2word
 go run ./tools/genfixtures   # regenerate testdata/*.pdf
 ```
 
+Diagnostics for layout work: `go run ./tools/rulesprobe file.pdf 1 2`
+(rulings, tables and images per page), `go run ./tools/ocrprobe file.pdf 1`
+(each stage of the OCR layout for one page), `go run ./tools/renderpages
+file.pdf outdir 80 1 2` (pages to PNG). To see a result the way Word will
+show it, convert the .docx with LibreOffice headless
+(`soffice --headless --convert-to pdf`) and render that PDF the same way.
+
 Project layout:
 
 ```
