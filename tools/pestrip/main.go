@@ -89,8 +89,8 @@ func strip(in, out string) error {
 	copy(outData, data[:newEnd])
 
 	le.PutUint16(outData[coffOff+2:], uint16(len(kept)))
-	le.PutUint32(outData[coffOff+8:], 0)  // PointerToSymbolTable
-	le.PutUint32(outData[coffOff+12:], 0) // NumberOfSymbols
+	le.PutUint32(outData[coffOff+8:], 0)                                       // PointerToSymbolTable
+	le.PutUint32(outData[coffOff+12:], 0)                                      // NumberOfSymbols
 	le.PutUint16(outData[coffOff+18:], le.Uint16(outData[coffOff+18:])|0x0200) // IMAGE_FILE_DEBUG_STRIPPED
 	le.PutUint32(outData[optOff+56:], sizeOfImage)
 	le.PutUint32(outData[optOff+64:], 0) // CheckSum: not verified for user-mode images
