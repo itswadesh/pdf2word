@@ -17,8 +17,8 @@ func fixture(name string) string {
 
 func TestRun_UsageErrors(t *testing.T) {
 	cases := [][]string{
-		{},                                  // no input
-		{"a.pdf", "b.docx", "c"},            // too many positionals
+		{},                                     // no input
+		{"a.pdf", "b.docx", "c"},               // too many positionals
 		{"-ocr", "bogus", fixture("text.pdf")}, // bad mode
 	}
 	for _, args := range cases {

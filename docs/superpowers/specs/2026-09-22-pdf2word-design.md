@@ -173,12 +173,28 @@ pdf2word [flags] input.pdf [output.docx]
   -lang string       Tesseract language(s), e.g. eng or eng+deu (default "eng")
   -tesseract string  path to tesseract executable (default: auto-detect)
   -min-text int      chars below which a page counts as scanned (default 20)
-  -v                 verbose progress to stderr
+  -v                 verbose: one progress line per page plus diagnostics
+  -no-progress       disable the progress indicator
   -version           print version
 ```
 
 Exit codes: `0` success, `1` conversion error, `2` usage error. On success a
-one-line summary is printed: pages converted, pages OCR'd, warnings count.
+one-line summary is printed to stdout: pages converted, pages OCR'd, empty
+pages, elapsed time and the output path. Warnings go to stderr.
+
+### 9.1 Progress indicator (added 2026-09-22 at the user's request)
+
+`convert.Options.OnProgress func(Progress)` is invoked once per page after it
+is resolved, with `{Page, Total, Source, OCR}`. The CLI renders it on stderr:
+
+- interactive terminal: one line redrawn in place with `\r`, e.g.
+  `[############------------------]  40%  page 4/10  ocr`
+- `-v`: one line per page (`page 4/10: ocr`) so diagnostics interleave cleanly
+- stderr not a terminal and no `-v`: silent
+- `-no-progress`: always silent
+
+Terminal detection uses `os.File.Stat()` mode `ModeCharDevice` (no extra
+dependency).
 
 ## 10. Error handling
 
