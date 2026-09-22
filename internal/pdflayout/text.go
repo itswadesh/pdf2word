@@ -282,6 +282,48 @@ func (p paragraph) x1() float64 {
 func (p paragraph) top() float64    { return p.lines[0].y1 }
 func (p paragraph) bottom() float64 { return p.lines[len(p.lines)-1].y0 }
 
+// baseline estimates a line's baseline from its box (the bottom includes
+// the descender, roughly a fifth of the size).
+func baseline(l textLine) float64 { return l.y0 + 0.2*l.size }
+
+// size returns the paragraph's largest dominant line size.
+func (p paragraph) size() float64 {
+	s := 0.0
+	for _, l := range p.lines {
+		s = math.Max(s, l.size)
+	}
+	return s
+}
+
+// leading is the baseline-to-baseline distance: the median of the measured
+// gaps for wrapped paragraphs, 1.2 x size for single lines. It never drops
+// below 1.15 x size so exact spacing in Word does not clip glyphs.
+func (p paragraph) leading() float64 {
+	size := p.size()
+	if len(p.lines) < 2 {
+		return 1.2 * size
+	}
+	var deltas []float64
+	for i := 1; i < len(p.lines); i++ {
+		if d := baseline(p.lines[i-1]) - baseline(p.lines[i]); d > 0 {
+			deltas = append(deltas, d)
+		}
+	}
+	if len(deltas) == 0 {
+		return 1.2 * size
+	}
+	sort.Float64s(deltas)
+	return math.Max(deltas[len(deltas)/2], 1.15*size)
+}
+
+// wordBox returns the vertical extent the paragraph will occupy in Word when
+// laid out with exact leading: the first line box starts 0.8 leading above
+// its baseline and the last ends 0.2 leading below.
+func (p paragraph) wordBox() (top, bottom float64) {
+	l := p.leading()
+	return baseline(p.lines[0]) + 0.8*l, baseline(p.lines[len(p.lines)-1]) - 0.2*l
+}
+
 // groupParagraphs merges consecutive lines that read as one wrapped
 // paragraph. Lines with several segments (columns) stay on their own.
 func groupParagraphs(lines []textLine, ct content) []paragraph {
@@ -380,7 +422,7 @@ func alignment(p paragraph, ct content) model.Alignment {
 // toBlock converts a paragraph into a model block positioned in the content
 // box. bodySize is the page's dominant font size (for heading detection).
 func toBlock(p paragraph, ct content, bodySize float64) model.Block {
-	b := model.Block{Kind: model.Paragraph, Align: alignment(p, ct)}
+	b := model.Block{Kind: model.Paragraph, Align: alignment(p, ct), Leading: p.leading()}
 	px0 := p.x0()
 	if b.Align == model.AlignLeft || b.Align == model.AlignJustify {
 		if ind := px0 - ct.left; ind > 1.5 {
@@ -432,8 +474,14 @@ func toBlock(p paragraph, ct content, bodySize float64) model.Block {
 // relative to the content box.
 func toSegment(s segment, l textLine, ct content) model.Segment {
 	seg := model.Segment{X: math.Max(0, s.x0-ct.left), Runs: append([]model.Run(nil), s.runs...)}
-	if len(l.segments) > 1 && s.x1 >= ct.right-3 && s.x0 > ct.left+0.3*ct.width() {
-		seg.FlushRight = true
+	if len(l.segments) > 1 {
+		center := (s.x0 + s.x1) / 2
+		switch {
+		case s.x1 >= ct.right-3 && s.x0 > ct.left+0.3*ct.width():
+			seg.FlushRight = true
+		case math.Abs(center-ct.center()) <= 0.02*ct.pageW && s.x0 > ct.left+0.1*ct.width():
+			seg.CenterX = center - ct.left
+		}
 	}
 	return seg
 }

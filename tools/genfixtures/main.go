@@ -123,8 +123,10 @@ func buildLayoutPDF() []byte {
 	hline := func(x1, x2, y float64) { fmt.Fprintf(&c, "%.2f %.2f m %.2f %.2f l S\n", x1, y, x2, y) }
 	vline := func(x, y1, y2 float64) { fmt.Fprintf(&c, "%.2f %.2f m %.2f %.2f l S\n", x, y1, x, y2) }
 
-	// Image top centre, title below it.
+	// Image top centre with a second one flush right on the same band (like
+	// a logo and a QR code), title below.
 	fmt.Fprintf(&c, "q 60 0 0 60 %.2f 520 cm /Im1 Do Q\n", (pageW-60)/2)
+	fmt.Fprintf(&c, "q 60 0 0 60 %.2f 510 cm /Im1 Do Q\n", right-60)
 	centered("F2", 14, 495, "Form No. 25")
 	centered("F1", 12, 475, "Nil Certificate Of Encumbrance On Property")
 	// Key/value line: left label, value flush right.
@@ -152,6 +154,21 @@ func buildLayoutPDF() []byte {
 	text("F1", 9, 42, 307, "1")
 	text("F1", 9, 142, 307, "Bhanapur - 42")
 	text("F1", 9, 242, 307, "0.0186 Hectare")
+	// Second table, grey rulings, header row spanning all three columns
+	// (no interior verticals in the top row): y 240..280, rows at 260.
+	fmt.Fprintf(&c, "0.5 0.5 0.5 RG\n")
+	vline(36, 240, 280)
+	vline(336, 240, 280)
+	vline(136, 240, 260)
+	vline(236, 240, 260)
+	for _, y := range []float64{280, 260, 240} {
+		hline(36, 336, y)
+	}
+	text("F2", 9, 42, 267, "Merged header")
+	text("F1", 9, 42, 247, "1")
+	text("F1", 9, 142, 247, "Two")
+	text("F1", 9, 242, 247, "Three")
+	fmt.Fprintf(&c, "0 0 0 RG\n")
 	// Footer: left and right items on one line.
 	text("F1", 9, left, 40, "Regn. Office: KATAKA")
 	flushRight("F1", 9, 40, "Page 1 of 1")

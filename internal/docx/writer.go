@@ -178,9 +178,13 @@ func (dw *docWriter) paragraphProps(b model.Block, layout bool) {
 	if tabs := dw.tabStops(b); tabs != "" {
 		props.WriteString(tabs)
 	}
-	if layout || b.SpaceBefore > 0 {
+	if layout || b.SpaceBefore > 0 || b.Leading > 0 {
 		before := twips(math.Max(0, b.SpaceBefore))
-		fmt.Fprintf(&props, `<w:spacing w:before="%d" w:after="0"/>`, before)
+		if b.Leading > 0 {
+			fmt.Fprintf(&props, `<w:spacing w:before="%d" w:after="0" w:line="%d" w:lineRule="exact"/>`, before, twips(b.Leading))
+		} else {
+			fmt.Fprintf(&props, `<w:spacing w:before="%d" w:after="0"/>`, before)
+		}
 	}
 	if b.IndentLeft > 0.5 || math.Abs(b.FirstIndent) > 0.5 {
 		props.WriteString(`<w:ind`)
@@ -216,26 +220,34 @@ func jcValue(a model.Alignment) string {
 	return ""
 }
 
-// tabStops returns a <w:tabs> element when any line has more than one
-// segment: a left tab at each segment start, or a right tab at the content
-// edge for segments that end at the right margin.
-func (dw *docWriter) tabStops(b model.Block) string {
-	type stop struct {
-		pos   int
-		right bool
+// segmentTab returns the tab stop a segment needs, if any: a centre tab at
+// CenterX, a right tab at the content edge for FlushRight, or a left tab at
+// X for every segment after the first.
+type tabStop struct {
+	pos  int
+	kind string // left, center, right
+}
+
+func (dw *docWriter) segmentTab(j int, seg model.Segment) (tabStop, bool) {
+	switch {
+	case seg.CenterX > 0:
+		return tabStop{pos: twips(seg.CenterX), kind: "center"}, true
+	case seg.FlushRight:
+		return tabStop{pos: twips(dw.setup.ContentWidth()), kind: "right"}, true
+	case j > 0 && seg.X > 0:
+		return tabStop{pos: twips(seg.X), kind: "left"}, true
 	}
-	seen := map[stop]bool{}
-	var stops []stop
+	return tabStop{}, false
+}
+
+// tabStops returns the <w:tabs> element for a block's segments.
+func (dw *docWriter) tabStops(b model.Block) string {
+	seen := map[tabStop]bool{}
+	var stops []tabStop
 	for _, ln := range b.Lines {
 		for j, seg := range ln.Segments {
-			if j == 0 {
-				continue
-			}
-			s := stop{pos: twips(seg.X)}
-			if seg.FlushRight {
-				s = stop{pos: twips(dw.setup.ContentWidth()), right: true}
-			}
-			if s.pos <= 0 || seen[s] {
+			s, ok := dw.segmentTab(j, seg)
+			if !ok || s.pos <= 0 || seen[s] {
 				continue
 			}
 			seen[s] = true
@@ -248,11 +260,7 @@ func (dw *docWriter) tabStops(b model.Block) string {
 	var sb strings.Builder
 	sb.WriteString("<w:tabs>")
 	for _, s := range stops {
-		kind := "left"
-		if s.right {
-			kind = "right"
-		}
-		fmt.Fprintf(&sb, `<w:tab w:val="%s" w:pos="%d"/>`, kind, s.pos)
+		fmt.Fprintf(&sb, `<w:tab w:val="%s" w:pos="%d"/>`, s.kind, s.pos)
 	}
 	sb.WriteString("</w:tabs>")
 	return sb.String()
@@ -267,7 +275,7 @@ func (dw *docWriter) writeParagraph(b model.Block, layout bool) {
 			sb.WriteString("<w:r><w:br/></w:r>")
 		}
 		for j, seg := range ln.Segments {
-			if j > 0 {
+			if _, ok := dw.segmentTab(j, seg); ok || j > 0 {
 				sb.WriteString("<w:r><w:tab/></w:r>")
 			}
 			for _, r := range seg.Runs {
@@ -279,6 +287,12 @@ func (dw *docWriter) writeParagraph(b model.Block, layout bool) {
 }
 
 func (dw *docWriter) writeRun(r model.Run) {
+	if r.Image != nil {
+		if xml := dw.drawingXML(r.Image); xml != "" {
+			dw.sb.WriteString("<w:r>" + xml + "</w:r>")
+		}
+		return
+	}
 	text := sanitize(r.Text)
 	if text == "" {
 		return
@@ -336,9 +350,13 @@ func (dw *docWriter) writeTable(b model.Block) {
 		fmt.Fprintf(sb, `<w:tblInd w:w="%d" w:type="dxa"/>`, twips(b.IndentLeft))
 	}
 	if t.Ruled {
+		color := t.BorderColor
+		if color == "" {
+			color = "000000"
+		}
 		sb.WriteString("<w:tblBorders>")
 		for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
-			fmt.Fprintf(sb, `<w:%s w:val="single" w:sz="4" w:space="0" w:color="000000"/>`, side)
+			fmt.Fprintf(sb, `<w:%s w:val="single" w:sz="4" w:space="0" w:color="%s"/>`, side, escapeAttr(color))
 		}
 		sb.WriteString("</w:tblBorders>")
 	}
@@ -349,48 +367,87 @@ func (dw *docWriter) writeTable(b model.Block) {
 		fmt.Fprintf(sb, `<w:gridCol w:w="%d"/>`, twips(w))
 	}
 	sb.WriteString("</w:tblGrid>")
+	ncols := len(t.ColWidths)
 	for _, row := range t.Rows {
 		sb.WriteString("<w:tr>")
-		for c := range t.ColWidths {
+		col := 0
+		for _, cell := range row {
+			if col >= ncols {
+				break
+			}
+			span := cell.Span
+			if span < 1 {
+				span = 1
+			}
+			if col+span > ncols {
+				span = ncols - col
+			}
+			width := 0.0
+			for c := col; c < col+span; c++ {
+				width += t.ColWidths[c]
+			}
 			sb.WriteString("<w:tc><w:tcPr>")
-			fmt.Fprintf(sb, `<w:tcW w:w="%d" w:type="dxa"/>`, twips(t.ColWidths[c]))
+			fmt.Fprintf(sb, `<w:tcW w:w="%d" w:type="dxa"/>`, twips(width))
+			if span > 1 {
+				fmt.Fprintf(sb, `<w:gridSpan w:val="%d"/>`, span)
+			}
 			sb.WriteString("</w:tcPr>")
-			var cell model.Cell
-			if c < len(row) {
-				cell = row[c]
-			}
-			if len(cell.Lines) == 0 {
-				sb.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>`)
-			}
-			for _, ln := range cell.Lines {
-				sb.WriteString("<w:p><w:pPr>")
-				sb.WriteString(`<w:spacing w:before="0" w:after="0"/>`)
-				if jc := jcValue(cell.Align); jc != "" {
-					fmt.Fprintf(sb, `<w:jc w:val="%s"/>`, jc)
-				}
-				sb.WriteString("</w:pPr>")
-				for j, seg := range ln.Segments {
-					if j > 0 {
-						sb.WriteString("<w:r><w:tab/></w:r>")
-					}
-					for _, r := range seg.Runs {
-						dw.writeRun(r)
-					}
-				}
-				sb.WriteString("</w:p>")
-			}
+			dw.writeCellContent(cell)
 			sb.WriteString("</w:tc>")
+			col += span
+		}
+		// Pad short rows so every row covers the whole grid.
+		for ; col < ncols; col++ {
+			fmt.Fprintf(sb, `<w:tc><w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p></w:tc>`, twips(t.ColWidths[col]))
 		}
 		sb.WriteString("</w:tr>")
 	}
 	sb.WriteString("</w:tbl>")
 }
 
+func (dw *docWriter) writeCellContent(cell model.Cell) {
+	sb := &dw.sb
+	if len(cell.Lines) == 0 {
+		sb.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>`)
+		return
+	}
+	for _, ln := range cell.Lines {
+		sb.WriteString("<w:p><w:pPr>")
+		sb.WriteString(`<w:spacing w:before="0" w:after="0"/>`)
+		if jc := jcValue(cell.Align); jc != "" {
+			fmt.Fprintf(sb, `<w:jc w:val="%s"/>`, jc)
+		}
+		sb.WriteString("</w:pPr>")
+		for j, seg := range ln.Segments {
+			if j > 0 {
+				sb.WriteString("<w:r><w:tab/></w:r>")
+			}
+			for _, r := range seg.Runs {
+				dw.writeRun(r)
+			}
+		}
+		sb.WriteString("</w:p>")
+	}
+}
+
 // writeImage emits an inline picture in its own paragraph.
 func (dw *docWriter) writeImage(b model.Block, layout bool) {
-	im := b.Image
-	if len(im.Data) == 0 || im.Width <= 0 || im.Height <= 0 {
+	xml := dw.drawingXML(b.Image)
+	if xml == "" {
 		return
+	}
+	sb := &dw.sb
+	sb.WriteString("<w:p>")
+	dw.paragraphProps(model.Block{Align: b.Image.Align, SpaceBefore: b.SpaceBefore, IndentLeft: b.IndentLeft}, layout)
+	sb.WriteString("<w:r>" + xml + "</w:r>")
+	sb.WriteString("</w:p>")
+}
+
+// drawingXML registers the image as a media part and returns the
+// <w:drawing> element for an inline picture (empty if the image is unusable).
+func (dw *docWriter) drawingXML(im *model.ImageData) string {
+	if im == nil || len(im.Data) == 0 || im.Width <= 0 || im.Height <= 0 {
+		return ""
 	}
 	dw.nextID++
 	id := dw.nextID
@@ -408,17 +465,16 @@ func (dw *docWriter) writeImage(b model.Block, layout bool) {
 		w = cw
 	}
 
-	sb := &dw.sb
-	sb.WriteString("<w:p>")
-	dw.paragraphProps(model.Block{Align: im.Align, SpaceBefore: b.SpaceBefore, IndentLeft: b.IndentLeft}, layout)
-	fmt.Fprintf(sb, `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/>`, emu(w), emu(h))
-	fmt.Fprintf(sb, `<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="%d" name="Picture %d"/>`, id, id)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/>`, emu(w), emu(h))
+	fmt.Fprintf(&sb, `<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="%d" name="Picture %d"/>`, id, id)
 	sb.WriteString(`<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`)
 	sb.WriteString(`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>`)
-	fmt.Fprintf(sb, `<pic:nvPicPr><pic:cNvPr id="%d" name="Picture %d"/><pic:cNvPicPr/></pic:nvPicPr>`, id, id)
-	fmt.Fprintf(sb, `<pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, part.rid)
-	fmt.Fprintf(sb, `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>`, emu(w), emu(h))
-	sb.WriteString(`</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`)
+	fmt.Fprintf(&sb, `<pic:nvPicPr><pic:cNvPr id="%d" name="Picture %d"/><pic:cNvPicPr/></pic:nvPicPr>`, id, id)
+	fmt.Fprintf(&sb, `<pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, part.rid)
+	fmt.Fprintf(&sb, `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>`, emu(w), emu(h))
+	sb.WriteString(`</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`)
+	return sb.String()
 }
 
 func (dw *docWriter) writeSectPr() {

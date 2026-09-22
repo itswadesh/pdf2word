@@ -18,6 +18,7 @@ import (
 	"github.com/klippa-app/go-pdfium/enums"
 	"github.com/klippa-app/go-pdfium/references"
 	"github.com/klippa-app/go-pdfium/requests"
+	"github.com/klippa-app/go-pdfium/structs"
 
 	"pdf2word/internal/model"
 	"pdf2word/internal/pdfiumx"
@@ -35,6 +36,7 @@ func (w Warning) String() string { return fmt.Sprintf("page %d: %s", w.Page, w.M
 const (
 	minMargin = 21.6 // 0.3 in
 	maxMargin = 90.0 // 1.25 in
+	maxGap    = 400  // pt: largest vertical gap reproduced between blocks
 )
 
 // Extract reads every page of the PDF at path.
@@ -78,11 +80,14 @@ func extractDoc(d *pdfiumx.Doc) (*model.Document, []Warning, error) {
 	return doc, warns, nil
 }
 
-// element is anything placed in the page flow.
+// element is anything placed in the page flow. top/bottom are the edges Word
+// will lay out (for text: first baseline + 0.8 leading, last baseline - 0.2
+// leading), used to reproduce vertical spacing.
 type element struct {
 	top, bottom float64
-	x0          float64
+	x0, x1      float64
 	block       model.Block
+	image       *placedImage // set for single images (may be grouped)
 }
 
 // layoutPage builds one page. The returned setup carries the page size and
@@ -128,8 +133,7 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
 		extend(im.x0, im.y0, im.x1, im.y1)
 	}
 	if math.IsInf(ct.left, 1) {
-		// Nothing on the page.
-		return page, nil, nil
+		return page, nil, nil // nothing on the page
 	}
 	setup := &model.PageSetup{
 		Width: page.Width, Height: page.Height,
@@ -145,13 +149,15 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
 	bodySize := dominantSize(chars)
 	var elems []element
 	for _, p := range groupParagraphs(lines, ct) {
-		elems = append(elems, element{top: p.top(), bottom: p.bottom(), x0: p.x0(), block: toBlock(p, ct, bodySize)})
+		top, bottom := p.wordBox()
+		elems = append(elems, element{top: top, bottom: bottom, x0: p.x0(), x1: p.x1(), block: toBlock(p, ct, bodySize)})
 	}
 	for _, t := range tables {
-		elems = append(elems, element{top: t.y1, bottom: t.y0, x0: t.x0, block: tableBlock(t, ct)})
+		elems = append(elems, element{top: t.y1, bottom: t.y0, x0: t.x0, x1: t.x1, block: tableBlock(t, ct)})
 	}
-	for _, im := range images {
-		elems = append(elems, element{top: im.y1, bottom: im.y0, x0: im.x0, block: im.block(ct)})
+	for i := range images {
+		im := &images[i]
+		elems = append(elems, element{top: im.y1, bottom: im.y0, x0: im.x0, x1: im.x1, block: im.block(ct), image: im})
 	}
 	sort.SliceStable(elems, func(i, j int) bool {
 		if math.Abs(elems[i].top-elems[j].top) > 1 {
@@ -159,39 +165,91 @@ func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, error) {
 		}
 		return elems[i].x0 < elems[j].x0
 	})
+	elems = groupImageBands(elems, ct)
 
-	prevBottom := ct.top
-	for i, e := range elems {
+	prevBottom := page.Height - setup.MarginTop
+	for _, e := range elems {
 		b := e.block
-		if i > 0 {
-			gap := prevBottom - e.top
-			lineSize := bodySize
-			if len(b.Lines) > 0 && len(b.Lines[0].Segments) > 0 && len(b.Lines[0].Segments[0].Runs) > 0 && b.Lines[0].Segments[0].Runs[0].Size > 0 {
-				lineSize = b.Lines[0].Segments[0].Runs[0].Size
-			}
-			b.SpaceBefore = clamp(gap-0.25*lineSize, 0, 60)
-		}
+		b.SpaceBefore = clamp(prevBottom-e.top, 0, maxGap)
 		page.Blocks = append(page.Blocks, b)
 		prevBottom = math.Min(prevBottom, e.bottom)
-		if e.bottom < prevBottom || i == 0 {
-			prevBottom = e.bottom
-		}
 	}
 	if len(chars) > 0 || len(tables) > 0 {
 		page.Source = model.SourceText
 	}
-	var werr error
-	if len(objWarns) > 0 {
-		werr = fmt.Errorf("%s", strings.Join(objWarns, "; "))
+	if len(objWarns) > 0 && page.Source != model.SourceText {
+		return page, setup, fmt.Errorf("%s", strings.Join(objWarns, "; "))
 	}
-	if werr != nil && page.Source == model.SourceText {
-		// Content was extracted; report object problems as a warning only.
-		return page, setup, nil
-	}
-	return page, setup, werr
+	return page, setup, nil
 }
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
+
+// groupImageBands joins images that share a horizontal band (logo left,
+// QR code right, ...) into one paragraph whose segments carry the pictures
+// at their positions, so they stay on one line in Word.
+func groupImageBands(elems []element, ct content) []element {
+	var out []element
+	for _, e := range elems {
+		if e.image != nil && len(out) > 0 {
+			last := &out[len(out)-1]
+			if last.image != nil || last.block.Kind == model.Paragraph && isImageLine(last.block) {
+				overlap := math.Min(last.top, e.top) - math.Max(last.bottom, e.bottom)
+				minH := math.Min(last.top-last.bottom, e.top-e.bottom)
+				if minH > 0 && overlap >= 0.5*minH {
+					mergeImageInto(last, e, ct)
+					continue
+				}
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func isImageLine(b model.Block) bool {
+	if len(b.Lines) != 1 {
+		return false
+	}
+	for _, s := range b.Lines[0].Segments {
+		for _, r := range s.Runs {
+			if r.Image == nil {
+				return false
+			}
+		}
+	}
+	return len(b.Lines[0].Segments) > 0
+}
+
+// mergeImageInto turns last into an image line (if it is still a single
+// image block) and adds e's image as another segment, ordered by x.
+func mergeImageInto(last *element, e element, ct content) {
+	if last.image != nil {
+		img := last.block.Image
+		last.block = model.Block{Kind: model.Paragraph, Lines: []model.Line{{Segments: []model.Segment{imageSegment(*last.image, img, ct)}}}}
+		last.image = nil
+	}
+	seg := imageSegment(*e.image, e.block.Image, ct)
+	segs := append(last.block.Lines[0].Segments, seg)
+	sort.SliceStable(segs, func(i, j int) bool { return segs[i].X < segs[j].X })
+	last.block.Lines[0].Segments = segs
+	last.top = math.Max(last.top, e.top)
+	last.bottom = math.Min(last.bottom, e.bottom)
+	last.x0 = math.Min(last.x0, e.x0)
+	last.x1 = math.Max(last.x1, e.x1)
+}
+
+func imageSegment(im placedImage, data *model.ImageData, ct content) model.Segment {
+	seg := model.Segment{X: math.Max(0, im.x0-ct.left), Runs: []model.Run{{Image: data}}}
+	center := (im.x0 + im.x1) / 2
+	switch {
+	case math.Abs(center-ct.center()) <= 0.02*ct.pageW:
+		seg.CenterX = center - ct.left
+	case im.x1 >= ct.right-3:
+		seg.FlushRight = true
+	}
+	return seg
+}
 
 // readChars fetches every character with its box and font.
 func readChars(d *pdfiumx.Doc, n int) ([]char, error) {
@@ -340,7 +398,8 @@ func readObjects(d *pdfiumx.Doc, n int, pageW, pageH float64, hasText bool) ([]r
 }
 
 // pathRules extracts straight horizontal/vertical strokes and thin filled
-// rectangles from a path object.
+// rectangles from a path object. Invisible (white or transparent) shapes are
+// ignored.
 func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 	inst := d.Instance
 	b, err := inst.FPDFPageObj_GetBounds(&requests.FPDFPageObj_GetBounds{PageObject: obj})
@@ -350,17 +409,25 @@ func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 	x0, y0, x1, y1 := float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top)
 	w, h := x1-x0, y1-y0
 
+	dm, err := inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj})
+	if err != nil {
+		return nil
+	}
+	col, visible := pathColor(d, obj, dm.Stroke, dm.FillMode != enums.FPDF_FILLMODE_NONE)
+	if !visible {
+		return nil
+	}
+
 	// Thin shape: treat the whole thing as one rule.
 	if h <= ruleMaxThick && w >= ruleMinLength {
-		return []rule{{vertical: false, pos: (y0 + y1) / 2, from: x0, to: x1}}
+		return []rule{{vertical: false, pos: (y0 + y1) / 2, from: x0, to: x1, color: col}}
 	}
 	if w <= ruleMaxThick && h >= ruleMinLength {
-		return []rule{{vertical: true, pos: (x0 + x1) / 2, from: y0, to: y1}}
+		return []rule{{vertical: true, pos: (x0 + x1) / 2, from: y0, to: y1, color: col}}
 	}
 
 	// Otherwise look at the segments: axis-aligned strokes and rectangles.
-	dm, err := inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj})
-	if err != nil || !dm.Stroke {
+	if !dm.Stroke {
 		return nil
 	}
 	cnt, err := inst.FPDFPath_CountSegments(&requests.FPDFPath_CountSegments{PageObject: obj})
@@ -387,14 +454,38 @@ func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 		if st.Type == enums.FPDF_SEGMENT_LINETO && have {
 			switch {
 			case math.Abs(y-py) <= ruleTol && math.Abs(x-px) >= ruleMinLength:
-				rules = append(rules, rule{pos: (y + py) / 2, from: math.Min(x, px), to: math.Max(x, px)})
+				rules = append(rules, rule{pos: (y + py) / 2, from: math.Min(x, px), to: math.Max(x, px), color: col})
 			case math.Abs(x-px) <= ruleTol && math.Abs(y-py) >= ruleMinLength:
-				rules = append(rules, rule{vertical: true, pos: (x + px) / 2, from: math.Min(y, py), to: math.Max(y, py)})
+				rules = append(rules, rule{vertical: true, pos: (x + px) / 2, from: math.Min(y, py), to: math.Max(y, py), color: col})
 			}
 		}
 		px, py, have = x, y, true
 	}
 	return rules
+}
+
+// pathColor returns the drawing colour of a path as RRGGBB and whether the
+// shape is visible at all (not white, not fully transparent).
+func pathColor(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT, stroke, fill bool) (string, bool) {
+	var c structs.FPDF_COLOR
+	got := false
+	if stroke {
+		if res, err := d.Instance.FPDFPageObj_GetStrokeColor(&requests.FPDFPageObj_GetStrokeColor{PageObject: obj}); err == nil {
+			c, got = res.StrokeColor, true
+		}
+	}
+	if !got && fill {
+		if res, err := d.Instance.FPDFPageObj_GetFillColor(&requests.FPDFPageObj_GetFillColor{PageObject: obj}); err == nil {
+			c, got = res.FillColor, true
+		}
+	}
+	if !got {
+		return "000000", true
+	}
+	if c.A == 0 || (c.R >= 250 && c.G >= 250 && c.B >= 250) {
+		return "", false
+	}
+	return fmt.Sprintf("%02X%02X%02X", c.R&0xFF, c.G&0xFF, c.B&0xFF), true
 }
 
 // renderImageObject renders one image object to PNG bytes.

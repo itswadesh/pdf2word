@@ -85,19 +85,22 @@ func (s PageSource) String() string {
 	return "unknown"
 }
 
-// Run is a span of text with one set of character formatting.
+// Run is a span of text with one set of character formatting, or an inline
+// picture when Image is set (Text is then ignored).
 type Run struct {
 	Text   string
 	Bold   bool
 	Italic bool
 	Size   float64 // points; 0 = inherit the document default
 	Font   string  // family name; "" = document default
+	Image  *ImageData
 }
 
 // Segment is a horizontally positioned piece of a line. A line with several
 // segments is rendered with tab stops so columns stay aligned.
 type Segment struct {
 	X          float64 // left edge in points from the page's left margin
+	CenterX    float64 // > 0: centred on this position (centre tab stop)
 	FlushRight bool    // ends at the right margin: rendered with a right tab
 	Runs       []Run
 }
@@ -126,10 +129,12 @@ func (l Line) Text() string {
 	return strings.Join(parts, " ")
 }
 
-// Cell is one table cell.
+// Cell is one table cell. Span > 1 makes it cover that many grid columns;
+// a row's cells then number fewer than the grid's columns.
 type Cell struct {
 	Lines []Line
 	Align Alignment
+	Span  int
 }
 
 // Text joins the cell's lines with newlines.
@@ -143,9 +148,10 @@ func (c Cell) Text() string {
 
 // TableData is a grid of cells with fixed column widths.
 type TableData struct {
-	ColWidths []float64 // points; len == number of columns
-	Rows      [][]Cell  // each row has len(ColWidths) cells
-	Ruled     bool      // draw borders
+	ColWidths   []float64 // points; len == number of grid columns
+	Rows        [][]Cell  // each row's spans add up to len(ColWidths)
+	Ruled       bool      // draw borders
+	BorderColor string    // hex RRGGBB; "" = black
 }
 
 // ImageData is a raster image placed in the flow.
@@ -165,6 +171,7 @@ type Block struct {
 	IndentLeft  float64   // points
 	FirstIndent float64   // points, relative to IndentLeft (may be negative)
 	SpaceBefore float64   // points of vertical space above the block
+	Leading     float64   // points from baseline to baseline; 0 = Word default
 
 	Lines []Line     // Paragraph and Heading content
 	Table *TableData // Kind == Table

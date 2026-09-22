@@ -88,16 +88,28 @@ func TestExtract_LayoutFixture(t *testing.T) {
 	blocks := p.Blocks
 	t.Logf("blocks:\n%s", describe(blocks))
 
-	// Expected order: image, title, subtitle, key/value, body, list a, list b, table, footer.
-	if len(blocks) != 9 {
-		t.Fatalf("got %d blocks, want 9", len(blocks))
+	// Expected order: image line, title, subtitle, key/value, body, list a,
+	// list b, table, merged-header table, footer.
+	if len(blocks) != 10 {
+		t.Fatalf("got %d blocks, want 10", len(blocks))
 	}
 
-	img := blocks[0]
-	if img.Kind != model.Image || img.Image.Align != model.AlignCenter || !near(img.Image.Width, 60, 1) {
-		t.Errorf("block 0 = image? %+v", img)
-	} else if im, err := png.Decode(bytes.NewReader(img.Image.Data)); err != nil || im.Bounds().Dx() < 30 {
+	// Two images on one band become one line: centre tab + right tab.
+	imgs := blocks[0]
+	if imgs.Kind != model.Paragraph || len(imgs.Lines) != 1 || len(imgs.Lines[0].Segments) != 2 {
+		t.Fatalf("block 0 should be a line with two pictures: %+v", imgs)
+	}
+	s0, s1 := imgs.Lines[0].Segments[0], imgs.Lines[0].Segments[1]
+	if s0.CenterX <= 0 || len(s0.Runs) != 1 || s0.Runs[0].Image == nil || !near(s0.Runs[0].Image.Width, 60, 1) {
+		t.Errorf("first picture segment = %+v, want centred 60pt image", s0)
+	} else if im, err := png.Decode(bytes.NewReader(s0.Runs[0].Image.Data)); err != nil || im.Bounds().Dx() < 30 {
 		t.Errorf("image data not a decodable PNG: %v", err)
+	}
+	if !s1.FlushRight || len(s1.Runs) != 1 || s1.Runs[0].Image == nil {
+		t.Errorf("second picture segment = %+v, want flush right image", s1)
+	}
+	if imgs.SpaceBefore > 6 {
+		t.Errorf("first block sits at the top margin; SpaceBefore = %.1f", imgs.SpaceBefore)
 	}
 
 	title := blocks[1]
@@ -106,6 +118,9 @@ func TestExtract_LayoutFixture(t *testing.T) {
 	}
 	if r := title.Lines[0].Segments[0].Runs[0]; !r.Bold || !near(r.Size, 14, 0.1) || r.Font != "Arial" {
 		t.Errorf("title run = %+v, want bold 14pt Arial", r)
+	}
+	if !near(title.Leading, 1.2*14, 0.5) {
+		t.Errorf("single-line heading leading = %.1f, want 16.8", title.Leading)
 	}
 
 	if sub := blocks[2]; sub.Align != model.AlignCenter || sub.Text() != "Nil Certificate Of Encumbrance On Property" {
@@ -126,6 +141,9 @@ func TestExtract_LayoutFixture(t *testing.T) {
 	}
 	if !strings.Contains(body.Text(), "respect of the undermentioned") {
 		t.Errorf("wrapped lines must be joined with a space: %q", body.Text())
+	}
+	if !near(body.Leading, 12, 0.6) {
+		t.Errorf("body leading = %.2f, want the measured 12pt baseline distance", body.Leading)
 	}
 
 	if a, b := blocks[5], blocks[6]; !strings.HasPrefix(a.Text(), "a) ") || !strings.HasPrefix(b.Text(), "b) ") {
@@ -151,11 +169,25 @@ func TestExtract_LayoutFixture(t *testing.T) {
 			t.Errorf("data row = %q %q %q", row[0].Text(), row[1].Text(), row[2].Text())
 		}
 	}
-	if !tbl.Table.Ruled {
-		t.Error("table should be ruled")
+	if !tbl.Table.Ruled || tbl.Table.BorderColor != "000000" {
+		t.Errorf("table should be ruled in black, got ruled=%v color=%q", tbl.Table.Ruled, tbl.Table.BorderColor)
 	}
 
-	footer := blocks[8]
+	merged := blocks[8]
+	if merged.Kind != model.Table || len(merged.Table.Rows) != 2 {
+		t.Fatalf("block 8 = %v with %d rows, want a 2-row table", merged.Kind, len(merged.Table.Rows))
+	}
+	if hdr := merged.Table.Rows[0]; len(hdr) != 1 || hdr[0].Span != 3 || hdr[0].Text() != "Merged header" {
+		t.Errorf("merged header row = %+v, want one cell spanning 3 columns", hdr)
+	}
+	if data := merged.Table.Rows[1]; len(data) != 3 || data[0].Text() != "1" || data[1].Text() != "Two" || data[2].Text() != "Three" {
+		t.Errorf("data row = %+v", data)
+	}
+	if c := merged.Table.BorderColor; c != "808080" && c != "7F7F7F" {
+		t.Errorf("grey rulings should give a grey border, got %q", c)
+	}
+
+	footer := blocks[9]
 	if len(footer.Lines) != 1 || len(footer.Lines[0].Segments) != 2 || footer.Lines[0].Segments[1].Text() != "Page 1 of 1" || !footer.Lines[0].Segments[1].FlushRight {
 		t.Errorf("footer = %+v", footer)
 	}

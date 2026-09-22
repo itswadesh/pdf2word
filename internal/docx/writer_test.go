@@ -473,6 +473,66 @@ func TestWrite_PageSetupFromDocument(t *testing.T) {
 	}
 }
 
+func TestWrite_ExactLeading(t *testing.T) {
+	doc := &model.Document{Pages: []model.Page{{Number: 1, Width: 612, Height: 792, Blocks: []model.Block{
+		{Kind: model.Paragraph, Leading: 12, SpaceBefore: 3, Lines: []model.Line{line(run("tight", false, false, 10, ""))}},
+	}}}}
+	body := readPart(t, openZip(t, render(t, doc)), "word/document.xml")
+	if !strings.Contains(body, `<w:spacing w:before="60" w:after="0" w:line="240" w:lineRule="exact"/>`) {
+		t.Fatalf("exact leading missing: %s", body)
+	}
+}
+
+func TestWrite_CenterTabAndImageRuns(t *testing.T) {
+	pngData := tinyPNG(t)
+	logo := &model.ImageData{Data: pngData, Ext: "png", Width: 40, Height: 40}
+	qr := &model.ImageData{Data: pngData, Ext: "png", Width: 30, Height: 30}
+	doc := richDoc()
+	doc.Pages[0].Blocks = []model.Block{{Kind: model.Paragraph, Lines: []model.Line{{Segments: []model.Segment{
+		{CenterX: 385, Runs: []model.Run{{Image: logo}}},
+		{FlushRight: true, Runs: []model.Run{{Image: qr}}},
+	}}}}}
+	zr := openZip(t, render(t, doc))
+	body := readPart(t, zr, "word/document.xml")
+	got := paragraphs(t, body)
+	if len(got) != 1 || !got[0].Drawing || got[0].Tabs != 2 {
+		t.Fatalf("paragraph = %+v; want two tabs and drawings", got)
+	}
+	if !strings.Contains(body, `<w:tab w:val="center" w:pos="7700"/>`) || !strings.Contains(body, `<w:tab w:val="right" w:pos="15400"/>`) {
+		t.Errorf("tab stops wrong: %s", body[strings.Index(body, "<w:tabs>"):strings.Index(body, "</w:tabs>")+9])
+	}
+	if strings.Count(body, "<w:drawing>") != 2 || !hasPart(zr, "word/media/image1.png") || !hasPart(zr, "word/media/image2.png") {
+		t.Errorf("expected two inline pictures with media parts; parts=%v", partNames(zr))
+	}
+}
+
+func TestWrite_TableGridSpanAndBorderColor(t *testing.T) {
+	doc := &model.Document{Pages: []model.Page{{Number: 1, Width: 612, Height: 792, Blocks: []model.Block{
+		{Kind: model.Table, Table: &model.TableData{
+			ColWidths: []float64{100, 100, 100}, Ruled: true, BorderColor: "999999",
+			Rows: [][]model.Cell{
+				{{Lines: []model.Line{line(run("Merged header", true, false, 9, ""))}, Span: 3}},
+				{{Lines: []model.Line{line(run("1", false, false, 9, ""))}}, {Lines: []model.Line{line(run("Two", false, false, 9, ""))}, Span: 2}},
+				{{Lines: []model.Line{line(run("only first", false, false, 9, ""))}}}, // short row gets padded
+			},
+		}},
+	}}}}
+	body := readPart(t, openZip(t, render(t, doc)), "word/document.xml")
+	for _, want := range []string{
+		`<w:tcW w:w="6000" w:type="dxa"/><w:gridSpan w:val="3"/>`,
+		`<w:tcW w:w="4000" w:type="dxa"/><w:gridSpan w:val="2"/>`,
+		`w:color="999999"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("table XML missing %s", want)
+		}
+	}
+	// Row 1: one cell; row 2: two cells; row 3: one real + two padding cells.
+	if n := strings.Count(body, "<w:tc>"); n != 6 {
+		t.Errorf("cell count = %d, want 6", n)
+	}
+}
+
 func TestWrite_PlainPagesKeepStyleSpacing(t *testing.T) {
 	// Pages without layout information (OCR, fallback) must not get explicit
 	// zero spacing, so the Normal style's paragraph spacing still applies.
