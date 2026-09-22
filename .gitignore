@@ -1,0 +1,6 @@
+/bin/
+/dist/
+/out/
+*.docx
+!testdata/*.docx
+*.tmp

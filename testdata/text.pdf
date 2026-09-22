@@ -1,0 +1,67 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [278 278 355 556 556 889 667 191 333 333 389 584 278 333 278 278 556 556 556 556 556 556 556 556 556 556 278 278 584 584 584 556 1015 667 667 722 722 667 611 778 722 278 500 667 556 833 722 778 667 778 722 667 611 722 667 944 667 667 611 278 278 278 469 556 333 556 556 500 556 556 278 556 556 222 222 500 222 833 556 556 556 556 333 500 278 556 500 722 500 500 500 334 260 334 584] >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 342 >>
+stream
+BT
+/F1 24 Tf
+72 720 Td
+(Quarterly Report) Tj
+/F1 11 Tf
+0 -40 Td
+(This is the first paragraph of the docu-) Tj
+0 -14 Td
+(ment used to test the converter. It has) Tj
+0 -14 Td
+(three lines of text.) Tj
+0 -28 Td
+(The second paragraph starts after a larger) Tj
+0 -14 Td
+(vertical gap and also spans several) Tj
+0 -14 Td
+(lines on the page.) Tj
+ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 57 >>
+stream
+BT
+/F1 11 Tf
+72 720 Td
+(Second page content here.) Tj
+ET
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000643 00000 n 
+0000000769 00000 n 
+0000001162 00000 n 
+0000001288 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1395
+%%EOF
