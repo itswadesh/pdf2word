@@ -16,13 +16,14 @@ PDFs on the page that opens, and save the Word files it gives back.
 
 ## Using the app
 
-1. Start `pdf2word.exe` (double-click). A console window shows the address and
-   your browser opens `http://127.0.0.1:<port>/`.
+1. Start `pdf2word.exe` (double-click). A console window shows the addresses
+   and your browser opens `http://127.0.0.1:9090/`. Other computers on the
+   network can open the address printed in the console, e.g.
+   `http://192.168.1.23:9090/` (see "Sharing it on your network").
 2. Drop one or more PDFs onto the page (or click the sheet to choose files).
 3. Watch the counter. When a file is done its Word document downloads by
    itself; the "Save Word file" button downloads it again.
-4. Close the browser tab when finished. The program exits on its own shortly
-   after (pass `-no-auto-exit` to keep it running).
+4. Close the console window (or press Ctrl+C in it) to stop the program.
 
 The page has no settings: pages with fewer than 20 characters of real text
 are read with OCR, in English. To change that for the app, start it with the
@@ -36,26 +37,31 @@ temporary folder that is removed when the program exits.
 
 ## Sharing it on your network
 
-By default the page is reachable only from the computer running it. To let
-other computers on the same network use it, bind it to a network address and
-keep it running:
+By default the program listens on port 9090 on every network interface, so
+other computers on the same network can use it. The console lists the
+addresses to share, for example `http://192.168.1.23:9090/`. The program
+keeps running until you close it. Each browser sees only the files it
+uploaded (a cookie identifies it); anyone who can reach the address can
+convert files, as there is no login. Traffic is plain HTTP, so use it on a
+trusted network. If the machine has a public IP address, `0.0.0.0` includes
+the internet: bind to a private address instead (`-addr 10.0.0.5:9090`) or
+restrict the firewall rule to your office's IP range.
+
+To keep it private to this computer only:
 
 ```
-pdf2word.exe -addr 0.0.0.0:8080 -no-browser
+pdf2word.exe -addr 127.0.0.1:9090
 ```
 
-The console then lists the addresses to share, for example
-`http://192.168.1.23:8080/`. In this mode the program does not exit on its
-own; press Ctrl+C to stop it. Each browser sees only the files it uploaded
-(a cookie identifies it); anyone who can reach the address can convert files,
-as there is no login. Traffic is plain HTTP, so use it on a trusted network.
+In that local-only mode the program also exits on its own once the browser
+page is closed (`-no-auto-exit` keeps it running).
 
 On Windows the firewall blocks incoming connections to new programs. An
 administrator must allow the port once, either by accepting the "Windows
 Security Alert" prompt that appears on first start or with:
 
 ```
-netsh advfirewall firewall add rule name="pdf2word" dir=in action=allow protocol=TCP localport=8080
+netsh advfirewall firewall add rule name="pdf2word" dir=in action=allow protocol=TCP localport=9090
 ```
 
 To keep it running after you log off, run it as a scheduled task at startup
@@ -97,9 +103,9 @@ pdf2word [flags] input.pdf [output.docx]
   -min-text int      text-layer characters below which a page counts as scanned (default 20)
   -v                 verbose: one progress line per page plus diagnostics
   -no-progress       disable the progress indicator
-  -addr string       address for the browser page (default "127.0.0.1:0", a free port)
+  -addr string       address for the browser page (default "0.0.0.0:9090"; 127.0.0.1:PORT = this computer only)
   -no-browser        app mode: do not open the browser automatically
-  -no-auto-exit      app mode: keep running after the browser page is closed
+  -no-auto-exit      app mode: keep running after the page is closed (only relevant with a 127.0.0.1 address)
   -version           print version and exit
 ```
 

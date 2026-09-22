@@ -29,6 +29,10 @@ import (
 //	go build -ldflags "-X main.version=1.0.0" ./cmd/pdf2word
 var version = "dev"
 
+// defaultAddr is where the browser page listens when -addr is not given:
+// port 9090 on every interface, so other computers on the network can use it.
+const defaultAddr = "0.0.0.0:9090"
+
 const usageText = `pdf2word converts PDF files to Word (.docx) documents.
 
 Usage:
@@ -62,7 +66,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		jobs        = fs.Int("jobs", convert.DefaultJobs(), "pages to OCR at the same time")
 		verbose     = fs.Bool("v", false, "verbose: one progress line per page plus diagnostics")
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator (command line)")
-		addr        = fs.String("addr", "127.0.0.1:0", "address for the browser page; 0 picks a free port, 0.0.0.0:PORT shares it on the network")
+		addr        = fs.String("addr", defaultAddr, "address for the browser page; 0.0.0.0:PORT shares it on the network, 127.0.0.1:PORT keeps it to this computer")
 		noBrowser   = fs.Bool("no-browser", false, "do not open the browser automatically")
 		noAutoExit  = fs.Bool("no-auto-exit", false, "keep running after the browser page is closed (always on when shared on the network)")
 		showVersion = fs.Bool("version", false, "print version and exit")
@@ -188,6 +192,7 @@ func serve(ctx context.Context, so serveOptions, stdout, stderr io.Writer) int {
 	ln, err := net.Listen("tcp", so.addr)
 	if err != nil {
 		fmt.Fprintf(stderr, "pdf2word: cannot listen on %s: %v\n", so.addr, err)
+		fmt.Fprintln(stderr, "If the port is taken, pick another one, e.g. -addr 0.0.0.0:9091")
 		return 1
 	}
 	port := ln.Addr().(*net.TCPAddr).Port

@@ -130,6 +130,15 @@ func TestServe_ServesPageAndStopsOnCancel(t *testing.T) {
 	}
 }
 
+func TestDefaultAddrIsSharedOnPort9090(t *testing.T) {
+	if defaultAddr != "0.0.0.0:9090" {
+		t.Fatalf("defaultAddr = %q", defaultAddr)
+	}
+	if !listensRemotely(defaultAddr) {
+		t.Fatal("the default address must be reachable from the network")
+	}
+}
+
 func TestListensRemotely(t *testing.T) {
 	for addr, want := range map[string]bool{
 		"127.0.0.1:0":      false,

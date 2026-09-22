@@ -262,7 +262,8 @@ The user asked for a double-click experience instead of a terminal: a page
 with drag-and-drop, a progress bar, and the Word file downloaded when done.
 
 - Running the executable with **no arguments** starts `internal/web` on
-  `127.0.0.1:<free port>` and opens the default browser. Arguments keep the
+  `0.0.0.0:9090` (originally `127.0.0.1:<free port>`; changed at the user's
+  request) and opens the default browser on `http://127.0.0.1:9090/`. Arguments keep the
   command-line behaviour. Flags: `-addr`, `-no-browser`, `-no-auto-exit`.
 - **API** (JSON): `GET /` page; `GET /api/info` version + OCR availability;
   `POST /api/convert` multipart (`ocr`, `lang`, then `file`) → 202 job;
@@ -290,7 +291,9 @@ with drag-and-drop, a progress bar, and the Word file downloaded when done.
   opened; `-no-auto-exit` disables this. Ctrl+C always works.
 - **Security**: loopback bind; requests whose `Host` is not loopback get 403;
   non-GET requests with a foreign `Origin` get 403; `Cache-Control: no-store`.
-- **Network sharing** (user asked "how to expose to network"): when `-addr`
+- **Network sharing** (user asked "how to expose to network", then "set
+  default port to 9090 and default to be accessible by network"): the
+  default `-addr` is `0.0.0.0:9090`. Whenever `-addr`
   binds a non-loopback address (`0.0.0.0:PORT`, a LAN IP, or `:PORT`), the
   server runs with `AllowRemote` (any `Host` accepted; the `Origin` check
   stays), auto-exit is disabled, and the console lists this machine's LAN
