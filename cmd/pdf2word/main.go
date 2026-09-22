@@ -62,9 +62,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		jobs        = fs.Int("jobs", convert.DefaultJobs(), "pages to OCR at the same time")
 		verbose     = fs.Bool("v", false, "verbose: one progress line per page plus diagnostics")
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator (command line)")
-		addr        = fs.String("addr", "127.0.0.1:0", "address for the browser page (0 picks a free port)")
+		addr        = fs.String("addr", "127.0.0.1:0", "address for the browser page; 0 picks a free port, 0.0.0.0:PORT shares it on the network")
 		noBrowser   = fs.Bool("no-browser", false, "do not open the browser automatically")
-		noAutoExit  = fs.Bool("no-auto-exit", false, "keep running after the browser page is closed")
+		noAutoExit  = fs.Bool("no-auto-exit", false, "keep running after the browser page is closed (always on when shared on the network)")
 		showVersion = fs.Bool("version", false, "print version and exit")
 	)
 	fs.Usage = func() {
@@ -95,10 +95,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	rest := fs.Args()
 	if len(rest) == 0 {
+		remote := listensRemotely(*addr)
 		return serve(ctx, serveOptions{
 			addr:        *addr,
 			openBrowser: !*noBrowser,
-			autoExit:    !*noAutoExit,
+			autoExit:    !*noAutoExit && !remote,
+			remote:      remote,
 			base:        base,
 			verbose:     *verbose,
 		}, stdout, stderr)
@@ -154,6 +156,7 @@ type serveOptions struct {
 	addr        string
 	openBrowser bool
 	autoExit    bool
+	remote      bool // listening on a network interface: accept any Host
 	base        convert.Options
 	verbose     bool
 	// ready, if set, is called with the page URL once the server listens
@@ -175,7 +178,7 @@ func serve(ctx context.Context, so serveOptions, stdout, stderr io.Writer) int {
 	if so.verbose {
 		logf = func(format string, a ...any) { fmt.Fprintf(stderr, format+"\n", a...) }
 	}
-	srv, err := web.New(web.Config{Base: so.base, Version: version, Logf: logf})
+	srv, err := web.New(web.Config{Base: so.base, Version: version, Logf: logf, AllowRemote: so.remote})
 	if err != nil {
 		fmt.Fprintf(stderr, "pdf2word: %v\n", err)
 		return 1
@@ -187,9 +190,10 @@ func serve(ctx context.Context, so serveOptions, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pdf2word: cannot listen on %s: %v\n", so.addr, err)
 		return 1
 	}
+	port := ln.Addr().(*net.TCPAddr).Port
 	url := fmt.Sprintf("http://%s/", ln.Addr().String())
-	if strings.HasPrefix(url, "http://[::]") || strings.HasPrefix(url, "http://0.0.0.0") {
-		url = fmt.Sprintf("http://127.0.0.1:%d/", ln.Addr().(*net.TCPAddr).Port)
+	if so.remote || strings.HasPrefix(url, "http://[::]") || strings.HasPrefix(url, "http://0.0.0.0") {
+		url = fmt.Sprintf("http://127.0.0.1:%d/", port)
 	}
 
 	httpSrv := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
@@ -205,6 +209,13 @@ func serve(ctx context.Context, so serveOptions, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintln(stdout, ".")
+	if so.remote {
+		fmt.Fprintln(stdout, "Other computers on your network can use:")
+		for _, u := range lanURLs(port) {
+			fmt.Fprintf(stdout, "  %s\n", u)
+		}
+		fmt.Fprintln(stdout, "Anyone who can reach these addresses can convert files; there is no login.")
+	}
 	if so.autoExit {
 		fmt.Fprintln(stdout, "Drop PDF files on the page. This window closes on its own after the page is closed.")
 	} else {
@@ -244,6 +255,44 @@ loop:
 	defer cancel()
 	httpSrv.Shutdown(shutdownCtx)
 	return code
+}
+
+// listensRemotely reports whether addr binds a network interface rather than
+// the loopback address only.
+func listensRemotely(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(host) {
+	case "", "0.0.0.0", "::":
+		return true
+	case "localhost":
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
+}
+
+// lanURLs lists http URLs for this machine's IPv4 addresses on the network.
+func lanURLs(port int) []string {
+	var urls []string
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return urls
+	}
+	for _, a := range addrs {
+		ipn, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip := ipn.IP.To4()
+		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+		urls = append(urls, fmt.Sprintf("http://%s:%d/", ip, port))
+	}
+	return urls
 }
 
 // sameFile reports whether in and out refer to the same existing file.

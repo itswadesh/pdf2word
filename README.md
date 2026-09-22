@@ -34,6 +34,33 @@ Everything runs locally. The server listens on the loopback address only,
 refuses requests from other hosts or origins, and stores uploads in a
 temporary folder that is removed when the program exits.
 
+## Sharing it on your network
+
+By default the page is reachable only from the computer running it. To let
+other computers on the same network use it, bind it to a network address and
+keep it running:
+
+```
+pdf2word.exe -addr 0.0.0.0:8080 -no-browser
+```
+
+The console then lists the addresses to share, for example
+`http://192.168.1.23:8080/`. In this mode the program does not exit on its
+own; press Ctrl+C to stop it. Each browser sees only the files it uploaded
+(a cookie identifies it); anyone who can reach the address can convert files,
+as there is no login. Traffic is plain HTTP, so use it on a trusted network.
+
+On Windows the firewall blocks incoming connections to new programs. An
+administrator must allow the port once, either by accepting the "Windows
+Security Alert" prompt that appears on first start or with:
+
+```
+netsh advfirewall firewall add rule name="pdf2word" dir=in action=allow protocol=TCP localport=8080
+```
+
+To keep it running after you log off, run it as a scheduled task at startup
+or wrap it in a service manager such as NSSM.
+
 ## Requirements
 
 | Purpose | Requirement |

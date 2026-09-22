@@ -130,6 +130,24 @@ func TestServe_ServesPageAndStopsOnCancel(t *testing.T) {
 	}
 }
 
+func TestListensRemotely(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"127.0.0.1:0":      false,
+		"localhost:8080":   false,
+		"[::1]:8080":       false,
+		"0.0.0.0:8080":     true,
+		":8080":            true,
+		"[::]:8080":        true,
+		"192.168.1.5:8080": true,
+		"myhost:8080":      true,
+		"garbage":          false,
+	} {
+		if got := listensRemotely(addr); got != want {
+			t.Errorf("listensRemotely(%q) = %v, want %v", addr, got, want)
+		}
+	}
+}
+
 func TestIndicator_VerbosePrintsOneLinePerPage(t *testing.T) {
 	var buf bytes.Buffer
 	ind := newIndicator(&buf, true, true)

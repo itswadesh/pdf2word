@@ -290,6 +290,15 @@ with drag-and-drop, a progress bar, and the Word file downloaded when done.
   opened; `-no-auto-exit` disables this. Ctrl+C always works.
 - **Security**: loopback bind; requests whose `Host` is not loopback get 403;
   non-GET requests with a foreign `Origin` get 403; `Cache-Control: no-store`.
+- **Network sharing** (user asked "how to expose to network"): when `-addr`
+  binds a non-loopback address (`0.0.0.0:PORT`, a LAN IP, or `:PORT`), the
+  server runs with `AllowRemote` (any `Host` accepted; the `Origin` check
+  stays), auto-exit is disabled, and the console lists this machine's LAN
+  URLs. Each browser receives an HttpOnly `pdf2word_client` cookie on first
+  visit; `GET /api/jobs` returns only that browser's jobs, while by-id
+  endpoints stay open (96-bit random ids). No authentication or TLS; the
+  README says to use it on a trusted network and how to open the Windows
+  firewall port.
 
 ## 12. Dependencies
 

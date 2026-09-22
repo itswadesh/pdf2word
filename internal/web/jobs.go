@@ -66,6 +66,7 @@ type job struct {
 	output   string
 	ocr      convert.OCRMode
 	lang     string
+	client   string // browser that uploaded it ("" for cookie-less clients)
 
 	state    State
 	progress convert.Progress
@@ -79,7 +80,8 @@ type job struct {
 	cancel context.CancelFunc
 }
 
-func newJobID() (string, error) {
+// newID returns 96 random bits as hex, used for job and client identifiers.
+func newID() (string, error) {
 	var b [12]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
@@ -184,8 +186,8 @@ func newJobStore(root string) *jobStore {
 	return &jobStore{root: root, jobs: map[string]*job{}}
 }
 
-func (s *jobStore) create(filename string, ocr convert.OCRMode, lang string) (*job, error) {
-	id, err := newJobID()
+func (s *jobStore) create(filename string, ocr convert.OCRMode, lang, client string) (*job, error) {
+	id, err := newID()
 	if err != nil {
 		return nil, err
 	}
@@ -202,6 +204,7 @@ func (s *jobStore) create(filename string, ocr convert.OCRMode, lang string) (*j
 		output:   filepath.Join(dir, "output.docx"),
 		ocr:      ocr,
 		lang:     lang,
+		client:   client,
 		state:    StateQueued,
 		created:  time.Now(),
 		ctx:      ctx,

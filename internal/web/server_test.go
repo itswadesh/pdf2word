@@ -319,6 +319,116 @@ func TestRefusesNonLoopbackHostAndForeignOrigin(t *testing.T) {
 	}
 }
 
+func TestAllowRemoteAcceptsForeignHost(t *testing.T) {
+	s, err := New(Config{Base: convert.Options{Engine: &fakeEngine{}}, WorkDir: t.TempDir(), AllowRemote: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	defer s.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/info", nil)
+	req.Host = "192.168.1.50:8080"
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("remote Host with AllowRemote: status %d, want 200", resp.StatusCode)
+	}
+
+	// Cross-site POSTs are still refused.
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/ping", nil)
+	req.Header.Set("Origin", "http://evil.example.com")
+	resp, err = ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("foreign Origin: status %d, want 403", resp.StatusCode)
+	}
+}
+
+// Each browser gets a cookie on first visit and only lists its own jobs, so
+// people sharing one server do not see each other's files.
+func TestJobsAreScopedPerBrowser(t *testing.T) {
+	_, ts := newTestServer(t)
+	data, _ := os.ReadFile(fixture("text.pdf"))
+
+	// First visit sets the cookie.
+	resp, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == clientCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil || cookie.Value == "" || !cookie.HttpOnly {
+		t.Fatalf("index did not set an HttpOnly %s cookie: %+v", clientCookie, resp.Cookies())
+	}
+
+	uploadAs := func(c *http.Cookie, name string) JobView {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		fw, _ := mw.CreateFormFile("file", name)
+		fw.Write(data)
+		mw.Close()
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/convert", &body)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		if c != nil {
+			req.AddCookie(c)
+		}
+		r, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var v JobView
+		decode(t, r, &v)
+		return v
+	}
+	listAs := func(c *http.Cookie) []string {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/jobs", nil)
+		if c != nil {
+			req.AddCookie(c)
+		}
+		r, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var views []JobView
+		decode(t, r, &views)
+		var names []string
+		for _, v := range views {
+			names = append(names, v.Filename)
+		}
+		return names
+	}
+
+	other := &http.Cookie{Name: clientCookie, Value: "someone-else"}
+	mine := uploadAs(cookie, "mine.pdf")
+	uploadAs(other, "theirs.pdf")
+	uploadAs(nil, "anonymous.pdf")
+
+	if got := listAs(cookie); len(got) != 1 || got[0] != "mine.pdf" {
+		t.Errorf("my list = %v, want [mine.pdf]", got)
+	}
+	if got := listAs(other); len(got) != 1 || got[0] != "theirs.pdf" {
+		t.Errorf("their list = %v, want [theirs.pdf]", got)
+	}
+	if got := listAs(nil); len(got) != 1 || got[0] != "anonymous.pdf" {
+		t.Errorf("cookie-less list = %v, want [anonymous.pdf]", got)
+	}
+	// Direct access by id keeps working for everyone (ids are unguessable).
+	waitForJob(t, ts, mine.ID)
+}
+
 func TestIdleTracking(t *testing.T) {
 	s, ts := newTestServer(t)
 	time.Sleep(30 * time.Millisecond)

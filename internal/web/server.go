@@ -37,9 +37,16 @@ type Config struct {
 	WorkDir string
 	// MaxUploadBytes caps a single upload (default 2 GiB).
 	MaxUploadBytes int64
-	Version        string
-	Logf           func(format string, args ...any)
+	// AllowRemote accepts requests addressed to any host, not just
+	// localhost. Set it when the listener is bound to a network interface.
+	AllowRemote bool
+	Version     string
+	Logf        func(format string, args ...any)
 }
+
+// clientCookie identifies a browser so that each one sees only the files it
+// uploaded. Jobs stay reachable by their (unguessable) id regardless.
+const clientCookie = "pdf2word_client"
 
 // Server is the HTTP application. Create it with New.
 type Server struct {
@@ -96,7 +103,7 @@ func New(cfg Config) (*Server, error) {
 // Handler returns the HTTP handler with loopback and origin protection.
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !loopbackHost(r.Host) {
+		if !s.cfg.AllowRemote && !loopbackHost(r.Host) {
 			http.Error(w, "this server only answers to localhost", http.StatusForbidden)
 			return
 		}
@@ -172,10 +179,27 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// clientID returns the browser's identifier, or "" for clients without the
+// cookie (e.g. curl).
+func (s *Server) clientID(r *http.Request) string {
+	if c, err := r.Cookie(clientCookie); err == nil {
+		return c.Value
+	}
+	return ""
+}
+
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.pageOpened = true
 	s.mu.Unlock()
+	if s.clientID(r) == "" {
+		if id, err := newID(); err == nil {
+			http.SetCookie(w, &http.Cookie{
+				Name: clientCookie, Value: id, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteStrictMode,
+			})
+		}
+	}
 	b, err := static.ReadFile("static/index.html")
 	if err != nil {
 		http.Error(w, "page missing from build", http.StatusInternalServerError)
@@ -222,11 +246,15 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"busy": s.Busy()})
 }
 
+// handleJobs lists the requesting browser's own jobs.
 func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
+	client := s.clientID(r)
 	views := []JobView{}
 	for _, j := range s.jobs.list() {
-		views = append(views, j.view(now))
+		if j.client == client {
+			views = append(views, j.view(now))
+		}
 	}
 	writeJSON(w, http.StatusOK, views)
 }
@@ -278,6 +306,7 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	mode := convert.OCRAuto
 	lang := s.cfg.Base.Lang
+	client := s.clientID(r)
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
@@ -303,7 +332,7 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 				lang = l
 			}
 		case "file":
-			s.acceptFile(w, part, mode, lang)
+			s.acceptFile(w, part, mode, lang, client)
 			return
 		default:
 			io.Copy(io.Discard, part)
@@ -311,13 +340,13 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode convert.OCRMode, lang string) {
+func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode convert.OCRMode, lang, client string) {
 	filename := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
 	if filename == "" || filename == "." || filename == "/" {
 		filename = "document.pdf"
 	}
 
-	j, err := s.jobs.create(filename, mode, lang)
+	j, err := s.jobs.create(filename, mode, lang, client)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot create job: "+err.Error())
 		return
