@@ -279,9 +279,12 @@ with drag-and-drop, a progress bar, and the Word file downloaded when done.
   "Save Word file" and collapsible notes (warnings). Files uploaded from the
   page download automatically when done; files discovered after a reload
   only offer the button. Polling every 0.5 s while active, 4 s otherwise,
-  which doubles as the keep-alive. No footer: the user asked for the engine
-  status and version lines to be removed; a missing OCR engine surfaces as
-  the file's error message instead (`GET /api/info` remains for tooling).
+  which doubles as the keep-alive. No footer and no options row: the user
+  asked for the engine status, version, text-recognition and language
+  controls to be removed. The page uploads only the file; the server applies
+  its defaults (auto OCR, `-lang`, `-min-text` from the command line). A
+  missing OCR engine surfaces as the file's error message. `GET /api/info`
+  and the `ocr`/`lang` upload fields remain in the API for tooling.
 - **Lifecycle**: the process exits on its own when the page has been silent
   for 45 s and no job is running, or after 5 minutes if the page never
   opened; `-no-auto-exit` disables this. Ctrl+C always works.
