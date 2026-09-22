@@ -145,9 +145,9 @@ minutes on a multi-core PC. Text PDFs convert in seconds.
 
 - The result is an editable document that follows the original's structure,
   not a pixel-perfect replica. Not yet handled: tables without ruling lines,
-  merged cells, multi-column article layouts (read row by row), text colours,
-  running headers and footers (they stay in the body), and formatting on
-  OCR'd pages.
+  cells merged vertically, multi-column article layouts (read row by row),
+  text colours, running headers and footers (they stay in the body), vector
+  drawings other than table rulings, and formatting on OCR'd pages.
 - OCR quality depends on scan quality and language data; dotted leaders and
   tables of contents produce noise.
 - Encrypted PDFs are not supported.
