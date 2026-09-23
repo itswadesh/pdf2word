@@ -6,106 +6,120 @@
 <meta name="color-scheme" content="light dark">
 <title>PDF to Word Converter</title>
 <style>
+  /* A sheet of paper on a desk. Progress is highlighter ink filling the
+     page from the top; everything around the sheet stays quiet. */
   :root {
-    --desk: #E4E8EC;
-    --desk-deep: #C9D1D8;
+    --desk: #E3E7EB;
+    --desk-deep: #C4CCD4;
     --paper: #FFFFFE;
     --paper-fold: #ECEBE4;
     --paper-shadow: rgba(27, 39, 51, .22);
     --ink: #1B2733;
-    --ink-soft: #5B6873;
+    --ink-soft: #566370;
     --ink-on-paper: #1B2733;
-    --ink-soft-on-paper: #6B7680;
+    --ink-soft-on-paper: #66717B;
     --mark: #F7D648;
-    --mark-wash: rgba(247, 214, 72, .28);
-    --mark-deep: #8F7607;
-    --ok: #2F7E5B;
-    --alert: #B5453A;
+    --mark-wash: rgba(247, 214, 72, .30);
+    --ok: #2A7454;
+    --alert: #AE3F34;
     --focus: #2B5FD9;
     --display: "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Segoe UI", sans-serif;
     --body: "Cambria", "Charter", "Georgia", "Times New Roman", serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --desk: #1D252B;
-      --desk-deep: #33404A;
-      --paper-shadow: rgba(0, 0, 0, .55);
+      --desk: #1B2329;
+      --desk-deep: #35424C;
+      --paper-shadow: rgba(0, 0, 0, .6);
       --ink: #E9EDF0;
-      --ink-soft: #A3AEB7;
-      --mark-deep: #E6C63C;
-      --ok: #74C79E;
-      --alert: #EE8E84;
+      --ink-soft: #A7B2BB;
+      --ok: #7FCDA6;
+      --alert: #F09A90;
       --focus: #8FB0FF;
     }
   }
   :root[data-theme="dark"] {
-    --desk: #1D252B;
-    --desk-deep: #33404A;
-    --paper-shadow: rgba(0, 0, 0, .55);
+    --desk: #1B2329;
+    --desk-deep: #35424C;
+    --paper-shadow: rgba(0, 0, 0, .6);
     --ink: #E9EDF0;
-    --ink-soft: #A3AEB7;
-    --mark-deep: #E6C63C;
-    --ok: #74C79E;
-    --alert: #EE8E84;
+    --ink-soft: #A7B2BB;
+    --ok: #7FCDA6;
+    --alert: #F09A90;
     --focus: #8FB0FF;
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
+    margin: 0;
     background: var(--desk);
     color: var(--ink);
     font-family: var(--body);
     font-size: 17px;
     line-height: 1.5;
     min-height: 100vh;
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
   }
-  body.dragging { background: color-mix(in srgb, var(--desk) 88%, var(--mark)); }
+  body.dragging { background: color-mix(in srgb, var(--desk) 86%, var(--mark)); }
 
-  main {
-    max-width: 640px;
+  .page {
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 48px 16px 40px;
+    padding: 28px 16px 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
   }
-
+  .intro { max-width: 44em; }
+  .brand {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+  }
   h1 {
     font-family: var(--display);
     font-weight: 600;
-    font-size: clamp(34px, 6vw, 46px);
+    font-size: clamp(27px, 4.4vw, 42px);
+    line-height: 1.1;
     letter-spacing: -0.01em;
-    line-height: 1;
-    margin: 0 0 12px;
+    margin: 0;
+    text-wrap: balance;
   }
-  .lede {
-    margin: 0 0 32px;
-    color: var(--ink-soft);
-    max-width: 34em;
+
+  /* Two columns from tablet width: the sheet at left, the tray at right. */
+  @media (min-width: 880px) {
+    .page {
+      grid-template-columns: 380px minmax(0, 1fr);
+      column-gap: 56px;
+      row-gap: 40px;
+      padding-top: 44px;
+    }
+    .intro { grid-column: 1 / -1; }
+    .desk-left { position: sticky; top: 32px; align-self: start; }
   }
 
   /* The sheet: drop target and live progress display in one. */
-  .sheet-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
+  .sheet-wrap { display: flex; justify-content: center; }
   .sheet {
     position: relative;
-    width: min(340px, 78vw);
+    width: min(340px, 100%);
     aspect-ratio: 8.5 / 11;
     background: var(--paper);
     color: var(--ink-on-paper);
-    border: 0;
     border-radius: 2px;
     box-shadow: 0 1px 2px var(--paper-shadow), 0 12px 30px -12px var(--paper-shadow);
-    cursor: pointer;
     overflow: hidden;
-    padding: 0;
-    font: inherit;
     text-align: center;
     transition: transform .18s ease, box-shadow .18s ease;
   }
-  .sheet:hover, .sheet.over {
+  .sheet:hover, .sheet.over, .sheet:has(.pick:focus-visible) {
     transform: translateY(-4px);
     box-shadow: 0 2px 3px var(--paper-shadow), 0 24px 40px -14px var(--paper-shadow);
   }
-  .sheet:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
   .sheet.over { outline: 3px solid var(--mark); outline-offset: -3px; }
   .sheet::before { /* folded corner */
     content: "";
@@ -113,6 +127,7 @@
     width: 38px; height: 38px;
     background: linear-gradient(to bottom left, var(--desk) 50%, var(--paper-fold) 50%);
     z-index: 3;
+    pointer-events: none;
   }
   .fill {
     position: absolute; left: 0; right: 0; top: 0;
@@ -121,8 +136,7 @@
     transition: height .4s linear;
   }
   .band {
-    position: absolute; left: 0; right: 0;
-    top: 0;
+    position: absolute; left: 0; right: 0; top: 0;
     height: 6px;
     margin-top: -3px;
     background: var(--mark);
@@ -137,14 +151,20 @@
     50%  { top: 96%; }
     100% { top: 4%; }
   }
-  .sheet-content {
+  .pick {
     position: absolute; inset: 0;
+    width: 100%; height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 6px;
     padding: 24px;
+    background: none; border: 0; margin: 0;
+    color: inherit; font: inherit; text-align: center;
+    cursor: pointer;
     z-index: 2;
   }
-  .sheet-content.hidden { display: none; }
+  .pick:focus-visible { outline: 3px solid var(--focus); outline-offset: -6px; border-radius: 2px; }
+  .pick > span { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; }
+  .pick > span.hidden { display: none; }
   .sheet-idle strong {
     font-family: var(--display);
     font-weight: 600;
@@ -152,6 +172,7 @@
     line-height: 1.15;
   }
   .sheet-idle span { color: var(--ink-soft-on-paper); font-size: 16px; }
+  .sheet-idle .sheet-limit { font-size: 13px; margin-top: 10px; }
   .count {
     font-family: var(--display);
     font-weight: 600;
@@ -164,20 +185,39 @@
   .sheet-eta { font-size: 15px; color: var(--ink-soft-on-paper); min-height: 1.4em; }
   .sheet-file {
     font-size: 14px; color: var(--ink-soft-on-paper);
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
+  .sheet-more { font-size: 13px; color: var(--ink-soft-on-paper); margin-top: 14px; }
+  .sheet.finished .count { color: var(--ok); }
+  .sheet.finished .band { opacity: 0; }
 
-  .notice {
-    margin: -4px auto 0;
-    max-width: 34em;
-    text-align: center;
-    color: var(--alert);
+  /* The tray: messages and the files. */
+  .tray { min-width: 0; }
+  .about { color: var(--ink-soft); max-width: 34em; }
+  .about p { margin: 0 0 12px; }
+  .about.hidden { display: none; }
+
+  .notice, .offline {
+    display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline;
+    margin: 0 0 20px;
+    padding: 0 0 0 14px;
+    border-left: 3px solid var(--alert);
     font-size: 15px;
     overflow-wrap: anywhere;
   }
-  .notice.hidden { display: none; }
+  .notice p { margin: 0; flex: 1 1 16em; }
+  .offline { border-left-color: var(--ink-soft); color: var(--ink-soft); }
+  .notice.hidden, .offline.hidden { display: none; }
 
-  .files { list-style: none; margin: 36px 0 0; padding: 0; }
+  .tray-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+    font-size: 15px; color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  .tray-head.hidden { display: none; }
+
+  .files { list-style: none; margin: 0; padding: 0; }
   .file {
     border-top: 1px solid var(--desk-deep);
     padding: 16px 0 18px;
@@ -185,11 +225,12 @@
   .file:last-child { border-bottom: 1px solid var(--desk-deep); }
   .file-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
   .name {
-    font-family: var(--display); font-weight: 600; font-size: 19px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin: 0;
+    font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.25;
+    min-width: 0; overflow-wrap: anywhere;
   }
   .size { color: var(--ink-soft); font-size: 15px; white-space: nowrap; }
-  .file-status { margin-top: 4px; }
+  .file-status { margin: 4px 0 0; }
   .file.error .file-status { color: var(--alert); }
   .file.done .file-status { color: var(--ok); }
   .bar {
@@ -200,16 +241,18 @@
   .bar > span { display: block; height: 100%; width: 0; background: var(--mark); transition: width .4s linear; }
   .file.done .bar > span { background: var(--ok); }
   .file.error .bar > span, .file.cancelled .bar > span { background: var(--desk-deep); }
-  .file-actions { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 12px; }
+  .file-actions { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; margin-top: 12px; }
   .file-actions:empty { display: none; }
   .btn, .link {
     font: inherit; font-size: 15px;
     cursor: pointer;
+    min-height: 36px;
   }
   .btn {
+    display: inline-flex; align-items: center;
     background: var(--ink); color: var(--desk);
     border: 0; border-radius: 3px;
-    padding: 8px 16px;
+    padding: 6px 16px;
     text-decoration: none;
     font-family: var(--display); font-weight: 600; letter-spacing: .01em;
   }
@@ -219,66 +262,121 @@
     background: none; border: 0; padding: 0;
     color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px;
   }
+  .link:hover { color: var(--ink); }
   .notes { margin: 10px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 14px; line-height: 1.45; }
   .notes.hidden { display: none; }
   .notes li { margin: 2px 0; overflow-wrap: anywhere; }
 
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .hidden { display: none !important; }
 
+  @media (pointer: coarse) {
+    .btn, .link { min-height: 44px; }
+    .btn { padding: 10px 18px; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .sheet, .fill, .band, .bar > span { transition: none; }
     .sheet.busy.indeterminate .band { animation: none; top: 50%; }
-    .sheet:hover, .sheet.over { transform: none; }
+    .sheet:hover, .sheet.over, .sheet:has(.pick:focus-visible) { transform: none; }
+  }
+  @media (prefers-contrast: more) {
+    .file { border-color: var(--ink); }
+    .btn { outline: 2px solid var(--ink); outline-offset: -2px; }
+    .link, .size, .about, .tray-head { color: var(--ink); }
   }
   @media (max-width: 480px) {
-    main { padding-top: 32px; }
+    .page { padding-top: 20px; row-gap: 22px; }
+    .sheet { width: min(300px, 84vw); }
     .count { font-size: 52px; }
+    .file-head { flex-wrap: wrap; gap: 2px 12px; }
   }
 </style>
 </head>
 <body>
-<main>
-  <h1>PDF to Word Converter</h1>
-  <p class="lede">Drop a PDF and get a Word document back. Pages without selectable text are read with OCR, so scans work too.</p>
+<div class="page">
+  <header class="intro">
+    <p class="brand">PDF to Word Converter</p>
+    <h1>Just drop any PDF, and it will convert to editable Word format. It works for scanned images as well.</h1>
+  </header>
 
-  <div class="sheet-wrap">
-    <button class="sheet" id="sheet" type="button" aria-describedby="sheet-hint">
-      <span class="fill" id="fill"></span>
-      <span class="band" id="band"></span>
-      <span class="sheet-content sheet-idle" id="sheet-idle">
-        <strong>Drop PDF files here</strong>
-        <span>or click to choose</span>
-      </span>
-      <span class="sheet-content sheet-busy hidden" id="sheet-busy" aria-live="polite">
-        <span class="count" id="count"></span>
-        <span class="sheet-status" id="sheet-status"></span>
-        <span class="sheet-eta" id="sheet-eta"></span>
-        <span class="sheet-file" id="sheet-file"></span>
-      </span>
-    </button>
-    <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
-    <p id="sheet-hint" class="visually-hidden">Press Enter to choose files, or drag PDF files anywhere onto this page. Only PDF files are accepted.</p>
+  <div class="desk-left">
+    <div class="sheet-wrap">
+      <div class="sheet" id="sheet">
+        <span class="fill" id="fill" aria-hidden="true"></span>
+        <span class="band" id="band" aria-hidden="true"></span>
+        <button class="pick" id="pick" type="button" aria-label="Choose PDF files to convert" aria-describedby="sheet-hint">
+          <span class="sheet-idle" id="sheet-idle" aria-hidden="true">
+            <strong>Drop PDF files here</strong>
+            <span>or click to choose</span>
+            <span class="sheet-limit">.pdf files up to <span id="limit">100 MB</span></span>
+          </span>
+          <span class="sheet-busy hidden" id="sheet-busy" aria-hidden="true">
+            <span class="count" id="count"></span>
+            <span class="sheet-status" id="sheet-status"></span>
+            <span class="sheet-eta" id="sheet-eta"></span>
+            <span class="sheet-file" id="sheet-file"></span>
+            <span class="sheet-more">Click to add more files</span>
+          </span>
+        </button>
+      </div>
+    </div>
+    <p id="sheet-hint" class="visually-hidden">You can also drag PDF files anywhere onto this page. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Each file's progress is listed under Your files.</p>
+    <input type="file" id="file" accept=".pdf" multiple hidden>
   </div>
-  <p class="notice hidden" id="notice" role="status" aria-live="polite"></p>
 
-  <ol class="files" id="files" aria-live="polite"></ol>
-</main>
+  <section class="tray" aria-labelledby="tray-title">
+    <h2 id="tray-title" class="visually-hidden">Your files</h2>
+    <noscript><p>This page needs JavaScript to upload files and show progress.</p></noscript>
+    <div class="notice hidden" id="notice" role="alert">
+      <p id="notice-text"></p>
+      <button class="link" id="notice-close" type="button">Dismiss</button>
+    </div>
+    <div class="offline hidden" id="offline" role="status">Lost contact with the converter. Trying again.</div>
+    <div class="about" id="about">
+      <p>Text PDFs keep their fonts, headings, tables and pictures. Scanned pages are read with text recognition, so the result is editable text rather than a picture of the page.</p>
+      <p>Files stay on the computer running the converter and are deleted an hour after conversion. The Word file downloads by itself when it is ready.</p>
+    </div>
+    <div class="tray-head hidden" id="tray-head">
+      <span id="tray-summary"></span>
+      <button class="link hidden" id="clear-done" type="button">Clear finished</button>
+    </div>
+    <ol class="files" id="files"></ol>
+  </section>
+
+  <div class="visually-hidden" id="announcer" role="status" aria-live="polite"></div>
+</div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const sheet = $('sheet'), fill = $('fill'), sheetIdle = $('sheet-idle'), sheetBusy = $('sheet-busy');
+  const sheet = $('sheet'), fill = $('fill'), band = $('band'), pick = $('pick');
+  const sheetIdle = $('sheet-idle'), sheetBusy = $('sheet-busy');
   const count = $('count'), sheetStatus = $('sheet-status'), sheetEta = $('sheet-eta'), sheetFile = $('sheet-file');
-  const fileInput = $('file'), filesList = $('files');
+  const fileInput = $('file'), filesList = $('files'), about = $('about');
+  const trayHead = $('tray-head'), traySummary = $('tray-summary'), clearDone = $('clear-done');
+  const announcer = $('announcer');
+  const TITLE = 'PDF to Word Converter';
 
-  // Rows for files dropped on this page: server jobs keyed by id, plus
-  // uploads that have no id yet. Jobs from earlier sessions are not shown.
-  const rows = new Map();      // key -> { el, view, downloaded, notesOpen }
-  let uploadSeq = 0;
-  let pollTimer = null;
+  // Rows for files dropped on this page (and conversions of ours that were
+  // still running when the page was reloaded). key -> row.
+  const rows = new Map();
+  let seq = 0;
+  let pollTimer = null, pollFailures = 0;
+  let flash = null; // { view, until }: a just-finished file shown on the sheet for a moment
+
+  // --- limits ------------------------------------------------------------------
+  let maxUploadBytes = 100 * 1024 * 1024;
+  function fmtLimit(n) { return n >= 1024 * 1024 ? Math.round(n / (1024 * 1024)) + ' MB' : Math.round(n / 1024) + ' KB'; }
+  fetch('/api/info').then((r) => r.json()).then((info) => {
+    if (info && info.maxUploadBytes > 0) {
+      maxUploadBytes = info.maxUploadBytes;
+      $('limit').textContent = fmtLimit(maxUploadBytes);
+      $('limit-hint').textContent = fmtLimit(maxUploadBytes);
+    }
+  }).catch(() => {});
 
   // --- picking files -------------------------------------------------------
-  sheet.addEventListener('click', () => fileInput.click());
+  pick.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => { queueFiles(fileInput.files); fileInput.value = ''; });
 
   let dragDepth = 0;
@@ -288,147 +386,205 @@
   document.addEventListener('drop', (e) => { e.preventDefault(); endDrag(); queueFiles(e.dataTransfer.files); });
   function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); sheet.classList.remove('over'); }
 
-  // Only PDFs are accepted. Anything else is skipped with a short notice
-  // (the server checks the file signature again on upload).
-  function isPDF(f) {
-    return /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
-  }
-  // Finished rows from an earlier drop make way for the new batch.
-  function clearFinished() {
-    for (const [key, row] of Array.from(rows.entries())) {
-      if (isTerminal(row.view.state)) {
-        row.el.remove();
-        rows.delete(key);
-      }
-    }
-  }
+  // Only files named *.pdf and no larger than the limit are uploaded. The
+  // rest are listed in a notice that stays until dismissed; the server
+  // checks the name, the size and the file signature again.
+  function isPDF(f) { return /\.pdf$/i.test(f.name); }
   function queueFiles(list) {
-    clearFinished();
-    const skipped = [];
+    const notPDF = [], tooBig = [];
+    let started = 0;
     for (const f of Array.from(list)) {
-      if (isPDF(f)) upload(f); else skipped.push(f.name);
+      if (!isPDF(f)) notPDF.push(f.name);
+      else if (f.size > maxUploadBytes) tooBig.push(f.name + ' (' + fmtSize(f.size) + ')');
+      else { upload(f); started++; }
     }
-    showNotice(skipped.length
-      ? 'Only PDF files are accepted. Skipped: ' + skipped.join(', ')
-      : '');
+    const notes = [];
+    if (notPDF.length) notes.push('Only .pdf files can be converted. Skipped: ' + notPDF.join(', ') + '.');
+    if (tooBig.length) notes.push('Files must be ' + fmtLimit(maxUploadBytes) + ' or smaller. Skipped: ' + tooBig.join(', ') + '.');
+    showNotice(notes.join(' '));
+    if (started && !notes.length) hideNotice();
   }
-  let noticeTimer = null;
   function showNotice(text) {
-    const n = $('notice');
-    n.textContent = text;
-    n.classList.toggle('hidden', !text);
-    clearTimeout(noticeTimer);
-    if (text) noticeTimer = setTimeout(() => n.classList.add('hidden'), 8000);
+    if (!text) return;
+    $('notice-text').textContent = text;
+    $('notice').classList.remove('hidden');
   }
+  function hideNotice() { $('notice').classList.add('hidden'); }
+  $('notice-close').addEventListener('click', () => { hideNotice(); pick.focus(); });
 
   // --- uploading -------------------------------------------------------------
-  async function upload(file) {
-    const key = 'upload-' + (++uploadSeq);
-    const row = addRow(key, { filename: file.name, size: file.size, state: 'uploading', done: 0, total: 0 });
-    // No options are sent: the server applies its defaults (OCR only where
-    // needed, language from the -lang flag).
+  // XMLHttpRequest rather than fetch: it reports upload progress, so the
+  // sheet moves from the first byte instead of after the whole file is up.
+  function upload(file, existing) {
+    const row = existing || addRow('upload-' + (++seq));
+    row.file = file;
+    setView(row, { filename: file.name, size: file.size, state: 'uploading', done: 0, total: file.size });
+
+    const xhr = new XMLHttpRequest();
+    row.xhr = xhr;
+    xhr.open('POST', '/api/convert');
+    xhr.responseType = 'json';
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && row.view.state === 'uploading') setView(row, Object.assign({}, row.view, { done: e.loaded, total: e.total }));
+    });
+    xhr.addEventListener('load', () => {
+      row.xhr = null;
+      const body = xhr.response || {};
+      if (xhr.status === 202 && body.id) {
+        rekey(row, body.id);
+        setView(row, body);
+        schedulePoll(0);
+      } else {
+        fail(row, body.error || ('The converter answered with status ' + xhr.status + '.'));
+      }
+    });
+    xhr.addEventListener('error', () => { row.xhr = null; fail(row, 'The upload did not reach the converter. Check the connection and try again.'); });
+    xhr.addEventListener('abort', () => { row.xhr = null; setView(row, Object.assign({}, row.view, { state: 'cancelled', done: 0, total: 0 })); });
+
     const data = new FormData();
     data.append('file', file, file.name);
-    try {
-      const res = await fetch('/api/convert', { method: 'POST', body: data });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || ('server answered ' + res.status));
-      // Re-key the row under the server job id.
-      rows.delete(key);
-      row.el.dataset.id = body.id;
-      rows.set(body.id, row);
-      applyView(row, body);
-      schedulePoll(0);
-    } catch (err) {
-      applyView(row, { filename: file.name, size: file.size, state: 'error', message: err.message || String(err), done: 0, total: 0 });
-    }
+    xhr.send(data);
+  }
+  function fail(row, message) {
+    setView(row, Object.assign({}, row.view, { state: 'error', message: message, done: 0, total: 0 }));
+  }
+  function rekey(row, id) {
+    rows.delete(row.key);
+    row.key = id;
+    row.el.dataset.id = id;
+    rows.set(id, row);
   }
 
   // --- polling -----------------------------------------------------------------
+  function isTerminal(s) { return s === 'done' || s === 'error' || s === 'cancelled'; }
   function anyActive() {
     for (const r of rows.values()) if (!isTerminal(r.view.state)) return true;
     return false;
   }
-  function isTerminal(s) { return s === 'done' || s === 'error' || s === 'cancelled'; }
-
   function schedulePoll(delay) {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(poll, delay);
   }
+  let firstPoll = true;
   async function poll() {
     try {
       const res = await fetch('/api/jobs');
-      if (res.ok) {
-        const views = await res.json();
-        // Only files dropped on this page are shown; older jobs the server
-        // still remembers stay hidden.
-        for (const v of views) {
-          const row = rows.get(v.id);
-          if (row) applyView(row, v);
-        }
+      if (!res.ok) throw new Error(res.status);
+      const views = await res.json();
+      for (const v of views) {
+        let row = rows.get(v.id);
+        // A conversion of ours that is still going after a reload comes
+        // back; finished ones from earlier stay out of the way.
+        if (!row && firstPoll && !isTerminal(v.state)) row = addRow(v.id);
+        if (row) setView(row, v);
       }
-    } catch (_) { /* server may be shutting down; keep trying */ }
+      pollFailures = 0;
+      $('offline').classList.add('hidden');
+    } catch (_) {
+      if (++pollFailures >= 2 && anyActive()) $('offline').classList.remove('hidden');
+    }
+    firstPoll = false;
     renderSheet();
-    // Fast while something is running; slow otherwise (this also tells the
-    // server the page is still open).
-    schedulePoll(anyActive() ? 500 : 4000);
+    schedulePoll(anyActive() ? 400 : 4000);
   }
 
-  // --- rendering -----------------------------------------------------------------
-  function addRow(key, view) {
+  // --- rows ------------------------------------------------------------------------
+  function addRow(key) {
     const el = document.createElement('li');
     el.className = 'file';
     el.innerHTML =
-      '<div class="file-head"><span class="name"></span><span class="size"></span></div>' +
-      '<div class="file-status"></div>' +
-      '<div class="bar" role="progressbar" aria-valuemin="0"><span></span></div>' +
+      '<div class="file-head"><h3 class="name"></h3><span class="size"></span></div>' +
+      '<p class="file-status"></p>' +
+      '<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>' +
       '<div class="file-actions"></div>' +
       '<ul class="notes hidden"></ul>';
     filesList.prepend(el);
-    const row = { el, view, downloaded: false, notesOpen: false };
+    const row = { key, el, view: { state: 'uploading', done: 0, total: 0 }, file: null, xhr: null, downloaded: false, notesOpen: false, announced: -1 };
     rows.set(key, row);
     return row;
   }
-
-  // Overall completion in [0,1]: reading the PDF is the first third, turning
-  // pages into Word content the remaining two thirds.
-  function overall(v) {
-    if (v.state === 'done') return 1;
-    if (v.state !== 'running' || !v.total) return 0;
-    const frac = Math.min(1, v.done / v.total);
-    return v.phase === 'reading' ? frac * 0.33 : 0.33 + frac * 0.67;
+  function removeRow(row) {
+    rows.delete(row.key);
+    row.el.remove();
+    renderTray();
+    renderSheet();
+    pick.focus();
   }
-  // Time left, estimated from elapsed time and completion; null when unknown.
+  clearDone.addEventListener('click', () => {
+    for (const r of Array.from(rows.values())) if (isTerminal(r.view.state)) { rows.delete(r.key); r.el.remove(); }
+    renderTray();
+    pick.focus();
+  });
+
+  function setView(row, v) {
+    const prev = row.view;
+    row.view = v;
+    applyView(row);
+    announceChange(row, prev);
+    if (v.state === 'done' && prev.state !== 'done') {
+      flash = { view: v, until: Date.now() + 4000 };
+      setTimeout(renderSheet, 4100);
+    }
+    renderTray();
+    renderSheet();
+  }
+
+  // Overall completion in [0,1]: the upload is the first tenth, reading
+  // the PDF the next quarter, turning pages into Word content the rest.
+  function overall(v) {
+    switch (v.state) {
+      case 'done': return 1;
+      case 'uploading': return v.total ? 0.10 * Math.min(1, v.done / v.total) : 0;
+      case 'queued': return 0.10;
+      case 'running': {
+        if (!v.total) return 0.10;
+        const f = Math.min(1, v.done / v.total);
+        return v.phase === 'reading' ? 0.10 + 0.27 * f : 0.37 + 0.63 * f;
+      }
+    }
+    return 0;
+  }
+  // Time left for the conversion itself, from elapsed time and completion.
   function remaining(v) {
-    const f = overall(v);
-    if (v.state !== 'running' || f < 0.05 || !v.elapsedMs) return null;
+    if (v.state !== 'running' || !v.elapsedMs) return null;
+    const f = (overall(v) - 0.10) / 0.90;
+    if (f < 0.05) return null;
     return v.elapsedMs * (1 - f) / f;
   }
   function phaseText(v) {
+    if (v.state === 'uploading') return 'Uploading';
+    if (v.state === 'queued') return 'Waiting for the file ahead of it';
     if (!v.total) return 'Opening the PDF';
     if (v.phase === 'reading') return 'Reading pages';
     return v.stage === 'ocr' ? 'Recognising text' : 'Converting pages';
   }
+  function detailText(v) {
+    if (v.state === 'uploading') return v.total ? fmtSize(v.done) + ' of ' + fmtSize(v.total) : '';
+    if (v.state === 'running' && v.total) return v.done + ' of ' + v.total + ' pages';
+    return '';
+  }
 
-  function applyView(row, v) {
-    row.view = v;
-    const el = row.el;
+  function applyView(row) {
+    const v = row.view, el = row.el;
     el.className = 'file ' + v.state;
-    el.querySelector('.name').textContent = v.filename;
+    el.querySelector('.name').textContent = v.filename || '';
     el.querySelector('.size').textContent = fmtSize(v.size);
     el.querySelector('.file-status').textContent = statusText(v);
 
     const bar = el.querySelector('.bar');
     const pct = Math.round(100 * overall(v));
-    bar.setAttribute('aria-valuemax', 100);
     bar.setAttribute('aria-valuenow', pct);
+    bar.setAttribute('aria-valuetext', pct + '%, ' + phaseText(v).toLowerCase());
+    bar.setAttribute('aria-label', 'Progress for ' + (v.filename || 'file'));
     bar.firstElementChild.style.width = pct + '%';
 
     const actions = el.querySelector('.file-actions');
     actions.textContent = '';
+    if (v.state === 'uploading' && row.xhr) {
+      actions.appendChild(button('Stop', 'link', () => row.xhr && row.xhr.abort()));
+    }
     if (v.state === 'queued' || v.state === 'running') {
-      const stop = button('Stop', 'link', () => fetch('/api/jobs/' + v.id + '/cancel', { method: 'POST' }));
-      actions.appendChild(stop);
+      actions.appendChild(button('Stop', 'link', () => fetch('/api/jobs/' + v.id + '/cancel', { method: 'POST' }).then(() => schedulePoll(0))));
     }
     if (v.state === 'done' && v.download) {
       const a = document.createElement('a');
@@ -439,18 +595,27 @@
       actions.appendChild(a);
       if (!row.downloaded) { row.downloaded = true; a.click(); }
     }
+    if ((v.state === 'error' || v.state === 'cancelled') && row.file) {
+      actions.appendChild(button('Try again', 'btn', () => { row.downloaded = false; upload(row.file, row); }));
+    }
     const notes = (v.report && v.report.warnings) || [];
     const notesEl = el.querySelector('.notes');
     if (notes.length) {
-      const toggle = button((row.notesOpen ? 'Hide ' : 'Show ') + notes.length + (notes.length === 1 ? ' note' : ' notes'), 'link', () => {
-        row.notesOpen = !row.notesOpen; applyView(row, row.view);
+      const toggle = button((row.notesOpen ? 'Hide ' : 'Show ') + plural(notes.length, 'note'), 'link', () => {
+        row.notesOpen = !row.notesOpen; applyView(row);
       });
+      toggle.setAttribute('aria-expanded', String(row.notesOpen));
       actions.appendChild(toggle);
       notesEl.textContent = '';
       for (const n of notes) { const li = document.createElement('li'); li.textContent = n; notesEl.appendChild(li); }
       notesEl.classList.toggle('hidden', !row.notesOpen);
     } else {
       notesEl.classList.add('hidden');
+    }
+    if (isTerminal(v.state)) {
+      const rm = button('Remove', 'link', () => removeRow(row));
+      rm.setAttribute('aria-label', 'Remove ' + (v.filename || 'file') + ' from the list');
+      actions.appendChild(rm);
     }
   }
 
@@ -463,11 +628,11 @@
 
   function statusText(v) {
     switch (v.state) {
-      case 'uploading': return 'Uploading';
-      case 'queued': return 'Waiting for its turn';
+      case 'uploading': return 'Uploading, ' + (detailText(v) || 'starting');
+      case 'queued': return 'Waiting for the file ahead of it';
       case 'running': {
         if (!v.total) return 'Opening the PDF';
-        let s = phaseText(v) + ': page ' + v.done + ' of ' + v.total + ' (' + Math.round(100 * overall(v)) + '%)';
+        let s = phaseText(v) + ', ' + detailText(v) + ' (' + Math.round(100 * overall(v)) + '%)';
         const left = remaining(v);
         if (left !== null) s += ', about ' + fmtDuration(left) + ' left';
         return s;
@@ -476,11 +641,11 @@
         const r = v.report || {};
         let s = 'Done: ' + plural(r.pages, 'page');
         const parts = [];
-        if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with OCR');
+        if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with text recognition');
         if (r.emptyPages) parts.push(plural(r.emptyPages, 'page') + ' came out empty');
         if (parts.length) s += ' (' + parts.join(', ') + ')';
         if (v.elapsedMs > 1500) s += ' in ' + fmtDuration(v.elapsedMs);
-        return s;
+        return s + '. The Word file has been downloaded.';
       }
       case 'cancelled': return 'Stopped';
       case 'error': return "Couldn't convert: " + (v.message || 'unknown error');
@@ -488,46 +653,115 @@
     return '';
   }
 
+  // --- the sheet -------------------------------------------------------------------
+  function activeView() {
+    for (const r of rows.values()) if (r.view.state === 'running') return r.view;
+    for (const r of rows.values()) if (r.view.state === 'uploading') return r.view;
+    for (const r of rows.values()) if (r.view.state === 'queued') return r.view;
+    return null;
+  }
   function renderSheet() {
-    let active = null;
-    for (const r of rows.values()) if (r.view.state === 'running') { active = r.view; break; }
-    if (!active) for (const r of rows.values()) if (r.view.state === 'uploading' || r.view.state === 'queued') { active = r.view; break; }
+    const active = activeView();
+    const now = Date.now();
+    if (!active && flash && flash.until > now) {
+      showBusy();
+      sheet.classList.add('finished');
+      sheet.classList.remove('indeterminate');
+      fill.style.height = '100%';
+      band.style.top = '100%';
+      count.textContent = 'Done';
+      sheetStatus.textContent = 'The Word file is downloading';
+      sheetEta.textContent = '';
+      sheetFile.textContent = flash.view.filename;
+      document.title = TITLE;
+      return;
+    }
+    sheet.classList.remove('finished');
     if (!active) {
       sheet.classList.remove('busy', 'indeterminate');
       sheetBusy.classList.add('hidden');
       sheetIdle.classList.remove('hidden');
       fill.style.height = '0';
-      $('band').style.top = '0';
-      document.title = 'PDF to Word Converter';
+      band.style.top = '0';
+      document.title = TITLE;
       return;
     }
+    showBusy();
+    sheetFile.textContent = active.filename || '';
+    const pct = 100 * overall(active);
+    const determinate = active.state === 'uploading' ? active.total > 0 : (active.state === 'running' && active.total > 0);
+    if (determinate) {
+      sheet.classList.remove('indeterminate');
+      fill.style.height = pct + '%';
+      band.style.top = pct + '%';
+      count.textContent = '';
+      count.append(String(Math.round(pct)));
+      const small = document.createElement('small'); small.textContent = '%'; count.appendChild(small);
+      sheetStatus.textContent = phaseText(active) + (detailText(active) ? ', ' + detailText(active) : '');
+      const left = remaining(active);
+      sheetEta.textContent = left === null ? '' : 'about ' + fmtDuration(left) + ' left';
+      document.title = Math.round(pct) + '% ' + TITLE;
+    } else {
+      sheet.classList.add('indeterminate');
+      fill.style.height = (pct > 0 ? pct : 0) + '%';
+      count.textContent = '';
+      sheetStatus.textContent = phaseText(active);
+      sheetEta.textContent = '';
+      document.title = TITLE;
+    }
+  }
+  function showBusy() {
     sheet.classList.add('busy');
     sheetIdle.classList.add('hidden');
     sheetBusy.classList.remove('hidden');
-    sheetFile.textContent = active.filename;
-    if (active.state === 'running' && active.total > 0) {
-      sheet.classList.remove('indeterminate');
-      const pct = 100 * overall(active);
-      fill.style.height = pct + '%';
-      $('band').style.top = pct + '%';
-      count.innerHTML = '';
-      count.append(String(Math.round(pct)));
-      const small = document.createElement('small'); small.textContent = '%'; count.appendChild(small);
-      sheetStatus.textContent = phaseText(active) + ' · page ' + active.done + ' of ' + active.total;
-      const left = remaining(active);
-      sheetEta.textContent = left === null ? '' : 'about ' + fmtDuration(left) + ' left';
-      document.title = Math.round(pct) + '% – PDF to Word Converter';
-    } else {
-      sheet.classList.add('indeterminate');
-      fill.style.height = '0';
-      count.textContent = '';
-      sheetStatus.textContent = active.state === 'uploading' ? 'Uploading' : (active.state === 'queued' ? 'Waiting' : 'Opening the PDF');
-      sheetEta.textContent = '';
-      document.title = 'PDF to Word Converter';
+  }
+
+  // --- the tray ------------------------------------------------------------------------
+  function renderTray() {
+    const all = Array.from(rows.values());
+    about.classList.toggle('hidden', all.length > 0);
+    trayHead.classList.toggle('hidden', all.length === 0);
+    if (!all.length) return;
+    const done = all.filter((r) => r.view.state === 'done').length;
+    const failed = all.filter((r) => r.view.state === 'error').length;
+    const finished = all.filter((r) => isTerminal(r.view.state)).length;
+    let s = plural(all.length, 'file');
+    if (done) s += ', ' + done + ' converted';
+    if (failed) s += ', ' + failed + ' failed';
+    traySummary.textContent = s;
+    clearDone.classList.toggle('hidden', finished === 0);
+  }
+
+  // --- screen reader announcements ------------------------------------------------
+  // State changes and every quarter of progress; not every poll.
+  function announce(text) {
+    announcer.textContent = '';
+    setTimeout(() => { announcer.textContent = text; }, 50);
+  }
+  function announceChange(row, prev) {
+    const v = row.view, name = v.filename || 'file';
+    if (v.state !== prev.state) {
+      row.announced = -1;
+      switch (v.state) {
+        case 'uploading': if (prev.state !== 'uploading') announce('Uploading ' + name); break;
+        case 'running': announce('Converting ' + name); break;
+        case 'done': announce(name + ' is ready. The Word file is downloading.'); break;
+        case 'error': announce(name + " couldn't be converted. " + (v.message || '')); break;
+        case 'cancelled': announce(name + ' stopped.'); break;
+      }
+      return;
+    }
+    if (v.state === 'running') {
+      const quarter = Math.floor(overall(v) * 4);
+      if (quarter > 0 && quarter > row.announced) {
+        row.announced = quarter;
+        announce(name + ': ' + Math.round(100 * overall(v)) + ' percent, ' + phaseText(v).toLowerCase());
+      }
     }
   }
 
-  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+  // --- formatting ---------------------------------------------------------------------
+  function plural(n, word) { n = n || 0; return n + ' ' + word + (n === 1 ? '' : 's'); }
   function fmtSize(b) {
     if (!b && b !== 0) return '';
     if (b < 1024) return b + ' B';
@@ -540,6 +774,7 @@
     return Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
   }
 
+  renderTray();
   poll();
 })();
 </script>

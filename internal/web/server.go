@@ -35,7 +35,7 @@ type Config struct {
 	Base convert.Options
 	// WorkDir holds uploads and results. Empty means a fresh temp dir.
 	WorkDir string
-	// MaxUploadBytes caps a single upload (default 2 GiB).
+	// MaxUploadBytes caps a single upload (default DefaultMaxUploadBytes).
 	MaxUploadBytes int64
 	// AllowRemote accepts requests addressed to any host, not just
 	// localhost. Set it when the listener is bound to a network interface.
@@ -61,10 +61,14 @@ type Server struct {
 	pageOpened bool
 }
 
+// DefaultMaxUploadBytes is the largest PDF the page accepts unless
+// Config.MaxUploadBytes says otherwise: 100 MB.
+const DefaultMaxUploadBytes = 100 << 20
+
 // New prepares a Server. Call Close to remove its working directory.
 func New(cfg Config) (*Server, error) {
 	if cfg.MaxUploadBytes <= 0 {
-		cfg.MaxUploadBytes = 2 << 30
+		cfg.MaxUploadBytes = DefaultMaxUploadBytes
 	}
 	if cfg.Logf == nil {
 		cfg.Logf = func(string, ...any) {}
@@ -213,6 +217,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 type InfoView struct {
 	Version string   `json:"version"`
 	OCR     OCRState `json:"ocr"`
+	// MaxUploadBytes lets the page refuse oversized files before uploading.
+	MaxUploadBytes int64 `json:"maxUploadBytes"`
 }
 
 // OCRState describes whether Tesseract is usable.
@@ -224,7 +230,7 @@ type OCRState struct {
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
-	info := InfoView{Version: s.cfg.Version}
+	info := InfoView{Version: s.cfg.Version, MaxUploadBytes: s.cfg.MaxUploadBytes}
 	if s.cfg.Base.Engine != nil {
 		info.OCR = OCRState{Available: true, Version: s.cfg.Base.Engine.Name()}
 	} else if p, err := ocr.Find(s.cfg.Base.TesseractPath); err != nil {
@@ -297,7 +303,14 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 // handleConvert accepts a multipart upload (fields: ocr, lang, file) and
 // queues a conversion. Fields must precede the file part.
 func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxUploadBytes)
+	// The multipart framing adds a few hundred bytes to the file itself;
+	// allow 64 KB for it so a file of exactly the limit still gets through.
+	limit := s.cfg.MaxUploadBytes + 64<<10
+	if r.ContentLength > limit {
+		writeError(w, http.StatusRequestEntityTooLarge, s.tooLargeMessage())
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	mr, err := r.MultipartReader()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "expected a multipart upload")
@@ -345,19 +358,23 @@ func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode co
 	if filename == "" || filename == "." || filename == "/" {
 		filename = "document.pdf"
 	}
+	if !strings.EqualFold(path.Ext(filename), ".pdf") {
+		writeError(w, http.StatusUnsupportedMediaType, fmt.Sprintf("%s was not accepted: only .pdf files can be converted", filename))
+		return
+	}
 
 	j, err := s.jobs.create(filename, mode, lang, client)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "cannot create job: "+err.Error())
 		return
 	}
-	size, err := saveUpload(j.input, part)
+	size, err := saveUpload(j.input, part, s.cfg.MaxUploadBytes)
 	if err != nil {
 		s.jobs.remove(j.id)
 		var mbe *http.MaxBytesError
 		switch {
-		case errors.As(err, &mbe):
-			writeError(w, http.StatusRequestEntityTooLarge, "file is too large")
+		case errors.As(err, &mbe), errors.Is(err, errTooLarge):
+			writeError(w, http.StatusRequestEntityTooLarge, s.tooLargeMessage())
 		case errors.Is(err, errNotPDF):
 			writeError(w, http.StatusUnsupportedMediaType, fmt.Sprintf("%s is not a PDF file", filename))
 		default:
@@ -371,10 +388,30 @@ func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode co
 	writeJSON(w, http.StatusAccepted, j.view(time.Now()))
 }
 
-var errNotPDF = errors.New("not a PDF")
+var (
+	errNotPDF   = errors.New("not a PDF")
+	errTooLarge = errors.New("file exceeds the upload limit")
+)
 
-// saveUpload streams the part to disk after checking the PDF signature.
-func saveUpload(dst string, part io.Reader) (int64, error) {
+func (s *Server) tooLargeMessage() string {
+	return fmt.Sprintf("file is larger than the %s limit", FormatSize(s.cfg.MaxUploadBytes))
+}
+
+// FormatSize renders a byte count the way the page does: whole MB or KB.
+func FormatSize(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%d MB", (n+1<<19)>>20)
+	case n >= 1<<10:
+		return fmt.Sprintf("%d KB", (n+1<<9)>>10)
+	default:
+		return fmt.Sprintf("%d bytes", n)
+	}
+}
+
+// saveUpload streams the part to disk after checking the PDF signature. A
+// file longer than max bytes is discarded with errTooLarge.
+func saveUpload(dst string, part io.Reader, max int64) (int64, error) {
 	head := make([]byte, 5)
 	n, err := io.ReadFull(part, head)
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
@@ -387,9 +424,12 @@ func saveUpload(dst string, part io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	written, err := io.Copy(f, io.MultiReader(strings.NewReader(string(head[:n])), part))
+	written, err := io.Copy(f, io.LimitReader(io.MultiReader(strings.NewReader(string(head[:n])), part), max+1))
 	if cerr := f.Close(); err == nil {
 		err = cerr
+	}
+	if err == nil && written > max {
+		err = errTooLarge
 	}
 	if err != nil {
 		os.Remove(dst)

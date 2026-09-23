@@ -203,14 +203,14 @@ func TestConvertScannedUsesOCRAndReportsStage(t *testing.T) {
 
 func TestRejectsNonPDF(t *testing.T) {
 	_, ts := newTestServer(t)
-	resp := upload(t, ts, "notes.txt", []byte("hello there"), nil)
+	resp := upload(t, ts, "notes.pdf", []byte("hello there"), nil)
 	if resp.StatusCode != http.StatusUnsupportedMediaType {
 		t.Fatalf("status %d, want 415", resp.StatusCode)
 	}
 	var e map[string]string
 	decode(t, resp, &e)
 	if !strings.Contains(e["error"], "not a PDF") {
-		t.Errorf("error = %q", e["error"])
+		t.Errorf("error = %q, want the signature check to name the file as not a PDF", e["error"])
 	}
 	// A rejected upload must not linger as a job on the page.
 	list, err := ts.Client().Get(ts.URL + "/api/jobs")
@@ -262,9 +262,57 @@ func TestUploadLimit(t *testing.T) {
 	defer s.Close()
 	data, _ := os.ReadFile(fixture("scanned.pdf")) // ~54 KB
 	resp := upload(t, ts, "big.pdf", data, nil)
-	resp.Body.Close()
+	var body map[string]string
+	decode(t, resp, &body)
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status %d, want 413", resp.StatusCode)
+	}
+	if !strings.Contains(body["error"], "1 KB") {
+		t.Errorf("error %q should name the limit", body["error"])
+	}
+	if n := len(s.jobs.list()); n != 0 {
+		t.Errorf("%d job(s) left behind by the rejected upload", n)
+	}
+}
+
+// The default limit is 100 MB and the page learns it from /api/info so it
+// can refuse bigger files before uploading them.
+func TestUploadLimitDefaultAndInfo(t *testing.T) {
+	s, ts := newTestServer(t)
+	if s.cfg.MaxUploadBytes != 100<<20 {
+		t.Fatalf("default MaxUploadBytes = %d, want 100 MiB", s.cfg.MaxUploadBytes)
+	}
+	resp, err := ts.Client().Get(ts.URL + "/api/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var info InfoView
+	decode(t, resp, &info)
+	if info.MaxUploadBytes != 100<<20 {
+		t.Fatalf("info.maxUploadBytes = %d", info.MaxUploadBytes)
+	}
+}
+
+// Only files named *.pdf are accepted, whatever their content; the case of
+// the extension does not matter.
+func TestUploadRequiresPDFExtension(t *testing.T) {
+	_, ts := newTestServer(t)
+	data, _ := os.ReadFile(fixture("text.pdf"))
+	for _, name := range []string{"report.txt", "report.docx", "report.pdf.exe", "report"} {
+		resp := upload(t, ts, name, data, nil)
+		var body map[string]string
+		decode(t, resp, &body)
+		if resp.StatusCode != http.StatusUnsupportedMediaType {
+			t.Errorf("%s: status %d, want 415", name, resp.StatusCode)
+		}
+		if !strings.Contains(body["error"], ".pdf") {
+			t.Errorf("%s: error %q should mention .pdf", name, body["error"])
+		}
+	}
+	resp := upload(t, ts, "REPORT.PDF", data, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("REPORT.PDF: status %d, want 202", resp.StatusCode)
 	}
 }
 

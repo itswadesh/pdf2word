@@ -33,6 +33,8 @@ PDFs on the page that opens, and save the Word files it gives back.
    network can open the address printed in the console, e.g.
    `http://192.168.1.23:9090/` (see "Sharing it on your network").
 2. Drop one or more PDFs onto the page (or click the sheet to choose files).
+   Only files named `.pdf` and no larger than 100 MB are accepted; others
+   are skipped with a notice. The limit can be changed with `-max-upload`.
 3. Watch the counter. When a file is done its Word document downloads by
    itself; the "Save Word file" button downloads it again.
 4. Close the console window (or press Ctrl+C in it) to stop the program.
@@ -144,6 +146,7 @@ pdf2word [flags] input.pdf [output.docx]
   -v                 verbose: one progress line per page plus diagnostics
   -no-progress       disable the progress indicator
   -addr string       address for the browser page (default "0.0.0.0:9090", env PORT sets the port; 127.0.0.1:PORT = this computer only)
+  -max-upload int    app mode: largest PDF the page accepts, in MB (default 100)
   -no-browser        app mode: do not open the browser automatically
   -no-auto-exit      app mode: keep running after the page is closed (only relevant with a 127.0.0.1 address)
   -version           print version and exit
@@ -215,7 +218,9 @@ go run ./tools/genfixtures   # regenerate testdata/*.pdf
 
 Diagnostics for layout work: `go run ./tools/rulesprobe file.pdf 1 2`
 (rulings, tables and images per page), `go run ./tools/ocrprobe file.pdf 1`
-(each stage of the OCR layout for one page), `go run ./tools/renderpages
+(each stage of the OCR layout for one page), `go run ./tools/pdftrim big.pdf
+excerpt.pdf 1-25` (copy a page range with PDFium, also from files stricter
+parsers reject), `go run ./tools/renderpages
 file.pdf outdir 80 1 2` (pages to PNG). To see a result the way Word will
 show it, convert the .docx with LibreOffice headless
 (`soffice --headless --convert-to pdf`) and render that PDF the same way.
