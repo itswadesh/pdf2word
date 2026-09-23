@@ -41,6 +41,7 @@ func Write(w io.Writer, doc *model.Document) error {
 	if doc.Setup != nil && doc.Setup.Width > 0 && doc.Setup.Height > 0 {
 		dw.setup = *doc.Setup
 	}
+	dw.docSetup = dw.setup
 	body := dw.documentXML(doc)
 
 	exts := map[string]bool{}
@@ -62,6 +63,8 @@ func Write(w io.Writer, doc *model.Document) error {
 		{"_rels/.rels", rootRelsXML},
 		{"word/document.xml", body},
 		{"word/styles.xml", fmt.Sprintf(stylesXMLTemplate, escapeAttr(csFont))},
+		{"word/settings.xml", settingsXML},
+		{"word/fontTable.xml", fontTableXML(dw.fonts)},
 		{"word/_rels/document.xml.rels", documentRelsXML(dw.images)},
 		{"docProps/core.xml", fmt.Sprintf(coreXMLTemplate, stamp, stamp)},
 		{"docProps/app.xml", appXML},
@@ -97,10 +100,12 @@ func addPart(zw *zip.Writer, name string, data []byte, ts time.Time) error {
 
 // docWriter accumulates document.xml and the images it references.
 type docWriter struct {
-	sb     strings.Builder
-	setup  model.PageSetup
-	images []imagePart
-	nextID int // drawing ids
+	docSetup model.PageSetup // the document section (pages without their own setup)
+	sb       strings.Builder
+	setup    model.PageSetup
+	images   []imagePart
+	nextID   int               // drawing ids
+	fonts    map[string]string // font family -> fallback, for the font table
 }
 
 const (
@@ -110,8 +115,6 @@ const (
 	nsA   = "http://schemas.openxmlformats.org/drawingml/2006/main"
 	nsPic = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 )
-
-const pageBreakXML = `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
 
 func twips(pt float64) int { return int(math.Round(pt * 20)) }
 func emu(pt float64) int64 { return int64(math.Round(pt * 12700)) }
@@ -124,48 +127,108 @@ func (dw *docWriter) documentXML(doc *model.Document) string {
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n")
 	fmt.Fprintf(sb, `<w:document xmlns:w=%q xmlns:r=%q xmlns:wp=%q xmlns:a=%q xmlns:pic=%q><w:body>`, nsW, nsR, nsWP, nsA, nsPic)
 
+	// A page with its own setup (a cover, a landscape page) becomes its own
+	// section; consecutive pages with the same setup share one and are
+	// separated by page breaks.
+	effective := func(p model.Page) model.PageSetup {
+		if p.Setup != nil {
+			return *p.Setup
+		}
+		return dw.docSetup
+	}
+	// Page boundaries never add paragraphs of their own: a stray empty
+	// paragraph at the top of a page costs a line and, on pages filled to
+	// the margin, pushes the last line over and so on down the document.
+	// A new page starts with pageBreakBefore on its first paragraph, and a
+	// page that ends a section carries the section properties in its last
+	// paragraph.
 	lastWasTable := false
 	for i, page := range doc.Pages {
+		dw.setup = effective(page)
+		var ctx pageCtx
 		if i > 0 {
-			sb.WriteString(pageBreakXML)
-			lastWasTable = false
+			prev := effective(doc.Pages[i-1])
+			ctx.breakBefore = model.SetupEqual(&prev, &dw.setup) // else the previous page ended its section
+		}
+		endSect := ""
+		if i < len(doc.Pages)-1 {
+			if next := effective(doc.Pages[i+1]); !model.SetupEqual(&dw.setup, &next) {
+				endSect = sectPrXML(dw.setup)
+			}
 		}
 		layout := page.Width > 0
-		for _, b := range page.Blocks {
-			if b.Kind == model.Table && lastWasTable {
-				sb.WriteString("<w:p/>") // two tables in a row would merge
+		if len(page.Blocks) == 0 {
+			dw.tinyParagraph(ctx.breakBefore, endSect)
+			lastWasTable = false
+			continue
+		}
+		for j, b := range page.Blocks {
+			c := pageCtx{breakBefore: ctx.breakBefore && j == 0}
+			if j == len(page.Blocks)-1 {
+				c.sectPr = endSect
 			}
-			dw.writeBlock(b, layout)
+			if b.Kind == model.Table && lastWasTable {
+				dw.tinyParagraph(false, "") // two tables in a row would merge
+			}
+			dw.writeBlock(b, layout, c)
 			lastWasTable = b.Kind == model.Table
 		}
 	}
 	if lastWasTable {
-		sb.WriteString("<w:p/>") // the body must not end with a table
+		dw.tinyParagraph(false, "") // the body must not end with a table
+	}
+	if len(doc.Pages) > 0 {
+		dw.setup = effective(doc.Pages[len(doc.Pages)-1])
 	}
 	dw.writeSectPr()
 	sb.WriteString(`</w:body></w:document>`)
 	return sb.String()
 }
 
-func (dw *docWriter) writeBlock(b model.Block, layout bool) {
+// pageCtx says how a block sits at page boundaries.
+type pageCtx struct {
+	breakBefore bool   // the block opens a new page of the same section
+	sectPr      string // section properties the block's page ends with, if any
+}
+
+// tinyParagraph writes an empty paragraph one point tall, used where the
+// markup needs a paragraph but the page must not lose a line: empty pages,
+// between adjacent tables, and section ends after a table.
+func (dw *docWriter) tinyParagraph(breakBefore bool, sectPr string) {
+	dw.sb.WriteString(`<w:p><w:pPr>`)
+	if breakBefore {
+		dw.sb.WriteString(`<w:pageBreakBefore/>`)
+	}
+	dw.sb.WriteString(`<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr>`)
+	dw.sb.WriteString(sectPr)
+	dw.sb.WriteString(`</w:pPr></w:p>`)
+}
+
+func (dw *docWriter) writeBlock(b model.Block, layout bool, c pageCtx) {
 	switch b.Kind {
 	case model.Table:
 		if b.Table != nil {
+			if c.breakBefore {
+				dw.tinyParagraph(true, "")
+			}
 			dw.writeTable(b)
+			if c.sectPr != "" {
+				dw.tinyParagraph(false, c.sectPr)
+			}
 		}
 	case model.Image:
 		if b.Image != nil {
-			dw.writeImage(b, layout)
+			dw.writeImage(b, layout, c)
 		}
 	default:
-		dw.writeParagraph(b, layout)
+		dw.writeParagraph(b, layout, c)
 	}
 }
 
 // paragraphProps writes <w:pPr> for a paragraph or heading. When layout is
 // true the block came from a layout-aware extractor, so spacing is explicit
 // (no style defaults) and positions are honoured.
-func (dw *docWriter) paragraphProps(b model.Block, layout bool) {
+func (dw *docWriter) paragraphProps(b model.Block, layout bool, c pageCtx) {
 	sb := &dw.sb
 	var props strings.Builder
 	if b.Kind == model.Heading {
@@ -177,6 +240,9 @@ func (dw *docWriter) paragraphProps(b model.Block, layout bool) {
 			lvl = 2
 		}
 		fmt.Fprintf(&props, `<w:pStyle w:val="Heading%d"/>`, lvl)
+	}
+	if c.breakBefore {
+		props.WriteString(`<w:pageBreakBefore/>`)
 	}
 	// Tab stops for multi-segment lines.
 	if tabs := dw.tabStops(b); tabs != "" {
@@ -190,10 +256,13 @@ func (dw *docWriter) paragraphProps(b model.Block, layout bool) {
 			fmt.Fprintf(&props, `<w:spacing w:before="%d" w:after="0"/>`, before)
 		}
 	}
-	if b.IndentLeft > 0.5 || math.Abs(b.FirstIndent) > 0.5 {
+	if b.IndentLeft > 0.5 || b.IndentRight > 0.5 || math.Abs(b.FirstIndent) > 0.5 {
 		props.WriteString(`<w:ind`)
 		if b.IndentLeft > 0.5 {
 			fmt.Fprintf(&props, ` w:left="%d"`, twips(b.IndentLeft))
+		}
+		if b.IndentRight > 0.5 {
+			fmt.Fprintf(&props, ` w:right="%d"`, twips(b.IndentRight))
 		}
 		if b.FirstIndent > 0.5 {
 			fmt.Fprintf(&props, ` w:firstLine="%d"`, twips(b.FirstIndent))
@@ -205,6 +274,7 @@ func (dw *docWriter) paragraphProps(b model.Block, layout bool) {
 	if jc := jcValue(b.Align); jc != "" {
 		fmt.Fprintf(&props, `<w:jc w:val="%s"/>`, jc)
 	}
+	props.WriteString(c.sectPr) // last: a section ends with this paragraph
 	if props.Len() > 0 {
 		sb.WriteString("<w:pPr>")
 		sb.WriteString(props.String())
@@ -270,10 +340,10 @@ func (dw *docWriter) tabStops(b model.Block) string {
 	return sb.String()
 }
 
-func (dw *docWriter) writeParagraph(b model.Block, layout bool) {
+func (dw *docWriter) writeParagraph(b model.Block, layout bool, c pageCtx) {
 	sb := &dw.sb
 	sb.WriteString("<w:p>")
-	dw.paragraphProps(b, layout)
+	dw.paragraphProps(b, layout, c)
 	for i, ln := range b.Lines {
 		if i > 0 {
 			sb.WriteString("<w:r><w:br/></w:r>")
@@ -305,6 +375,12 @@ func (dw *docWriter) writeRun(r model.Run) {
 	sb.WriteString("<w:r>")
 	var props strings.Builder
 	if r.Font != "" {
+		if dw.fonts == nil {
+			dw.fonts = map[string]string{}
+		}
+		if _, seen := dw.fonts[r.Font]; !seen || r.Fallback != "" {
+			dw.fonts[r.Font] = r.Fallback
+		}
 		// The Latin font from the PDF; complex scripts keep the document's
 		// complex-script font, which is the one with the right glyphs.
 		f := escapeAttr(r.Font)
@@ -315,6 +391,14 @@ func (dw *docWriter) writeRun(r model.Run) {
 	}
 	if r.Italic {
 		props.WriteString("<w:i/><w:iCs/>")
+	}
+	if tw := twips(r.Spacing); tw != 0 {
+		// Even a twentieth of a point per glyph decides whether a line kept
+		// from the PDF still fits its measure.
+		fmt.Fprintf(&props, `<w:spacing w:val="%d"/>`, tw)
+	}
+	if r.Scale > 0 && math.Abs(r.Scale-1) > 0.005 {
+		fmt.Fprintf(&props, `<w:w w:val="%d"/>`, int(math.Round(r.Scale*100)))
 	}
 	if r.Size > 0 {
 		hp := int(math.Round(r.Size * 2))
@@ -437,14 +521,17 @@ func (dw *docWriter) writeCellContent(cell model.Cell) {
 }
 
 // writeImage emits an inline picture in its own paragraph.
-func (dw *docWriter) writeImage(b model.Block, layout bool) {
+func (dw *docWriter) writeImage(b model.Block, layout bool, c pageCtx) {
 	xml := dw.drawingXML(b.Image)
 	if xml == "" {
+		if c.breakBefore || c.sectPr != "" {
+			dw.tinyParagraph(c.breakBefore, c.sectPr)
+		}
 		return
 	}
 	sb := &dw.sb
 	sb.WriteString("<w:p>")
-	dw.paragraphProps(model.Block{Align: b.Image.Align, SpaceBefore: b.SpaceBefore, IndentLeft: b.IndentLeft}, layout)
+	dw.paragraphProps(model.Block{Align: b.Image.Align, SpaceBefore: b.SpaceBefore, IndentLeft: b.IndentLeft}, layout, c)
 	sb.WriteString("<w:r>" + xml + "</w:r>")
 	sb.WriteString("</w:p>")
 }
@@ -464,11 +551,15 @@ func (dw *docWriter) drawingXML(im *model.ImageData) string {
 	part := imagePart{name: fmt.Sprintf("image%d.%s", id, ext), rid: fmt.Sprintf("rId%d", 100+id), data: im.Data}
 	dw.images = append(dw.images, part)
 
-	// Keep the picture inside the text area.
+	// Keep the picture inside the text area, both ways.
 	w, h := im.Width, im.Height
 	if cw := dw.setup.ContentWidth(); cw > 0 && w > cw {
 		h = h * cw / w
 		w = cw
+	}
+	if ch := dw.setup.ContentHeight(); ch > 0 && h > ch {
+		w = w * ch / h
+		h = ch
 	}
 
 	var sb strings.Builder
@@ -484,17 +575,21 @@ func (dw *docWriter) drawingXML(im *model.ImageData) string {
 }
 
 func (dw *docWriter) writeSectPr() {
-	s := dw.setup
-	sb := &dw.sb
+	dw.sb.WriteString(sectPrXML(dw.setup))
+}
+
+func sectPrXML(s model.PageSetup) string {
+	var sb strings.Builder
 	sb.WriteString("<w:sectPr>")
 	orient := ""
 	if s.Width > s.Height {
 		orient = ` w:orient="landscape"`
 	}
-	fmt.Fprintf(sb, `<w:pgSz w:w="%d" w:h="%d"%s/>`, twips(s.Width), twips(s.Height), orient)
-	fmt.Fprintf(sb, `<w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/>`,
+	fmt.Fprintf(&sb, `<w:pgSz w:w="%d" w:h="%d"%s/>`, twips(s.Width), twips(s.Height), orient)
+	fmt.Fprintf(&sb, `<w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/>`,
 		twips(s.MarginTop), twips(s.MarginRight), twips(s.MarginBottom), twips(s.MarginLeft))
 	sb.WriteString("</w:sectPr>")
+	return sb.String()
 }
 
 // sanitize removes characters that are illegal in XML 1.0 and normalises

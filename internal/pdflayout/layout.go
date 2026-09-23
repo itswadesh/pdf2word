@@ -55,9 +55,22 @@ type Result struct {
 	Assets map[int]*PageAssets
 }
 
-// Extract reads every page of the PDF at path.
+// Options tunes the layout.
+type Options struct {
+	// Reflow joins the lines of each paragraph so the text reflows when it
+	// is edited. By default every line of the PDF becomes a line in Word,
+	// which keeps each page looking like the original.
+	Reflow bool
+}
+
+// Extract reads every page of the PDF at path with default options.
 func Extract(path string) (*model.Document, []Warning, error) {
-	res, err := ExtractAll(path)
+	return ExtractWith(path, Options{})
+}
+
+// ExtractWith reads every page of the PDF at path.
+func ExtractWith(path string, opts Options) (*model.Document, []Warning, error) {
+	res, err := ExtractAllProgress(path, opts, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -66,46 +79,125 @@ func Extract(path string) (*model.Document, []Warning, error) {
 
 // ExtractAll reads every page and also returns the assets of text-less pages.
 func ExtractAll(path string) (*Result, error) {
-	return ExtractAllProgress(path, nil)
+	return ExtractAllProgress(path, Options{}, nil)
 }
 
-// ExtractAllProgress is ExtractAll with a callback invoked after each page
-// (page is 1-based) so long documents can show progress while being read.
-func ExtractAllProgress(path string, progress func(page, total int)) (*Result, error) {
+// ExtractAllProgress is ExtractAll with options and a callback invoked after
+// each page is read (page is 1-based) so long documents can show progress.
+func ExtractAllProgress(path string, opts Options, progress func(page, total int)) (*Result, error) {
 	d, err := pdfiumx.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer d.Close()
-	return extractDoc(d, progress)
+	return extractDoc(d, opts, progress)
 }
 
-func extractDoc(d *pdfiumx.Doc, progress func(page, total int)) (*Result, error) {
+// pageRaw is what a page contributes before layout.
+type pageRaw struct {
+	w, h   float64
+	chars  []char
+	rules  []rule
+	images []placedImage
+	warns  []string
+}
+
+func extractDoc(d *pdfiumx.Doc, opts Options, progress func(page, total int)) (*Result, error) {
 	d.Mu.Lock()
 	defer d.Mu.Unlock()
 
 	res := &Result{Doc: &model.Document{}, Assets: map[int]*PageAssets{}}
-	var setup *model.PageSetup
+
+	// Pass 1: read every page (the slow part) and lay each out on its own
+	// margins to learn the document's typical margins.
+	raws := make([]*pageRaw, d.Pages)
+	var setups []*model.PageSetup
 	for n := 1; n <= d.Pages; n++ {
 		if progress != nil && n > 1 {
 			progress(n-1, d.Pages)
 		}
-		page, margins, assets, err := layoutPage(d, n)
+		raw, err := readPage(d, n)
 		if err != nil {
 			res.Warnings = append(res.Warnings, Warning{Page: n, Msg: err.Error()})
-			page = model.Page{Number: n, Source: model.SourceEmpty}
+			continue
 		}
-		res.Doc.Pages = append(res.Doc.Pages, page)
-		if assets != nil {
-			res.Assets[n] = assets
+		raws[n-1] = raw
+		if len(raw.chars) > 0 {
+			_, setup := assemble(n, raw.w, raw.h, raw.chars, raw.rules, raw.images, tolText, false, opts, nil)
+			setups = append(setups, setup)
 		}
-		setup = mergeSetup(setup, margins)
 	}
 	if progress != nil && d.Pages > 0 {
 		progress(d.Pages, d.Pages)
 	}
-	res.Doc.Setup = setup
+	res.Doc.Setup = ChooseSetup(setups)
+
+	// Pass 2: lay pages out relative to the margins Word will use. A page
+	// whose content reaches beyond them keeps its own margins (its own
+	// section in Word).
+	for n := 1; n <= d.Pages; n++ {
+		raw := raws[n-1]
+		if raw == nil {
+			res.Doc.Pages = append(res.Doc.Pages, model.Page{Number: n, Source: model.SourceEmpty})
+			continue
+		}
+		if len(raw.chars) == 0 {
+			// Nothing to lay out yet; keep what OCR will need.
+			res.Assets[n] = &PageAssets{Width: raw.w, Height: raw.h, rules: raw.rules, images: raw.images}
+			if len(raw.warns) > 0 {
+				res.Warnings = append(res.Warnings, Warning{Page: n, Msg: fmt.Sprintf("%v", raw.warns)})
+			}
+			res.Doc.Pages = append(res.Doc.Pages, model.Page{Number: n, Source: model.SourceEmpty, Width: raw.w, Height: raw.h})
+			continue
+		}
+		page, setup := assemble(n, raw.w, raw.h, raw.chars, raw.rules, raw.images, tolText, false, opts, res.Doc.Setup)
+		if !model.SetupEqual(setup, res.Doc.Setup) {
+			page.Setup = setup
+		}
+		res.Doc.Pages = append(res.Doc.Pages, page)
+	}
 	return res, nil
+}
+
+// outlierMargin is how far below the median a page's margin may be before
+// the page counts as an outlier (a cover, a full-bleed picture) whose
+// margins should not shape the whole document.
+const outlierMargin = 12.0
+
+// ChooseSetup picks a document page setup from per-page ones: the first
+// page's size and, per side, the smallest margin among the pages that are
+// not outliers. It returns nil when there are no setups.
+func ChooseSetup(setups []*model.PageSetup) *model.PageSetup {
+	var valid []*model.PageSetup
+	for _, s := range setups {
+		if s != nil {
+			valid = append(valid, s)
+		}
+	}
+	if len(valid) == 0 {
+		return nil
+	}
+	out := *valid[0]
+	pick := func(get func(*model.PageSetup) float64) float64 {
+		vals := make([]float64, len(valid))
+		for i, s := range valid {
+			vals[i] = get(s)
+		}
+		sort.Float64s(vals)
+		median := vals[len(vals)/2]
+		best := math.Inf(1)
+		for _, v := range vals {
+			if v >= median-outlierMargin && v < best {
+				best = v
+			}
+		}
+		return best
+	}
+	out.MarginLeft = pick(func(s *model.PageSetup) float64 { return s.MarginLeft })
+	out.MarginRight = pick(func(s *model.PageSetup) float64 { return s.MarginRight })
+	out.MarginTop = pick(func(s *model.PageSetup) float64 { return s.MarginTop })
+	out.MarginBottom = pick(func(s *model.PageSetup) float64 { return s.MarginBottom })
+	return &out
 }
 
 // MergeSetup combines page setups: the first page's size, and the smallest
@@ -139,31 +231,36 @@ func pageSize(d *pdfiumx.Doc, n int) (float64, float64, error) {
 	return w, h, nil
 }
 
-// layoutPage builds one page from its text layer. For a page without text
-// it returns the page's assets so OCR can be laid out later.
-func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, *PageAssets, error) {
-	page := model.Page{Number: n, Source: model.SourceEmpty}
+// readPage reads one page's size, characters, rulings and images.
+func readPage(d *pdfiumx.Doc, n int) (*pageRaw, error) {
 	w, h, err := pageSize(d, n)
 	if err != nil {
-		return page, nil, nil, err
+		return nil, err
 	}
-	page.Width, page.Height = w, h
-
 	chars, err := readChars(d, n)
 	if err != nil {
-		return page, nil, nil, err
+		return nil, err
 	}
 	rules, images, objWarns := readObjects(d, n, w, h, len(chars) > 0)
-	if len(chars) == 0 {
-		// Nothing to lay out yet; keep what OCR will need.
-		assets := &PageAssets{Width: w, Height: h, rules: rules, images: images}
-		var werr error
-		if len(objWarns) > 0 {
-			werr = fmt.Errorf("%v", objWarns)
-		}
-		return page, nil, assets, werr
+	return &pageRaw{w: w, h: h, chars: chars, rules: rules, images: images, warns: objWarns}, nil
+}
+
+// layoutPage builds one page from its text layer on its own margins (used
+// by diagnostics). For a page without text it returns the page's assets.
+func layoutPage(d *pdfiumx.Doc, n int) (model.Page, *model.PageSetup, *PageAssets, error) {
+	raw, err := readPage(d, n)
+	if err != nil {
+		return model.Page{Number: n, Source: model.SourceEmpty}, nil, nil, err
 	}
-	p, setup := assemble(n, w, h, chars, rules, images, tolText, false)
+	if len(raw.chars) == 0 {
+		var werr error
+		if len(raw.warns) > 0 {
+			werr = fmt.Errorf("%v", raw.warns)
+		}
+		return model.Page{Number: n, Source: model.SourceEmpty, Width: raw.w, Height: raw.h}, nil,
+			&PageAssets{Width: raw.w, Height: raw.h, rules: raw.rules, images: raw.images}, werr
+	}
+	p, setup := assemble(n, raw.w, raw.h, raw.chars, raw.rules, raw.images, tolText, false, Options{}, nil)
 	return p, setup, nil, nil
 }
 
@@ -182,7 +279,19 @@ type Word struct {
 
 // AssembleOCR lays out OCR words on a page, using the page's rulings and
 // images (assets may be nil). Full-page scan images are not embedded.
-func AssembleOCR(number int, width, height float64, words []Word, assets *PageAssets) (model.Page, *model.PageSetup) {
+const (
+	scanImageFraction = 0.5 // an image at least this big may be the scan of the page
+	fullPageFraction  = 0.8 // an image this big, kept, is the whole page
+	scanMinWords      = 40  // OCR words on a page-sized image that make it a text scan outright
+)
+
+// AssembleOCR lays out OCR words on a page. base, when not nil, is the
+// document's page setup: the page uses it when its content fits inside
+// those margins, otherwise its own. isPicture, when not nil, is consulted
+// for a page-sized image that carries only a few OCR words: it reports
+// whether the page rendering looks like a picture (a cover, a photo, art)
+// rather than a scan of a mostly-white text page. It is called at most once.
+func AssembleOCR(number int, width, height float64, words []Word, assets *PageAssets, opts Options, base *model.PageSetup, isPicture func() bool) (model.Page, *model.PageSetup) {
 	chars := make([]char, 0, len(words))
 	for _, w := range words {
 		if w.Text == "" {
@@ -198,17 +307,60 @@ func AssembleOCR(number int, width, height float64, words []Word, assets *PageAs
 	var images []placedImage
 	if assets != nil {
 		rules = assets.rules
-		for _, im := range assets.images {
-			if (im.x1-im.x0)*(im.y1-im.y0) >= 0.5*width*height {
-				continue // the scan itself
-			}
-			images = append(images, im)
-		}
 		if assets.Width > 0 && assets.Height > 0 {
 			width, height = assets.Width, assets.Height
 		}
+		// A page-sized image with a page of OCR words on it is the scan of a
+		// text page: the words replace it. With no words it is a picture (an
+		// illustration, a photo) and is kept. With a few words it may be a
+		// cover or a short scanned note; the page's tones decide. A kept
+		// picture that fills the page is the content, and the few words OCR
+		// found on it (a title, a caption inside the art) are dropped.
+		pictureDecided, picture := false, false
+		looksLikePicture := func() bool {
+			if !pictureDecided {
+				pictureDecided = true
+				picture = isPicture != nil && isPicture()
+			}
+			return picture
+		}
+		fullPagePicture := false
+		for _, im := range assets.images {
+			frac := (im.x1 - im.x0) * (im.y1 - im.y0) / (width * height)
+			if frac >= scanImageFraction && len(chars) > 0 {
+				if len(chars) >= scanMinWords || !looksLikePicture() {
+					continue // the scan itself
+				}
+			}
+			if frac >= fullPageFraction {
+				fullPagePicture = true
+			}
+			images = append(images, im)
+		}
+		if fullPagePicture {
+			chars = nil
+		}
+		// Words OCR read inside a kept picture (a logo's name, lettering in
+		// the art) are part of the picture, not text to repeat below it.
+		if len(images) > 0 && len(chars) > 0 {
+			kept := chars[:0]
+			for _, c := range chars {
+				cx, cy := (c.x0+c.x1)/2, (c.y0+c.y1)/2
+				inside := false
+				for _, im := range images {
+					if cx >= im.x0 && cx <= im.x1 && cy >= im.y0 && cy <= im.y1 {
+						inside = true
+						break
+					}
+				}
+				if !inside {
+					kept = append(kept, c)
+				}
+			}
+			chars = kept
+		}
 	}
-	page, setup := assemble(number, width, height, chars, rules, images, tolOCR, true)
+	page, setup := assemble(number, width, height, chars, rules, images, tolOCR, true, opts, base)
 	if len(page.Blocks) > 0 {
 		page.Source = model.SourceOCR
 	}
@@ -228,7 +380,7 @@ type element struct {
 // assemble is the shared page builder: it groups characters into lines and
 // paragraphs, detects tables from rulings, places images, derives margins
 // and vertical spacing, and returns the page with its setup.
-func assemble(number int, w, h float64, chars []char, rules []rule, images []placedImage, tol float64, ocr bool) (model.Page, *model.PageSetup) {
+func assemble(number int, w, h float64, chars []char, rules []rule, images []placedImage, tol float64, ocr bool, opts Options, base *model.PageSetup) (model.Page, *model.PageSetup) {
 	page := model.Page{Number: number, Source: model.SourceEmpty, Width: w, Height: h}
 
 	gap := segmentGapFactor
@@ -250,6 +402,7 @@ func assemble(number int, w, h float64, chars []char, rules []rule, images []pla
 	for _, l := range lines {
 		extend(l.x0, l.y0, l.x1, l.y1)
 	}
+	ct.textRight = typicalRight(lines)
 	for _, t := range tables {
 		extend(t.x0, t.y0, t.x1, t.y1)
 	}
@@ -259,12 +412,26 @@ func assemble(number int, w, h float64, chars []char, rules []rule, images []pla
 	if math.IsInf(ct.left, 1) {
 		return page, nil // nothing on the page
 	}
+	// The page's own margins, from its content. Without a base they are
+	// kept within the usual range so the document's margins stay sane; a
+	// page that does not fit the base (a cover) may go right to the edge.
+	lo := minMargin
+	if base != nil {
+		lo = 0
+	}
+	// The right margin gets a little slack: a line that exactly filled the
+	// PDF's measure must not wrap in Word because of rounding or a missing
+	// kerning pair.
 	setup := &model.PageSetup{
 		Width: w, Height: h,
-		MarginLeft:   clamp(ct.left, minMargin, maxMargin),
-		MarginRight:  clamp(w-ct.right, minMargin, maxMargin),
-		MarginTop:    clamp(h-ct.top, minMargin, maxMargin),
-		MarginBottom: clamp(ct.bottom, minMargin, maxMargin),
+		MarginLeft:   clamp(ct.left, lo, maxMargin),
+		MarginRight:  clamp(w-ct.right-measureSlack, lo, maxMargin),
+		MarginTop:    clamp(h-ct.top, lo, maxMargin),
+		MarginBottom: clamp(ct.bottom-bottomSlack, lo, maxMargin),
+	}
+	if base != nil && fitsSetup(ct, w, h, base) {
+		c := *base
+		setup = &c
 	}
 	// Positions are expressed relative to the margins actually used.
 	ct.left = setup.MarginLeft
@@ -274,7 +441,7 @@ func assemble(number int, w, h float64, chars []char, rules []rule, images []pla
 	var elems []element
 	for _, p := range groupParagraphs(lines, ct) {
 		top, bottom := p.wordBox()
-		elems = append(elems, element{top: top, bottom: bottom, x0: p.x0(), x1: p.x1(), block: toBlock(p, ct, bodySize)})
+		elems = append(elems, element{top: top, bottom: bottom, x0: p.x0(), x1: p.x1(), block: toBlock(p, ct, bodySize, opts)})
 	}
 	for _, t := range tables {
 		elems = append(elems, element{top: t.y1, bottom: t.y0, x0: t.x0, x1: t.x1, block: tableBlock(t, ct)})
@@ -305,6 +472,54 @@ func assemble(number int, w, h float64, chars []char, rules []rule, images []pla
 }
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
+
+// measureSlack widens the text measure by this many points beyond the
+// widest line, so lines kept from the PDF fit in Word. bottomSlack does the
+// same for the page height: the page whose last line sits lowest defines
+// the document's bottom margin and would otherwise have no room to spare
+// for rounding, so its last line would spill onto a page of its own.
+const (
+	measureSlack = 1.5
+	bottomSlack  = 10.0
+)
+
+// typicalRight is the right edge of the page's text block: the median right
+// edge of its full lines (those at least 70 % as wide as the widest), so a
+// single line that overhangs (a hanging hyphen, a wide table row) does not
+// make every justified line look short of the edge. With fewer than three
+// full lines it is the widest line's edge.
+func typicalRight(lines []textLine) float64 {
+	widest := 0.0
+	for _, l := range lines {
+		widest = math.Max(widest, l.width())
+	}
+	var edges []float64
+	for _, l := range lines {
+		if l.width() >= 0.7*widest {
+			edges = append(edges, l.x1)
+		}
+	}
+	if len(edges) == 0 {
+		return 0
+	}
+	sort.Float64s(edges)
+	if len(edges) < 3 {
+		return edges[len(edges)-1]
+	}
+	return edges[len(edges)/2]
+}
+
+// fitsSetup reports whether content bounds ct on a w x h page lie inside
+// the margins of s (with a point of tolerance) and s is for that page size.
+// The right and bottom margins of a setup already include their slack;
+// the content must fit inside the unslacked margins, so every page keeps
+// the slack as room for rounding.
+func fitsSetup(ct content, w, h float64, s *model.PageSetup) bool {
+	const tol = 1.0
+	return math.Abs(s.Width-w) < 0.5 && math.Abs(s.Height-h) < 0.5 &&
+		ct.left >= s.MarginLeft-tol && w-ct.right >= s.MarginRight+measureSlack-tol &&
+		h-ct.top >= s.MarginTop-tol && ct.bottom >= s.MarginBottom+bottomSlack-tol
+}
 
 // groupImageBands joins images that share a horizontal band (logo left,
 // QR code right, ...) into one paragraph whose segments carry the pictures

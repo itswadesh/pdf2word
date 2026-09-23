@@ -4,3 +4,5 @@
 *.docx
 !testdata/*.docx
 *.tmp
+# PDFs dropped into the project root for testing are never committed
+/*.pdf

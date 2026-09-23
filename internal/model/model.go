@@ -93,7 +93,17 @@ type Run struct {
 	Italic bool
 	Size   float64 // points; 0 = inherit the document default
 	Font   string  // family name; "" = document default
-	Image  *ImageData
+	// Fallback is the standard font Word should use when Font is not
+	// installed (Times New Roman, Arial or Courier New); "" lets Word guess.
+	Fallback string
+	// Spacing is extra space after each character in points: positive for
+	// letter-spaced titles, negative to fit a kept line into its original
+	// width; 0 = none.
+	Spacing float64
+	// Scale is the horizontal character scale (1 = none) used when a kept
+	// line needs more compression than spacing can give discreetly.
+	Scale float64
+	Image *ImageData
 }
 
 // Segment is a horizontally positioned piece of a line. A line with several
@@ -169,6 +179,7 @@ type Block struct {
 	Level       int       // heading level (1 = top); 0 otherwise
 	Align       Alignment // paragraphs, headings, images
 	IndentLeft  float64   // points
+	IndentRight float64   // points; narrows justified text that stops short of the right margin
 	FirstIndent float64   // points, relative to IndentLeft (may be negative)
 	SpaceBefore float64   // points of vertical space above the block
 	Leading     float64   // points from baseline to baseline; 0 = Word default
@@ -225,6 +236,10 @@ type Page struct {
 	Width  float64 // points; 0 = unknown
 	Height float64
 	Blocks []Block
+	// Setup, when set, gives this page its own section in Word (its own
+	// size and margins) because its content does not fit the document's.
+	// Block positions on the page are relative to these margins.
+	Setup *PageSetup
 }
 
 // TextChars returns the number of non-whitespace runes on the page.
@@ -248,6 +263,21 @@ type PageSetup struct {
 
 // ContentWidth is the width available to text.
 func (s PageSetup) ContentWidth() float64 { return s.Width - s.MarginLeft - s.MarginRight }
+
+// ContentHeight is the height available to text.
+func (s PageSetup) ContentHeight() float64 { return s.Height - s.MarginTop - s.MarginBottom }
+
+// SetupEqual reports whether two setups describe the same page geometry
+// (within half a point). Two nils are equal; nil and non-nil are not.
+func SetupEqual(a, b *PageSetup) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	eq := func(x, y float64) bool { return x-y < 0.5 && y-x < 0.5 }
+	return eq(a.Width, b.Width) && eq(a.Height, b.Height) &&
+		eq(a.MarginLeft, b.MarginLeft) && eq(a.MarginRight, b.MarginRight) &&
+		eq(a.MarginTop, b.MarginTop) && eq(a.MarginBottom, b.MarginBottom)
+}
 
 // Document is the whole converted file.
 type Document struct {

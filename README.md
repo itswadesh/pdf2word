@@ -4,10 +4,19 @@ Turn PDF files into Word (`.docx`) documents. Double-click the program, drop
 PDFs on the page that opens, and save the Word files it gives back.
 
 - **Text PDFs** – the text layer is read with its layout: fonts, bold and
-  italic, sizes, centred/right alignment, indents, left/right field pairs
-  (as tab stops), ruled tables (as real Word tables), embedded images, and the
-  page size and margins of the original. Headings are detected from font
-  size.
+  italic, sizes, centred/right/justified alignment, indents, left/right field
+  pairs (as tab stops), ruled tables (as real Word tables), embedded images,
+  letter-spaced titles, and the page size and margins of the original.
+  Headings are detected from font size.
+- **Pages match the original.** Every line breaks where the PDF broke it,
+  each line is fitted to the width it had (a typeface the reader's machine
+  does not have is replaced by Times New Roman, Arial or Courier New and the
+  character spacing adjusted so the line still fits), page breaks fall where
+  they fell, and a cover or full-page picture gets its own section with its
+  own margins. A 384-page novel and a 136-page illustrated book converted
+  to Word files with exactly 384 and 136 pages, each page starting with the
+  same words. Pass `-reflow` to join lines into flowing paragraphs instead,
+  which is easier to edit but no longer paginates like the original.
 - **Scanned PDFs and print-to-PDF outlines** – pages without selectable text
   are rendered and read with [Tesseract](https://github.com/tesseract-ocr/tesseract)
   OCR. This includes files where a print driver turned the text into vector
@@ -139,6 +148,7 @@ pdf2word [flags] input.pdf [output.docx]
   -ocr string        OCR mode: auto, off or force (default "auto")
   -lang string       Tesseract language(s), e.g. eng, ori or eng+ori (default "eng", env PDF2WORD_LANG)
   -ocr-sparse        second OCR pass that recovers text inside pictures and coloured boxes (about twice the OCR time)
+  -reflow            join each paragraph's lines so the text reflows when edited (default: keep the PDF's line breaks so pages match)
   -tesseract string  path to the tesseract executable (default: auto-detect)
   -dpi int           resolution used to render pages before OCR (default 300)
   -jobs int          pages to OCR at the same time (default: CPUs, at most 8)
@@ -186,12 +196,18 @@ minutes on a multi-core PC. Text PDFs convert in seconds.
 
 ## Limitations
 
-- The result is an editable document that follows the original's structure,
-  not a pixel-perfect replica. Not yet handled: tables without ruling lines,
-  cells merged vertically, multi-column article layouts (read row by row),
-  text colours, running headers and footers (they stay in the body), vector
-  drawings other than table rulings, bold/italic on OCR'd pages, and tables
-  on raster scans (no ruling lines to read).
+- The result is an editable document laid out like the original, not a
+  pixel-perfect replica: a substituted typeface changes the look of the
+  letters even though lines and pages fall in the same places. Not yet
+  handled: tables without ruling lines, cells merged vertically,
+  multi-column article layouts (read row by row), text colours, running
+  headers and footers (they stay in the body), vector drawings other than
+  table rulings, bold/italic on OCR'd pages, and tables on raster scans (no
+  ruling lines to read).
+- Line fitting needs the font files of the substitute fonts. Windows has
+  them; the Docker image installs the metric-compatible Liberation, Carlito
+  and Caladea fonts. Without them lines keep their breaks but a few may wrap
+  when the substitute font is wider.
 - OCR quality depends on scan quality and language data; dotted leaders and
   tables of contents produce noise.
 - Encrypted PDFs are not supported.
@@ -220,7 +236,13 @@ Diagnostics for layout work: `go run ./tools/rulesprobe file.pdf 1 2`
 (rulings, tables and images per page), `go run ./tools/ocrprobe file.pdf 1`
 (each stage of the OCR layout for one page), `go run ./tools/pdftrim big.pdf
 excerpt.pdf 1-25` (copy a page range with PDFium, also from files stricter
-parsers reject), `go run ./tools/renderpages
+parsers reject), `go run ./tools/pagetext file.pdf` (the first words of
+every page, to compare pagination between a PDF and a rendering of its
+conversion), the environment-gated tests `PDF2WORD_DEBUG_PDF=file.pdf
+PDF2WORD_DEBUG_PAGE=7 go test ./internal/pdflayout -run 'TestDebug' -v`
+(where each kept line lands, its width in the PDF, its natural width in the
+Word font and the fitting applied, next to the PDF's real lines), and
+`go run ./tools/renderpages
 file.pdf outdir 80 1 2` (pages to PNG). To see a result the way Word will
 show it, convert the .docx with LibreOffice headless
 (`soffice --headless --convert-to pdf`) and render that PDF the same way.

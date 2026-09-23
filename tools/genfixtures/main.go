@@ -53,7 +53,73 @@ func main() {
 	if err := os.WriteFile(filepath.Join(outDir, "layout.pdf"), buildLayoutPDF(), 0o644); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("wrote text.pdf, scanned.pdf, badannot.pdf and layout.pdf in", outDir)
+	if err := os.WriteFile(filepath.Join(outDir, "scaled.pdf"), buildScaledPDF(), 0o644); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("wrote text.pdf, scanned.pdf, badannot.pdf, layout.pdf and scaled.pdf in", outDir)
+}
+
+// buildScaledPDF imitates two habits of real typesetting software that the
+// simple fixtures do not have: text set at "1 pt" (Tf 1) and scaled up with
+// the text matrix, and words positioned glyph by glyph with no space
+// characters between them. A converter that trusts Tf produces 1 pt text,
+// and one that only copies characters glues the words together.
+func buildScaledPDF() []byte {
+	var b bytes.Buffer
+	var offsets []int
+	b.WriteString("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+	add := func(body string) {
+		offsets = append(offsets, b.Len())
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", len(offsets), body)
+	}
+	stream := func(content string) string {
+		return fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content)
+	}
+	var widths bytes.Buffer
+	for i, w := range helveticaWidths {
+		if i > 0 {
+			widths.WriteByte(' ')
+		}
+		fmt.Fprintf(&widths, "%d", w)
+	}
+	fontDict := fmt.Sprintf("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [%s] >>", widths.String())
+
+	var c strings.Builder
+	// Heading: Tf 1, matrix scale 18.
+	c.WriteString("BT /F1 1 Tf 18 0 0 18 72 700 Tm (Scaled Heading) Tj ET\n")
+	// Body: Tf 1, matrix scale 11, three lines of a paragraph.
+	c.WriteString("BT /F1 1 Tf 11 0 0 11 72 660 Tm (The body of this page is set at one point and) Tj ET\n")
+	c.WriteString("BT /F1 1 Tf 11 0 0 11 72 646 Tm (scaled eleven times by the text matrix, as many) Tj ET\n")
+	c.WriteString("BT /F1 1 Tf 11 0 0 11 72 632 Tm (page layout programs do.) Tj ET\n")
+	// A line whose words are placed one by one, 0.3 em apart, without any
+	// space characters, at a plain 11 pt.
+	x := 72.0
+	for _, w := range []string{"Words", "placed", "apart", "without", "spaces"} {
+		fmt.Fprintf(&c, "BT /F1 11 Tf %.2f 600 Td (%s) Tj ET\n", x, w)
+		x += helveticaWidth(w, 11) + 0.3*11
+	}
+
+	// Page 2 is an outlier: a caption 20 pt from the left and top edges,
+	// well outside the 72 pt margins of page 1. It must get its own page
+	// setup rather than pull the document's margins in.
+	page2 := "BT /F1 9 Tf 20 772 Td (Edge caption on an outlier page) Tj ET\n" +
+		"BT /F1 11 Tf 72 700 Td (Ordinary text on the same page.) Tj ET\n"
+
+	add("<< /Type /Catalog /Pages 2 0 R >>")
+	add("<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>")
+	add(fontDict)
+	add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>")
+	add(stream(c.String()))
+	add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>")
+	add(stream(page2))
+
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(offsets)+1)
+	for _, o := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", o)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets)+1, xref)
+	return b.Bytes()
 }
 
 // helveticaWidth returns the advance of s in points at the given size using

@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/png"
 	"math"
+	"strings"
 	"unicode"
 
 	"github.com/klippa-app/go-pdfium/enums"
@@ -27,9 +28,22 @@ func readChars(d *pdfiumx.Doc, n int) ([]char, error) {
 	if err != nil {
 		return nil, fmt.Errorf("text: %w", err)
 	}
+	// PDFium reports the font size set with Tf; many producers set Tf 1 (or
+	// some other nominal size) and scale with the text matrix, so the real
+	// size is Tf x the matrix scale. The matrix and the advance box are
+	// queried per character.
+	metrics := charMetrics(d, n, len(txt.Chars))
+
 	chars := make([]char, 0, len(txt.Chars))
-	for _, c := range txt.Chars {
+	for i, c := range txt.Chars {
 		if c.Text == "" {
+			continue
+		}
+		// PDFium invents a space wherever two glyphs sit apart, judging the
+		// gap against the nominal font size, which misfires for scaled text
+		// and letter-spaced titles. Word gaps are judged here instead, from
+		// the advance boxes, so PDFium's own spaces are dropped.
+		if metrics != nil && metrics[i].generated && strings.TrimSpace(c.Text) == "" {
 			continue
 		}
 		if c.Text == "\x02" {
@@ -51,8 +65,15 @@ func readChars(d *pdfiumx.Doc, n int) ([]char, error) {
 			continue // generated line breaks and zero-size marks
 		}
 		ch := char{text: c.Text, x0: x0, y0: y0, x1: x1, y1: y1}
+		if metrics != nil {
+			ch.ax0, ch.ax1 = metrics[i].ax0, metrics[i].ax1
+			ch.base, ch.hasBase = metrics[i].base, metrics[i].hasBase
+		}
 		if c.FontInformation != nil {
 			ch.size = c.FontInformation.Size
+			if metrics != nil && metrics[i].scale > 0 {
+				ch.size *= metrics[i].scale
+			}
 			ch.font = parseFont(c.FontInformation.Name, c.FontInformation.Weight, c.FontInformation.Flags)
 		}
 		if ch.size <= 0 {
@@ -61,6 +82,54 @@ func readChars(d *pdfiumx.Doc, n int) ([]char, error) {
 		chars = append(chars, ch)
 	}
 	return chars, nil
+}
+
+// charMetric is what the structured text extraction does not give: the
+// scale of the character's text matrix (sqrt of its determinant, 0 when
+// unknown) and the x-range of its advance box (0,0 when unknown).
+type charMetric struct {
+	scale     float64
+	ax0, ax1  float64
+	base      float64 // y of the glyph origin: the baseline
+	hasBase   bool
+	generated bool // inserted by PDFium (a space or line break), not in the PDF
+}
+
+// charMetrics returns one metric per character index, or nil when the
+// indices cannot be lined up with the structured text.
+func charMetrics(d *pdfiumx.Doc, n int, want int) []charMetric {
+	if want == 0 {
+		return nil
+	}
+	tp, err := d.Instance.FPDFText_LoadPage(&requests.FPDFText_LoadPage{Page: d.Page(n)})
+	if err != nil {
+		return nil
+	}
+	defer d.Instance.FPDFText_ClosePage(&requests.FPDFText_ClosePage{TextPage: tp.TextPage})
+	count, err := d.Instance.FPDFText_CountChars(&requests.FPDFText_CountChars{TextPage: tp.TextPage})
+	if err != nil || count.Count != want {
+		return nil
+	}
+	metrics := make([]charMetric, want)
+	for i := range metrics {
+		if m, err := d.Instance.FPDFText_GetMatrix(&requests.FPDFText_GetMatrix{TextPage: tp.TextPage, Index: i}); err == nil {
+			det := float64(m.Matrix.A)*float64(m.Matrix.D) - float64(m.Matrix.B)*float64(m.Matrix.C)
+			if s := math.Sqrt(math.Abs(det)); s > 0 && !math.IsInf(s, 0) {
+				metrics[i].scale = s
+			}
+		}
+		if lb, err := d.Instance.FPDFText_GetLooseCharBox(&requests.FPDFText_GetLooseCharBox{TextPage: tp.TextPage, Index: i}); err == nil {
+			l, r := float64(lb.Rect.Left), float64(lb.Rect.Right)
+			metrics[i].ax0, metrics[i].ax1 = math.Min(l, r), math.Max(l, r)
+		}
+		if g, err := d.Instance.FPDFText_IsGenerated(&requests.FPDFText_IsGenerated{TextPage: tp.TextPage, Index: i}); err == nil {
+			metrics[i].generated = g.IsGenerated
+		}
+		if o, err := d.Instance.FPDFText_GetCharOrigin(&requests.FPDFText_GetCharOrigin{TextPage: tp.TextPage, Index: i}); err == nil {
+			metrics[i].base, metrics[i].hasBase = o.Y, true
+		}
+	}
+	return metrics
 }
 
 // readObjects walks the page objects (recursing into form XObjects) and

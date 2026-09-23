@@ -23,14 +23,22 @@ func TestParseFont(t *testing.T) {
 		flags  int
 		want   fontInfo
 	}{
-		{"Helvetica-Bold", 0, 0x20, fontInfo{"Arial", true, false}},
-		{"Times-Roman", 0, 0x20, fontInfo{"Times New Roman", false, false}},
-		{"Times-BoldItalic", 0, 0, fontInfo{"Times New Roman", true, true}},
-		{"GQUSAY+BalooBhaina2-Regular", 400, 0x80020, fontInfo{"Baloo Bhaina 2", false, false}},
-		{"ABCDEF+Calibri", 700, 0, fontInfo{"Calibri", true, false}},
-		{"Arial,Italic", 0, 0, fontInfo{"Arial", false, true}},
-		{"CourierNewPSMT", 0, 0, fontInfo{"Courier New", false, false}},
-		{"Verdana", 400, 1 << 6, fontInfo{"Verdana", false, true}},
+		{"Helvetica-Bold", 0, 0x20, fontInfo{"Arial", true, false, "Arial"}},
+		{"Times-Roman", 0, 0x20, fontInfo{"Times New Roman", false, false, "Times New Roman"}},
+		{"Times-BoldItalic", 0, 0, fontInfo{"Times New Roman", true, true, "Times New Roman"}},
+		// Typefaces the reader will not have are replaced by their stand-in;
+		// Windows and Office fonts keep their names.
+		{"GQUSAY+BalooBhaina2-Regular", 400, 0x80020, fontInfo{"Times New Roman", false, false, "Times New Roman"}},
+		{"ABCDEF+Calibri", 700, 0, fontInfo{"Calibri", true, false, "Arial"}},
+		{"Arial,Italic", 0, 0, fontInfo{"Arial", false, true, "Arial"}},
+		{"CourierNewPSMT", 0, 0, fontInfo{"Courier New", false, false, "Courier New"}},
+		{"Verdana", 400, 1 << 6, fontInfo{"Verdana", false, true, "Arial"}},
+		{"FournierMT-ItalicOsF", 310, 0x80044, fontInfo{"Times New Roman", false, true, "Times New Roman"}},
+		{"AAAAAA+LiberationSerif", 435, 0x80004, fontInfo{"Times New Roman", false, false, "Times New Roman"}},
+		{"LiberationSans-Bold", 700, 0x20, fontInfo{"Arial", true, false, "Arial"}},
+		{"Consolas", 400, 0x1, fontInfo{"Consolas", false, false, "Courier New"}},
+		{"SegoeUI-Semibold", 600, 0x20, fontInfo{"Segoe UI", true, false, "Arial"}},
+		{"Garamond-Italic", 400, 0x60, fontInfo{"Garamond", false, true, "Times New Roman"}},
 	}
 	for _, tc := range cases {
 		if got := parseFont(tc.name, tc.weight, tc.flags); got != tc.want {
@@ -68,7 +76,9 @@ func describe(blocks []model.Block) string {
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 
 func TestExtract_LayoutFixture(t *testing.T) {
-	doc, warns, err := Extract(fixture("layout.pdf"))
+	// Reflow: this test checks how wrapped lines join; line keeping is
+	// covered in lines_test.go.
+	doc, warns, err := ExtractWith(fixture("layout.pdf"), Options{Reflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +215,7 @@ func TestExtract_LayoutFixture(t *testing.T) {
 }
 
 func TestExtract_PlainTextFixtureStillWorks(t *testing.T) {
-	doc, _, err := Extract(fixture("text.pdf"))
+	doc, _, err := ExtractWith(fixture("text.pdf"), Options{Reflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,12 +265,12 @@ func TestAssembleOCR_SyntheticWords(t *testing.T) {
 		mk("end.", 72, 100, 622, 11),
 		mk("30", 528, 540, 60, 10),
 	}
-	page, setup := AssembleOCR(30, 612, 792, words, nil)
+	page, setup := AssembleOCR(30, 612, 792, words, nil, Options{Reflow: true}, nil, nil)
 	t.Logf("blocks:\n%s", describe(page.Blocks))
 	if page.Source != model.SourceOCR || page.Number != 30 || page.Width != 612 {
 		t.Fatalf("page = %+v", page)
 	}
-	if setup == nil || !near(setup.MarginLeft, 72, 1) || !near(setup.MarginRight, 72, 1) {
+	if setup == nil || !near(setup.MarginLeft, 72, 1) || !near(setup.MarginRight, 72-measureSlack, 1) {
 		t.Errorf("setup = %+v, want 72pt side margins", setup)
 	}
 	if len(page.Blocks) != 3 {

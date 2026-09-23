@@ -147,7 +147,7 @@ func TestBuildDocument_OCROffLeavesScannedPageEmpty(t *testing.T) {
 func TestBuildDocument_ForcePrefersOCRWhereImagesExist(t *testing.T) {
 	eng := &fakeEngine{text: "OCR TEXT"}
 	fi := &fakeImages{pages: map[int][]pdfimage.Image{1: oneImage()}} // page 2 has no images
-	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: eng, OpenImages: opener(fi)})
+	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: eng, OpenImages: opener(fi), Reflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -447,7 +447,7 @@ func TestBuildDocument_OCRWordsAreLaidOut(t *testing.T) {
 	// OCR is forced so the word boxes are used on a normal page size.
 	img := []pdfimage.Image{{Data: []byte("fake-png"), Ext: "png", Width: 100, Height: 130}}
 	fi := &fakeImages{pages: map[int][]pdfimage.Image{1: img, 2: img}}
-	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: eng, OpenImages: opener(fi)})
+	doc, rep, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: eng, OpenImages: opener(fi), Reflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}

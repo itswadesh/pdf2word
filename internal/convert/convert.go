@@ -104,6 +104,10 @@ type Options struct {
 	// finds where the first pass found nothing (headings in coloured boxes
 	// that layout analysis files as pictures). Roughly doubles OCR time.
 	SparsePass bool
+	// Reflow joins the lines of each paragraph so the text reflows when
+	// edited. By default every line of the PDF stays a line in Word, which
+	// keeps each page looking like the original.
+	Reflow bool
 
 	// TesseractPath is an explicit tesseract executable; empty means
 	// auto-detect (see ocr.Find).
@@ -202,7 +206,7 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 	var rep Report
 
 	opts.Logf("reading text layer of %s", in)
-	doc, assets, err := extractText(in, &rep, opts.Logf, func(page, total int) {
+	doc, assets, err := extractText(in, &rep, opts.Logf, pdflayout.Options{Reflow: opts.Reflow}, func(page, total int) {
 		opts.OnProgress(Progress{Phase: PhaseReading, Done: page, Total: total, Page: page})
 	})
 	if err != nil {
@@ -210,7 +214,7 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 	}
 	rep.Pages = len(doc.Pages)
 
-	s := &session{opts: opts, in: in, assets: assets}
+	s := &session{opts: opts, in: in, assets: assets, base: doc.Setup, ocrLaid: map[int]*ocrLaid{}}
 	defer s.close()
 
 	done := 0
@@ -248,8 +252,18 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 			return nil, rep, err
 		}
 	}
-	if s.ocrSetup != nil {
-		doc.Setup = pdflayout.MergeSetup(doc.Setup, s.ocrSetup)
+	// A document without a text layer learns its margins from the OCR'd
+	// pages, which are then laid out again relative to those margins.
+	if doc.Setup == nil && len(s.ocrSetups) > 0 {
+		doc.Setup = pdflayout.ChooseSetup(s.ocrSetups)
+		for idx, l := range s.ocrLaid {
+			laid, setup := pdflayout.AssembleOCR(doc.Pages[idx].Number, l.width, l.height, l.words, l.assets, s.layoutOpts(), doc.Setup, l.picture)
+			page := &doc.Pages[idx]
+			page.Blocks, page.Setup = laid.Blocks, nil
+			if !model.SetupEqual(setup, doc.Setup) {
+				page.Setup = setup
+			}
+		}
 	}
 	if s.langWarning != "" {
 		rep.warnf("%s", s.langWarning)
@@ -266,8 +280,8 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 // extractText reads the text layer with layout via PDFium and falls back to
 // the plain extractor if PDFium cannot open the file. The returned assets
 // (rulings, images, size of text-less pages) let OCR output be laid out too.
-func extractText(in string, rep *Report, logf func(string, ...any), progress func(page, total int)) (*model.Document, map[int]*pdflayout.PageAssets, error) {
-	res, err := pdflayout.ExtractAllProgress(in, progress)
+func extractText(in string, rep *Report, logf func(string, ...any), layout pdflayout.Options, progress func(page, total int)) (*model.Document, map[int]*pdflayout.PageAssets, error) {
+	res, err := pdflayout.ExtractAllProgress(in, layout, progress)
 	if err == nil {
 		for _, w := range res.Warnings {
 			rep.warnf("%s", w)
@@ -302,7 +316,23 @@ type session struct {
 	langWarning string // set when requested OCR languages were missing
 
 	imagesFailedPages int
-	ocrSetup          *model.PageSetup // page setup derived from OCR'd pages
+
+	base      *model.PageSetup   // the document's page setup from its text pages (nil if none)
+	ocrSetups []*model.PageSetup // setups of OCR'd pages, to choose a document setup when base is nil
+	ocrLaid   map[int]*ocrLaid   // inputs of OCR'd pages, to lay them out again on the chosen setup
+}
+
+func (s *session) layoutOpts() pdflayout.Options { return pdflayout.Options{Reflow: s.opts.Reflow} }
+
+// ocrLaid is an OCR'd page's layout together with what is needed to lay it
+// out again on different margins.
+type ocrLaid struct {
+	blocks        []model.Block
+	width, height float64
+	setup         *model.PageSetup
+	words         []pdflayout.Word
+	assets        *pdflayout.PageAssets
+	picture       func() bool // the picture-or-scan decision, if it was made
 }
 
 func (s *session) close() {
@@ -337,6 +367,7 @@ type pageResult struct {
 	// layout results when OCR word boxes were available
 	width, height float64
 	setup         *model.PageSetup
+	laid          *ocrLaid
 	// imagesUnavailable marks pages skipped because the image source never
 	// opened; they are counted once at the end instead of warned per page.
 	imagesUnavailable bool
@@ -398,7 +429,13 @@ func (s *session) ocrPages(ctx context.Context, doc *model.Document, todo []int,
 				page.Width, page.Height = r.width, r.height
 			}
 			if r.setup != nil {
-				s.ocrSetup = pdflayout.MergeSetup(s.ocrSetup, r.setup)
+				if !model.SetupEqual(r.setup, s.base) {
+					page.Setup = r.setup
+				}
+				s.ocrSetups = append(s.ocrSetups, r.setup)
+				if r.laid != nil {
+					s.ocrLaid[r.idx] = r.laid
+				}
 			}
 		}
 		finish(r.idx, r.ocrRan)
@@ -441,10 +478,10 @@ func (s *session) ocrPage(ctx context.Context, page *model.Page) pageResult {
 	// text PDF (alignment, paragraphs, tables from the PDF's rulings).
 	if we, ok := eng.(ocr.WordEngine); ok && len(imgs) == 1 && imgs[0].Width > 0 {
 		if assets := s.assets[page.Number]; assets != nil || page.Width > 0 {
-			blocks, w, h, setup, err := s.ocrLayout(ctx, we, page, imgs[0], assets)
+			laid, err := s.ocrLayout(ctx, we, page, imgs[0], assets)
 			if err == nil {
-				res.blocks, res.width, res.height, res.setup = blocks, w, h, setup
-				if len(blocks) == 0 && !hasText {
+				res.blocks, res.width, res.height, res.setup, res.laid = laid.blocks, laid.width, laid.height, laid.setup, &laid
+				if len(laid.blocks) == 0 && !hasText {
 					res.warns = append(res.warns, fmt.Sprintf("page %d: OCR produced no text", page.Number))
 				}
 				return res
@@ -583,16 +620,16 @@ func letters(s string) int {
 
 // ocrLayout recognises words with their boxes on a rendered page image,
 // converts the boxes to page points and assembles a laid-out page.
-func (s *session) ocrLayout(ctx context.Context, we ocr.WordEngine, page *model.Page, img pdfimage.Image, assets *pdflayout.PageAssets) ([]model.Block, float64, float64, *model.PageSetup, error) {
+func (s *session) ocrLayout(ctx context.Context, we ocr.WordEngine, page *model.Page, img pdfimage.Image, assets *pdflayout.PageAssets) (ocrLaid, error) {
 	words, err := we.RecognizeWords(ctx, img.Data, img.Ext)
 	if err != nil {
-		return nil, 0, 0, nil, err
+		return ocrLaid{}, err
 	}
 	if se, ok := we.(ocr.SparseWordEngine); ok && s.opts.SparsePass {
 		if extra, err := se.RecognizeWordsSparse(ctx, img.Data, img.Ext); err == nil {
 			words = append(words, sparseAdditions(words, extra)...)
 		} else if ctx.Err() != nil {
-			return nil, 0, 0, nil, ctx.Err()
+			return ocrLaid{}, ctx.Err()
 		}
 	}
 	w, h := page.Width, page.Height
@@ -600,11 +637,18 @@ func (s *session) ocrLayout(ctx context.Context, we ocr.WordEngine, page *model.
 		w, h = assets.Width, assets.Height
 	}
 	if w <= 0 || h <= 0 {
-		return nil, 0, 0, nil, errors.New("page size unknown")
+		return ocrLaid{}, errors.New("page size unknown")
 	}
 	pw := ocrWords(words, img.Width, img.Height, w, h)
-	laid, setup := pdflayout.AssembleOCR(page.Number, w, h, pw, assets)
-	return laid.Blocks, w, h, setup, nil
+	// The picture-or-scan decision needs the page image; decide it at most
+	// once here and keep only the answer, not the image.
+	isPicture := false
+	picture := func() bool {
+		isPicture = pdflayout.LooksLikePicture(img.Data)
+		return isPicture
+	}
+	laid, setup := pdflayout.AssembleOCR(page.Number, w, h, pw, assets, s.layoutOpts(), s.base, picture)
+	return ocrLaid{blocks: laid.Blocks, width: w, height: h, setup: setup, words: pw, assets: assets, picture: func() bool { return isPicture }}, nil
 }
 
 var errImagesUnavailable = errors.New("page images unavailable")

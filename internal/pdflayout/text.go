@@ -14,10 +14,32 @@ import (
 // y grows upwards).
 type char struct {
 	text           string
-	x0, y0, x1, y1 float64
+	x0, y0, x1, y1 float64 // ink (tight glyph) box
+	ax0, ax1       float64 // advance box x-range (origin to origin+advance); 0,0 when unknown
+	base           float64 // baseline (glyph origin y) when hasBase
+	hasBase        bool
 	size           float64
 	font           fontInfo
 	group          int // OCR paragraph id (0 = unknown)
+}
+
+func (c char) hasAdvance() bool { return c.ax1 > c.ax0 }
+
+// left and right are the character's horizontal extent as a word processor
+// sees it: the advance box when known (Word positions text by advances),
+// else the ink box.
+func (c char) left() float64 {
+	if c.hasAdvance() {
+		return c.ax0
+	}
+	return c.x0
+}
+
+func (c char) right() float64 {
+	if c.hasAdvance() {
+		return c.ax1
+	}
+	return c.x1
 }
 
 func (c char) width() float64  { return c.x1 - c.x0 }
@@ -63,7 +85,8 @@ func (l textLine) width() float64  { return l.x1 - l.x0 }
 const (
 	segmentGapFactor = 1.0  // horizontal gap that separates columns on a line
 	ocrSegmentGap    = 1.6  // same for OCR words, whose spacing is noisier
-	wordGapFactor    = 0.25 // gap that separates words when no space char exists
+	wordGapFactor    = 0.25 // ink-box gap that separates words when no space char exists (OCR words, chars without advance data)
+	advanceGapFactor = 0.12 // advance-box gap that separates words: letters' advance boxes touch (kerning aside); a tight justified space is ~0.2 em
 	paragraphGap     = 1.6  // vertical gap that separates paragraphs
 	ocrParagraphGap  = 2.2  // same, within one OCR-detected paragraph (1.5/2.0 line spacing)
 	sizeChangeRatio  = 0.15
@@ -132,16 +155,16 @@ func finishLine(ln *textLine, gapFactor float64) {
 		if !c.font.Bold {
 			ln.bold = false
 		}
-		if first || c.x0 < ln.x0 {
-			ln.x0 = c.x0
+		if first || c.left() < ln.x0 {
+			ln.x0 = c.left()
 		}
-		if first || c.x1 > ln.x1 {
-			ln.x1 = c.x1
+		if first || c.right() > ln.x1 {
+			ln.x1 = c.right()
 		}
 		first = false
 	}
 	if first { // only spaces
-		ln.x0, ln.x1 = ln.chars[0].x0, ln.chars[len(ln.chars)-1].x1
+		ln.x0, ln.x1 = ln.chars[0].left(), ln.chars[len(ln.chars)-1].right()
 		ln.bold = false
 	}
 	ln.size = modeSize(sizes)
@@ -196,6 +219,9 @@ func splitSegments(chars []char, size, gapFactor float64) []segment {
 		return r != nil && r.Bold == c.font.Bold && r.Italic == c.font.Italic &&
 			math.Abs(r.Size-c.size) < 0.05 && r.Font == c.font.Family
 	}
+	// A line set with letter-spacing (a tracked title) has the same small gap
+	// after every glyph; those gaps become character spacing, not spaces.
+	tracking := detectTracking(chars, size)
 
 	for i := range chars {
 		c := &chars[i]
@@ -204,13 +230,24 @@ func splitSegments(chars []char, size, gapFactor float64) []segment {
 			prev = c
 			continue
 		}
-		gap := 0.0
+		// Segments split on ink gaps; words are told apart by advance boxes
+		// when the PDF provides them (ink boxes of narrow glyphs such as "1"
+		// or "l" leave gaps as wide as a space).
+		gap, wordGap, wordThreshold := 0.0, 0.0, wordGapFactor
 		if prev != nil {
 			gap = c.x0 - prev.x1
+			wordGap = gap
+			if prev.hasAdvance() && c.hasAdvance() {
+				wordGap, wordThreshold = c.ax0-prev.ax1, advanceGapFactor
+			}
 		}
 		refSize := size
 		if c.size > 0 {
 			refSize = math.Max(size, c.size)
+		}
+		isWordGap := wordGap > wordThreshold*refSize
+		if tracking > 0 {
+			isWordGap = wordGap > trackingWordGap*tracking
 		}
 		if cur == nil || gap > gapFactor*refSize {
 			// New segment (also the first one).
@@ -218,15 +255,15 @@ func splitSegments(chars []char, size, gapFactor float64) []segment {
 				flushRun(cur, run)
 				segs = append(segs, *cur)
 			}
-			cur = &segment{x0: c.x0, x1: c.x1}
+			cur = &segment{x0: c.left(), x1: c.right()}
 			run = nil
 			pendingSpace = false
-		} else if gap > wordGapFactor*refSize {
+		} else if isWordGap {
 			pendingSpace = true
 		}
 		if !sameStyle(run, *c) {
 			flushRun(cur, run)
-			run = &model.Run{Bold: c.font.Bold, Italic: c.font.Italic, Size: c.size, Font: c.font.Family}
+			run = &model.Run{Bold: c.font.Bold, Italic: c.font.Italic, Size: c.size, Font: c.font.Family, Fallback: c.font.Fallback, Spacing: tracking}
 			if pendingSpace && len(cur.runs) > 0 {
 				// Attach the separating space to the previous run.
 				last := &cur.runs[len(cur.runs)-1]
@@ -242,8 +279,8 @@ func splitSegments(chars []char, size, gapFactor float64) []segment {
 			pendingSpace = false
 		}
 		run.Text += c.text
-		if c.x1 > cur.x1 {
-			cur.x1 = c.x1
+		if c.right() > cur.x1 {
+			cur.x1 = c.right()
 		}
 		prev = c
 	}
@@ -265,6 +302,54 @@ var listMarker = regexp.MustCompile(`^(\(?\d{1,3}[.)]|\(?[a-zA-Z][.)]|\(?[ivxlcI
 
 // looksLikeListItem reports whether a line starts with a list or clause
 // marker such as "a)", "(1)", "3.", "2.1" or a bullet.
+const (
+	trackingMin     = 0.04 // em: smaller gaps are kerning noise
+	trackingMax     = 0.7  // em: larger gaps are word spaces, not tracking
+	trackingShare   = 0.7  // share of gaps that must agree for a line to count as tracked
+	trackingWordGap = 2.2  // a gap this many times the tracking is a word space
+)
+
+// detectTracking returns the letter-spacing of a line whose glyphs are all
+// set the same small distance apart (a spaced-out title), in points, or 0
+// for an ordinary line. Gaps are measured between advance boxes.
+func detectTracking(chars []char, size float64) float64 {
+	if size <= 0 {
+		return 0
+	}
+	var gaps []float64
+	var prev *char
+	for i := range chars {
+		c := &chars[i]
+		if c.isSpace() {
+			prev = nil
+			continue
+		}
+		if prev != nil && prev.hasAdvance() && c.hasAdvance() {
+			gaps = append(gaps, c.ax0-prev.ax1)
+		}
+		prev = c
+	}
+	if len(gaps) < 4 {
+		return 0
+	}
+	sorted := append([]float64(nil), gaps...)
+	sort.Float64s(sorted)
+	median := sorted[len(sorted)/2]
+	if median < trackingMin*size || median > trackingMax*size {
+		return 0
+	}
+	agree := 0
+	for _, g := range gaps {
+		if g >= 0.5*median && g <= 1.5*median {
+			agree++
+		}
+	}
+	if float64(agree) < trackingShare*float64(len(gaps)) {
+		return 0
+	}
+	return median
+}
+
 func looksLikeListItem(s string) bool {
 	return listMarker.MatchString(strings.TrimSpace(s))
 }
@@ -272,10 +357,21 @@ func looksLikeListItem(s string) bool {
 // content is the text area of a page in PDF coordinates. tol is the
 // geometric tolerance for edge comparisons (larger for OCR boxes).
 type content struct {
-	left, right float64
+	left, right float64 // the margins positions are relative to (the layout box)
 	top, bottom float64
 	pageW       float64
 	tol         float64
+	// textRight is the page's own rightmost text edge. Alignment is judged
+	// against it, because the layout box may be the document's, which can
+	// be wider than this page's text block.
+	textRight float64
+}
+
+func (c content) rightEdge() float64 {
+	if c.textRight > 0 {
+		return c.textRight
+	}
+	return c.right
 }
 
 func (c content) width() float64  { return c.right - c.left }
@@ -306,7 +402,27 @@ func (p paragraph) bottom() float64 { return p.lines[len(p.lines)-1].y0 }
 
 // baseline estimates a line's baseline from its box (the bottom includes
 // the descender, roughly a fifth of the size).
-func baseline(l textLine) float64 { return l.y0 + 0.2*l.size }
+// baseline is the line's baseline: the median glyph origin when the PDF
+// gave one, else estimated from the ink bottom (which sits a descender
+// lower on lines that have descenders).
+func baseline(l textLine) float64 {
+	var bases []float64
+	for _, c := range l.chars {
+		if c.hasBase && !c.isSpace() {
+			bases = append(bases, c.base)
+		}
+	}
+	if len(bases) == 0 {
+		return l.y0 + 0.2*l.size
+	}
+	sort.Float64s(bases)
+	return bases[len(bases)/2]
+}
+
+// descentRatio is a typical descender depth as a fraction of the font size;
+// Word sets the baseline of an exactly spaced line this far above the
+// bottom of the line box.
+const descentRatio = 0.22
 
 // size returns the paragraph's largest dominant line size.
 func (p paragraph) size() float64 {
@@ -339,11 +455,13 @@ func (p paragraph) leading() float64 {
 }
 
 // wordBox returns the vertical extent the paragraph will occupy in Word when
-// laid out with exact leading: the first line box starts 0.8 leading above
-// its baseline and the last ends 0.2 leading below.
+// laid out with exact leading: each line box ends a descender below its
+// baseline, so the first box starts (leading - descent) above the first
+// baseline and the last ends a descent below the last baseline.
 func (p paragraph) wordBox() (top, bottom float64) {
 	l := p.leading()
-	return baseline(p.lines[0]) + 0.8*l, baseline(p.lines[len(p.lines)-1]) - 0.2*l
+	descent := descentRatio * p.size()
+	return baseline(p.lines[0]) + l - descent, baseline(p.lines[len(p.lines)-1]) - descent
 }
 
 // groupParagraphs merges consecutive lines that read as one wrapped
@@ -433,12 +551,12 @@ func alignment(p paragraph, ct content) model.Alignment {
 		if math.Abs(l.center()-ct.center()) > tol || l.width() > 0.85*ct.width() {
 			centered = false
 		}
-		if l.x1 < ct.right-edge {
+		if l.x1 < ct.rightEdge()-edge {
 			rightAligned = false
 		}
 		minLeft = math.Min(minLeft, l.x0)
 		maxLeft = math.Max(maxLeft, l.x0)
-		if i < len(p.lines)-1 && math.Abs(l.x0-ct.left) <= edge && l.x1 >= ct.right-edge {
+		if i < len(p.lines)-1 && math.Abs(l.x0-ct.left) <= edge && l.x1 >= ct.rightEdge()-edge {
 			justified++
 		}
 	}
@@ -455,7 +573,9 @@ func alignment(p paragraph, ct content) model.Alignment {
 
 // toBlock converts a paragraph into a model block positioned in the content
 // box. bodySize is the page's dominant font size (for heading detection).
-func toBlock(p paragraph, ct content, bodySize float64) model.Block {
+// Unless opts.Reflow is set, every source line stays a line of its own, so
+// the Word page breaks its lines where the PDF did.
+func toBlock(p paragraph, ct content, bodySize float64, opts Options) model.Block {
 	b := model.Block{Kind: model.Paragraph, Align: alignment(p, ct), Leading: p.leading()}
 	px0 := p.x0()
 	if b.Align == model.AlignLeft || b.Align == model.AlignJustify {
@@ -466,6 +586,15 @@ func toBlock(p paragraph, ct content, bodySize float64) model.Block {
 			if fi := p.lines[0].x0 - px0; math.Abs(fi) > 1.5 {
 				b.FirstIndent = fi
 			}
+		}
+	}
+	if b.Align == model.AlignJustify {
+		// Justified text that stops short of the right margin (a quotation
+		// set in from both sides) must not be stretched to the margin. The
+		// measure keeps the same slack as the page's, so a line set to that
+		// exact width still fits.
+		if ir := ct.right - p.x1() - measureSlack; ir > 2 {
+			b.IndentRight = ir
 		}
 	}
 
@@ -486,7 +615,10 @@ func toBlock(p paragraph, ct content, bodySize float64) model.Block {
 			// Wrapped continuation: fold into the same logical line.
 			cur = appendWrapped(cur, l, ct)
 		}
-		if i == len(p.lines)-1 || p.breaks[i] {
+		if i == len(p.lines)-1 || p.breaks[i] || !opts.Reflow {
+			if !opts.Reflow {
+				fitKeptLine(&cur, l.x1-l.x0)
+			}
 			b.Lines = append(b.Lines, cur)
 			started = false
 		}
@@ -511,7 +643,7 @@ func toSegment(s segment, l textLine, ct content) model.Segment {
 	if len(l.segments) > 1 {
 		center := (s.x0 + s.x1) / 2
 		switch {
-		case s.x1 >= ct.right-ct.tol-1 && s.x0 > ct.left+0.3*ct.width():
+		case s.x1 >= ct.rightEdge()-ct.tol-1 && s.x0 > ct.left+0.3*ct.width():
 			seg.FlushRight = true
 		case math.Abs(center-ct.center()) <= 0.02*ct.pageW && s.x0 > ct.left+0.1*ct.width():
 			seg.CenterX = center - ct.left

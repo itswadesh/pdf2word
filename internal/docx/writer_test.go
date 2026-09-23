@@ -116,6 +116,10 @@ func paragraphs(t *testing.T, docXML string) []para {
 				}
 			case "pPr":
 				inPPr = cur != nil
+			case "pageBreakBefore":
+				if cur != nil {
+					cur.PageBreak = true
+				}
 			case "pStyle":
 				if cur != nil {
 					cur.Style = attr(el, "val")
@@ -255,7 +259,9 @@ func TestWrite_ParagraphsStylesAndPageBreaks(t *testing.T) {
 		style, text string
 		brk         bool
 	}
-	wants := []want{{"Heading1", "Title", false}, {"", "Body one", false}, {"Heading2", "Sub", false}, {"", "", true}, {"", "Second", false}}
+	// The second page starts with pageBreakBefore on its first paragraph;
+	// no paragraph exists just to hold a break.
+	wants := []want{{"Heading1", "Title", false}, {"", "Body one", false}, {"Heading2", "Sub", false}, {"", "Second", true}}
 	if len(got) != len(wants) {
 		t.Fatalf("got %d paragraphs %+v, want %d", len(got), got, len(wants))
 	}
@@ -283,8 +289,11 @@ func TestWrite_PageBreakBetweenEveryPageEvenIfEmpty(t *testing.T) {
 	if breaks != 2 {
 		t.Fatalf("got %d page breaks, want 2: %+v", breaks, got)
 	}
-	if got[len(got)-1].PageBreak {
-		t.Fatal("document must not end with a page break")
+	if got[0].PageBreak {
+		t.Fatal("the first page must not start with a page break")
+	}
+	if len(got) != 3 || got[1].Text != "" || !got[1].PageBreak {
+		t.Fatalf("the empty page should be one tiny paragraph carrying the break: %+v", got)
 	}
 }
 
@@ -422,7 +431,7 @@ func TestWrite_TableStructure(t *testing.T) {
 	// A table followed by the end of the body needs a trailing paragraph.
 	end := &model.Document{Pages: []model.Page{{Number: 1, Blocks: []model.Block{richDoc().Pages[0].Blocks[3]}}}}
 	endBody := readPart(t, openZip(t, render(t, end)), "word/document.xml")
-	if !strings.Contains(endBody, "</w:tbl><w:p/><w:sectPr>") {
+	if !strings.Contains(endBody, "</w:tbl><w:p><w:pPr>") || !strings.Contains(endBody, "</w:p><w:sectPr>") {
 		t.Errorf("body ending with a table must get an empty paragraph before sectPr:\n%s", endBody[len(endBody)-200:])
 	}
 }
@@ -557,6 +566,94 @@ func TestWrite_ComplexScriptText(t *testing.T) {
 	doc.ComplexScriptFont = "Kalinga"
 	if s := readPart(t, openZip(t, render(t, doc)), "word/styles.xml"); !strings.Contains(s, `w:cs="Kalinga"`) {
 		t.Error("ComplexScriptFont override not applied")
+	}
+}
+
+// A page with its own setup becomes its own section: the previous page ends
+// with a section break carrying its geometry instead of a page break, and
+// the body's final sectPr describes the last page.
+func TestWrite_SectionsForPagesWithOwnSetup(t *testing.T) {
+	letter := model.PageSetup{Width: 612, Height: 792, MarginTop: 72, MarginRight: 72, MarginBottom: 72, MarginLeft: 72}
+	cover := model.PageSetup{Width: 612, Height: 792, MarginTop: 0, MarginRight: 0, MarginBottom: 0, MarginLeft: 0}
+	doc := &model.Document{Setup: &letter, Pages: []model.Page{
+		{Number: 1, Width: 612, Height: 792, Setup: &cover, Blocks: []model.Block{model.Para("Cover")}},
+		{Number: 2, Width: 612, Height: 792, Blocks: []model.Block{model.Para("Body one")}},
+		{Number: 3, Width: 612, Height: 792, Blocks: []model.Block{model.Para("Body two")}},
+	}}
+	body := readPart(t, openZip(t, render(t, doc)), "word/document.xml")
+	if got := strings.Count(body, "<w:sectPr>"); got != 2 {
+		t.Fatalf("sectPr count = %d, want 2 (cover section + final)", got)
+	}
+	if got := strings.Count(body, `<w:pageBreakBefore/>`); got != 1 {
+		t.Errorf("page breaks = %d, want 1 (between the two body pages only)", got)
+	}
+	if strings.Contains(body, `w:type="page"`) {
+		t.Error("no page-break paragraphs: they cost a line at the top of the next page")
+	}
+	first := body[strings.Index(body, "<w:sectPr>"):]
+	if !strings.Contains(first[:strings.Index(first, "</w:sectPr>")], `w:top="0" w:right="0" w:bottom="0" w:left="0"`) {
+		t.Errorf("first section should carry the cover's zero margins:\n%s", first[:200])
+	}
+	// The section ends inside the cover page's own last paragraph.
+	if !strings.Contains(body, `</w:sectPr></w:pPr><w:r>`) || strings.Count(body, "<w:p>") != 3 {
+		t.Errorf("the section break must live in the last paragraph's pPr, with no extra paragraph:\n%s", body)
+	}
+	last := body[strings.LastIndex(body, "<w:sectPr>"):]
+	if !strings.Contains(last, `w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"`) {
+		t.Errorf("final section should be the document setup:\n%s", last)
+	}
+}
+
+func TestWrite_RightIndentAndHeadingWeight(t *testing.T) {
+	doc := &model.Document{Pages: []model.Page{{Number: 1, Width: 612, Height: 792, Blocks: []model.Block{
+		{Kind: model.Paragraph, Align: model.AlignJustify, IndentLeft: 18, IndentRight: 18, Lines: []model.Line{line(run("Set in from both sides.", false, false, 11, ""))}},
+		{Kind: model.Heading, Level: 1, Lines: []model.Line{line(run("Light heading", false, false, 18, ""))}},
+	}}}}
+	zr := openZip(t, render(t, doc))
+	body := readPart(t, zr, "word/document.xml")
+	if !strings.Contains(body, `<w:ind w:left="360" w:right="360"/>`) {
+		t.Errorf("right indent missing: %s", body[strings.Index(body, "<w:ind"):][:80])
+	}
+	styles := readPart(t, zr, "word/styles.xml")
+	h1 := styles[strings.Index(styles, `w:styleId="Heading1"`):]
+	h1 = h1[:strings.Index(h1, "</w:style>")]
+	if strings.Contains(h1, "<w:b/>") {
+		t.Error("Heading1 style must not force bold; the run carries the source weight")
+	}
+}
+
+// Fonts the PDF used are declared with a standard alternative, so a machine
+// without them substitutes one of similar width; settings ask for current
+// Word layout rules.
+func TestWrite_FontTableAndSettings(t *testing.T) {
+	doc := &model.Document{Pages: []model.Page{{Number: 1, Width: 612, Height: 792, Blocks: []model.Block{
+		{Kind: model.Paragraph, Lines: []model.Line{{Segments: []model.Segment{{Runs: []model.Run{
+			{Text: "Book text ", Size: 11, Font: "Fournier", Fallback: "Times New Roman"},
+			{Text: "and code", Size: 10, Font: "Fira Mono", Fallback: "Courier New"},
+			{Text: " in Arial", Size: 10, Font: "Arial", Fallback: "Arial"},
+		}}}}}},
+	}}}}
+	zr := openZip(t, render(t, doc))
+	fonts := readPart(t, zr, "word/fontTable.xml")
+	for _, want := range []string{
+		`<w:font w:name="Fournier"><w:altName w:val="Times New Roman"/><w:family w:val="roman"/><w:pitch w:val="variable"/></w:font>`,
+		`<w:font w:name="Fira Mono"><w:altName w:val="Courier New"/><w:family w:val="modern"/><w:pitch w:val="fixed"/></w:font>`,
+		`<w:font w:name="Arial"><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font>`,
+	} {
+		if !strings.Contains(fonts, want) {
+			t.Errorf("font table missing %s\n%s", want, fonts)
+		}
+	}
+	settings := readPart(t, zr, "word/settings.xml")
+	if !strings.Contains(settings, `w:name="compatibilityMode"`) || !strings.Contains(settings, `w:val="15"`) {
+		t.Errorf("settings: %s", settings)
+	}
+	rels := readPart(t, zr, "word/_rels/document.xml.rels")
+	ct := readPart(t, zr, "[Content_Types].xml")
+	for _, part := range []string{"settings.xml", "fontTable.xml"} {
+		if !strings.Contains(rels, `Target="`+part+`"`) || !strings.Contains(ct, "/word/"+part) {
+			t.Errorf("%s not wired into rels/content types", part)
+		}
 	}
 }
 

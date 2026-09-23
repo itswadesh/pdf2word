@@ -62,7 +62,7 @@ func main() {
 	if len(lw) > 0 {
 		fmt.Printf("first word in points: %+v\n", lw[0])
 	}
-	laid, setup := pdflayout.AssembleOCR(page, pw, ph, lw, assets)
+	laid, setup := pdflayout.AssembleOCR(page, pw, ph, lw, assets, pdflayout.Options{}, nil, nil)
 	fmt.Printf("assembled: %d blocks, source=%v, setup=%+v\n", len(laid.Blocks), laid.Source, setup)
 	for i, b := range laid.Blocks {
 		if i >= 12 {

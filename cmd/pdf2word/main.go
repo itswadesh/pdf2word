@@ -91,6 +91,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		dpi         = fs.Int("dpi", render.DefaultDPI, "resolution used to render pages before OCR")
 		jobs        = fs.Int("jobs", convert.DefaultJobs(), "pages to OCR at the same time")
 		sparse      = fs.Bool("ocr-sparse", false, "second OCR pass that recovers text inside pictures/coloured boxes (about twice the OCR time)")
+		reflow      = fs.Bool("reflow", false, "join each paragraph's lines so the text reflows when edited (default: keep the PDF's line breaks so pages match the original)")
 		verbose     = fs.Bool("v", false, "verbose: one progress line per page plus diagnostics")
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator (command line)")
 		addr        = fs.String("addr", defaultListenAddr(), "address for the browser page; 0.0.0.0:PORT shares it on the network, 127.0.0.1:PORT keeps it to this computer (env PORT sets the port)")
@@ -119,6 +120,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		DPI:           *dpi,
 		Jobs:          *jobs,
 		SparsePass:    *sparse,
+		Reflow:        *reflow,
 		Lang:          *lang,
 		TesseractPath: *tess,
 	}
