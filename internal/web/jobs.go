@@ -36,6 +36,7 @@ type JobView struct {
 	Filename  string      `json:"filename"`
 	Size      int64       `json:"size"`
 	State     State       `json:"state"`
+	Phase     string      `json:"phase"` // "reading" while the PDF is read, "" while pages are resolved
 	Done      int         `json:"done"`
 	Total     int         `json:"total"`
 	Page      int         `json:"page"`
@@ -97,6 +98,7 @@ func (j *job) view(now time.Time) JobView {
 		Filename: j.filename,
 		Size:     j.size,
 		State:    j.state,
+		Phase:    j.progress.Phase,
 		Done:     j.progress.Done,
 		Total:    j.progress.Total,
 		Page:     j.progress.Page,
@@ -128,7 +130,7 @@ func (j *job) view(now time.Time) JobView {
 
 func stageLabel(p convert.Progress) string {
 	switch {
-	case p.Total == 0:
+	case p.Total == 0 || p.Phase == convert.PhaseReading:
 		return ""
 	case p.Source == model.SourceOCR:
 		return "ocr"

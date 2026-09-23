@@ -66,21 +66,30 @@ func Extract(path string) (*model.Document, []Warning, error) {
 
 // ExtractAll reads every page and also returns the assets of text-less pages.
 func ExtractAll(path string) (*Result, error) {
+	return ExtractAllProgress(path, nil)
+}
+
+// ExtractAllProgress is ExtractAll with a callback invoked after each page
+// (page is 1-based) so long documents can show progress while being read.
+func ExtractAllProgress(path string, progress func(page, total int)) (*Result, error) {
 	d, err := pdfiumx.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer d.Close()
-	return extractDoc(d)
+	return extractDoc(d, progress)
 }
 
-func extractDoc(d *pdfiumx.Doc) (*Result, error) {
+func extractDoc(d *pdfiumx.Doc, progress func(page, total int)) (*Result, error) {
 	d.Mu.Lock()
 	defer d.Mu.Unlock()
 
 	res := &Result{Doc: &model.Document{}, Assets: map[int]*PageAssets{}}
 	var setup *model.PageSetup
 	for n := 1; n <= d.Pages; n++ {
+		if progress != nil && n > 1 {
+			progress(n-1, d.Pages)
+		}
 		page, margins, assets, err := layoutPage(d, n)
 		if err != nil {
 			res.Warnings = append(res.Warnings, Warning{Page: n, Msg: err.Error()})
@@ -91,6 +100,9 @@ func extractDoc(d *pdfiumx.Doc) (*Result, error) {
 			res.Assets[n] = assets
 		}
 		setup = mergeSetup(setup, margins)
+	}
+	if progress != nil && d.Pages > 0 {
+		progress(d.Pages, d.Pages)
 	}
 	res.Doc.Setup = setup
 	return res, nil

@@ -221,12 +221,21 @@ func TestBuildDocument_ImageSourceErrorBecomesWarning(t *testing.T) {
 }
 
 func TestBuildDocument_ReportsProgressPerPage(t *testing.T) {
-	var got []Progress
-	record := func(p Progress) { got = append(got, p) }
+	var got, reading []Progress
+	record := func(p Progress) {
+		if p.Phase == PhaseReading {
+			reading = append(reading, p)
+			return
+		}
+		got = append(got, p)
+	}
 
 	_, _, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OnProgress: record, OpenImages: opener(&fakeImages{})})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(reading) == 0 || reading[len(reading)-1].Done != 2 || reading[len(reading)-1].Total != 2 {
+		t.Fatalf("reading phase should report both pages: %+v", reading)
 	}
 	if len(got) != 2 {
 		t.Fatalf("got %d progress events, want 2: %+v", len(got), got)
@@ -245,6 +254,31 @@ func TestBuildDocument_ReportsProgressPerPage(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != (Progress{Done: 1, Total: 1, Page: 1, Source: model.SourceOCR, OCR: true}) {
 		t.Errorf("scanned progress = %+v", got)
+	}
+}
+
+func TestBuildDocument_ParallelProgressStaysInPhase(t *testing.T) {
+	var events []Progress
+	_, _, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{
+		OCR: OCRForce, Jobs: 2, Engine: &slowEngine{delay: 20 * time.Millisecond},
+		OpenImages: func(string) (ImageSource, error) { return pageTaggedImages{}, nil },
+		OnProgress: func(p Progress) { events = append(events, p) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawReading := false
+	for i, e := range events {
+		if e.Phase == PhaseReading {
+			sawReading = true
+			continue
+		}
+		if sawReading && i > 0 && events[i-1].Phase == PhaseReading && e.Done != 1 {
+			t.Errorf("resolution phase must restart its count at 1, got %+v", e)
+		}
+	}
+	if !sawReading {
+		t.Error("no reading-phase events")
 	}
 }
 
@@ -341,7 +375,11 @@ func TestBuildDocument_OCRRunsPagesInParallelAndKeepsOrder(t *testing.T) {
 		Jobs:       2,
 		Engine:     eng,
 		OpenImages: func(string) (ImageSource, error) { return pageTaggedImages{}, nil },
-		OnProgress: func(p Progress) { events = append(events, p) },
+		OnProgress: func(p Progress) {
+			if p.Phase == "" {
+				events = append(events, p)
+			}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

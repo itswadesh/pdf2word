@@ -76,15 +76,21 @@ type ImageSource interface {
 	Close() error
 }
 
-// Progress is reported after each page has been resolved. Pages that need
-// OCR finish in parallel, so Page is not necessarily increasing; Done is.
+// Progress is reported while a document is processed. During the reading
+// phase (Phase == PhaseReading) Done counts pages whose layout has been
+// read; afterwards (Phase == "") it counts pages finally resolved. Pages
+// that need OCR finish in parallel, so Page is not necessarily increasing.
 type Progress struct {
-	Done   int // pages finished so far (1..Total)
+	Phase  string // PhaseReading while the PDF is being read; "" afterwards
+	Done   int    // pages finished so far (1..Total)
 	Total  int
 	Page   int              // 1-based page just finished
-	Source model.PageSource // how the page's text was obtained
+	Source model.PageSource // how the page's text was obtained (resolution phase)
 	OCR    bool             // true when OCR was attempted on this page
 }
+
+// PhaseReading marks progress events from the initial read of the PDF.
+const PhaseReading = "reading"
 
 // Options configures a conversion. The zero value is usable.
 type Options struct {
@@ -191,7 +197,9 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 	var rep Report
 
 	opts.Logf("reading text layer of %s", in)
-	doc, assets, err := extractText(in, &rep, opts.Logf)
+	doc, assets, err := extractText(in, &rep, opts.Logf, func(page, total int) {
+		opts.OnProgress(Progress{Phase: PhaseReading, Done: page, Total: total, Page: page})
+	})
 	if err != nil {
 		return nil, rep, err
 	}
@@ -250,8 +258,8 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 // extractText reads the text layer with layout via PDFium and falls back to
 // the plain extractor if PDFium cannot open the file. The returned assets
 // (rulings, images, size of text-less pages) let OCR output be laid out too.
-func extractText(in string, rep *Report, logf func(string, ...any)) (*model.Document, map[int]*pdflayout.PageAssets, error) {
-	res, err := pdflayout.ExtractAll(in)
+func extractText(in string, rep *Report, logf func(string, ...any), progress func(page, total int)) (*model.Document, map[int]*pdflayout.PageAssets, error) {
+	res, err := pdflayout.ExtractAllProgress(in, progress)
 	if err == nil {
 		for _, w := range res.Warnings {
 			rep.warnf("%s", w)

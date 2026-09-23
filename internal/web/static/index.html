@@ -161,6 +161,7 @@
   }
   .count small { font-size: 26px; font-weight: 400; color: var(--ink-soft-on-paper); margin-left: 4px; }
   .sheet-status { font-size: 17px; }
+  .sheet-eta { font-size: 15px; color: var(--ink-soft-on-paper); min-height: 1.4em; }
   .sheet-file {
     font-size: 14px; color: var(--ink-soft-on-paper);
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -251,6 +252,7 @@
       <span class="sheet-content sheet-busy hidden" id="sheet-busy" aria-live="polite">
         <span class="count" id="count"></span>
         <span class="sheet-status" id="sheet-status"></span>
+        <span class="sheet-eta" id="sheet-eta"></span>
         <span class="sheet-file" id="sheet-file"></span>
       </span>
     </button>
@@ -266,10 +268,11 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const sheet = $('sheet'), fill = $('fill'), sheetIdle = $('sheet-idle'), sheetBusy = $('sheet-busy');
-  const count = $('count'), sheetStatus = $('sheet-status'), sheetFile = $('sheet-file');
+  const count = $('count'), sheetStatus = $('sheet-status'), sheetEta = $('sheet-eta'), sheetFile = $('sheet-file');
   const fileInput = $('file'), filesList = $('files');
 
-  // Local rows: server jobs keyed by id, plus uploads that have no id yet.
+  // Rows for files dropped on this page: server jobs keyed by id, plus
+  // uploads that have no id yet. Jobs from earlier sessions are not shown.
   const rows = new Map();      // key -> { el, view, downloaded, notesOpen }
   let uploadSeq = 0;
   let pollTimer = null;
@@ -290,7 +293,17 @@
   function isPDF(f) {
     return /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
   }
+  // Finished rows from an earlier drop make way for the new batch.
+  function clearFinished() {
+    for (const [key, row] of Array.from(rows.entries())) {
+      if (isTerminal(row.view.state)) {
+        row.el.remove();
+        rows.delete(key);
+      }
+    }
+  }
   function queueFiles(list) {
+    clearFinished();
     const skipped = [];
     for (const f of Array.from(list)) {
       if (isPDF(f)) upload(f); else skipped.push(f.name);
@@ -347,17 +360,11 @@
       const res = await fetch('/api/jobs');
       if (res.ok) {
         const views = await res.json();
-        // The server lists newest first; rows are prepended, so walk oldest
-        // first to keep the newest file at the top.
-        for (const v of views.slice().reverse()) {
-          let row = rows.get(v.id);
-          if (!row) {
-            row = addRow(v.id, v);
-            // Not uploaded from this page (e.g. after a reload): offer the
-            // file, but do not start a download on its own.
-            row.downloaded = true;
-          }
-          applyView(row, v);
+        // Only files dropped on this page are shown; older jobs the server
+        // still remembers stay hidden.
+        for (const v of views) {
+          const row = rows.get(v.id);
+          if (row) applyView(row, v);
         }
       }
     } catch (_) { /* server may be shutting down; keep trying */ }
@@ -383,6 +390,26 @@
     return row;
   }
 
+  // Overall completion in [0,1]: reading the PDF is the first third, turning
+  // pages into Word content the remaining two thirds.
+  function overall(v) {
+    if (v.state === 'done') return 1;
+    if (v.state !== 'running' || !v.total) return 0;
+    const frac = Math.min(1, v.done / v.total);
+    return v.phase === 'reading' ? frac * 0.33 : 0.33 + frac * 0.67;
+  }
+  // Time left, estimated from elapsed time and completion; null when unknown.
+  function remaining(v) {
+    const f = overall(v);
+    if (v.state !== 'running' || f < 0.05 || !v.elapsedMs) return null;
+    return v.elapsedMs * (1 - f) / f;
+  }
+  function phaseText(v) {
+    if (!v.total) return 'Opening the PDF';
+    if (v.phase === 'reading') return 'Reading pages';
+    return v.stage === 'ocr' ? 'Recognising text' : 'Converting pages';
+  }
+
   function applyView(row, v) {
     row.view = v;
     const el = row.el;
@@ -392,9 +419,9 @@
     el.querySelector('.file-status').textContent = statusText(v);
 
     const bar = el.querySelector('.bar');
-    const pct = v.total > 0 ? Math.round(100 * v.done / v.total) : (v.state === 'done' ? 100 : 0);
-    bar.setAttribute('aria-valuemax', v.total || 100);
-    bar.setAttribute('aria-valuenow', v.total ? v.done : pct);
+    const pct = Math.round(100 * overall(v));
+    bar.setAttribute('aria-valuemax', 100);
+    bar.setAttribute('aria-valuenow', pct);
     bar.firstElementChild.style.width = pct + '%';
 
     const actions = el.querySelector('.file-actions');
@@ -438,9 +465,13 @@
     switch (v.state) {
       case 'uploading': return 'Uploading';
       case 'queued': return 'Waiting for its turn';
-      case 'running':
-        if (!v.total) return 'Reading the text layer';
-        return 'Reading page ' + v.page + ' of ' + v.total + (v.stage === 'ocr' ? ' with OCR' : '');
+      case 'running': {
+        if (!v.total) return 'Opening the PDF';
+        let s = phaseText(v) + ': page ' + v.done + ' of ' + v.total + ' (' + Math.round(100 * overall(v)) + '%)';
+        const left = remaining(v);
+        if (left !== null) s += ', about ' + fmtDuration(left) + ' left';
+        return s;
+      }
       case 'done': {
         const r = v.report || {};
         let s = 'Done: ' + plural(r.pages, 'page');
@@ -467,6 +498,7 @@
       sheetIdle.classList.remove('hidden');
       fill.style.height = '0';
       $('band').style.top = '0';
+      document.title = 'PDF to Word Converter';
       return;
     }
     sheet.classList.add('busy');
@@ -475,18 +507,23 @@
     sheetFile.textContent = active.filename;
     if (active.state === 'running' && active.total > 0) {
       sheet.classList.remove('indeterminate');
-      const pct = 100 * active.done / active.total;
+      const pct = 100 * overall(active);
       fill.style.height = pct + '%';
       $('band').style.top = pct + '%';
       count.innerHTML = '';
-      count.append(String(active.done));
-      const small = document.createElement('small'); small.textContent = '/ ' + active.total; count.appendChild(small);
-      sheetStatus.textContent = active.stage === 'ocr' ? 'Reading with OCR' : 'Reading';
+      count.append(String(Math.round(pct)));
+      const small = document.createElement('small'); small.textContent = '%'; count.appendChild(small);
+      sheetStatus.textContent = phaseText(active) + ' · page ' + active.done + ' of ' + active.total;
+      const left = remaining(active);
+      sheetEta.textContent = left === null ? '' : 'about ' + fmtDuration(left) + ' left';
+      document.title = Math.round(pct) + '% – PDF to Word Converter';
     } else {
       sheet.classList.add('indeterminate');
       fill.style.height = '0';
       count.textContent = '';
-      sheetStatus.textContent = active.state === 'uploading' ? 'Uploading' : (active.state === 'queued' ? 'Waiting' : 'Reading the text layer');
+      sheetStatus.textContent = active.state === 'uploading' ? 'Uploading' : (active.state === 'queued' ? 'Waiting' : 'Opening the PDF');
+      sheetEta.textContent = '';
+      document.title = 'PDF to Word Converter';
     }
   }
 

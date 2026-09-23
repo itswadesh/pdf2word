@@ -105,6 +105,8 @@ func (ind *indicator) redraw(line string) {
 
 func sourceLabel(p convert.Progress) string {
 	switch {
+	case p.Phase == convert.PhaseReading:
+		return "reading"
 	case p.Source == model.SourceOCR:
 		return "ocr"
 	case p.Source == model.SourceText:

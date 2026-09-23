@@ -28,7 +28,6 @@ func Probe(path string, page int) (ProbeInfo, error) {
 	if err != nil {
 		return info, err
 	}
-	_ = tolText
 	info.Width, info.Height = w, h
 	chars, err := readChars(d, page)
 	if err != nil {

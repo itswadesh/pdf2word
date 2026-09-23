@@ -144,6 +144,13 @@ func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 	if w < ruleMinPiece && h < ruleMinPiece {
 		return nil // dots and specks
 	}
+	thin := w <= ruleMaxThick || h <= ruleMaxThick
+	if !thin && (w < 20 || h < 6) {
+		// Neither a thin rule nor big enough to be a table frame: a glyph
+		// drawn as an outline. Decided from the bounds alone, before any
+		// further PDFium calls, because outline PDFs have thousands per page.
+		return nil
+	}
 
 	dm, err := inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj})
 	if err != nil {
@@ -166,6 +173,13 @@ func pathRules(d *pdfiumx.Doc, obj references.FPDF_PAGEOBJECT) []rule {
 	}
 	if w <= ruleMaxThick && h >= minLen {
 		return []rule{{vertical: true, pos: (x0 + x1) / 2, from: y0, to: y1, color: col, stroke: dm.Stroke}}
+	}
+
+	// Filled shapes the size of a glyph are letters drawn as outlines; only
+	// larger filled paths can be table frames. Skipping them here avoids
+	// reading thousands of segment lists per page on outline PDFs.
+	if !dm.Stroke && (w < 20 || h < 6) {
+		return nil
 	}
 
 	// Otherwise look at the segments. Their points are in the path's own
