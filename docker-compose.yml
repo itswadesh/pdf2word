@@ -14,7 +14,10 @@ services:
       # One OpenMP thread per Tesseract process; pages are OCR'd in parallel
       # processes instead (see -jobs).
       OMP_THREAD_LIMIT: "1"
-    command: ["-addr", "0.0.0.0:9090", "-no-browser", "-jobs", "4"]
+      PORT: "9090"
+      # OCR languages (English and Odia are in the image).
+      PDF2WORD_LANG: "eng+ori"
+    command: ["-no-browser", "-jobs", "4"]
     # Uploads and results live in the container's temp directory and are
     # removed an hour after a conversion finishes; nothing needs a volume.
     tmpfs:

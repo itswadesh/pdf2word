@@ -17,7 +17,8 @@ import (
 
 // Version identifies the bundled Tesseract build. Bump it whenever the files
 // under win64/ change so that existing installs are unpacked afresh.
-const Version = "5.4.0.20240606"
+// "-2": Odia (ori) language data added.
+const Version = "5.4.0.20240606-2"
 
 //go:embed win64
 var files embed.FS

@@ -43,6 +43,22 @@ var version = "dev"
 // port 9090 on every interface, so other computers on the network can use it.
 const defaultAddr = "0.0.0.0:9090"
 
+// defaultListenAddr honours the PORT environment variable that Cloud Run,
+// Fly, Render and similar platforms hand to the process.
+func defaultListenAddr() string {
+	if p := strings.TrimSpace(os.Getenv("PORT")); p != "" {
+		return "0.0.0.0:" + p
+	}
+	return defaultAddr
+}
+
+func envOr(name, def string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
+	}
+	return def
+}
+
 const usageText = `pdf2word converts PDF files to Word (.docx) documents.
 
 Usage:
@@ -69,14 +85,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var (
 		outFlag     = fs.String("o", "", "output .docx path (default: input name with .docx)")
 		ocrFlag     = fs.String("ocr", "auto", "OCR mode: auto, off or force")
-		lang        = fs.String("lang", "eng", "Tesseract language(s), e.g. eng or eng+deu")
+		lang        = fs.String("lang", envOr("PDF2WORD_LANG", "eng"), "Tesseract language(s), e.g. eng, ori or eng+ori (env PDF2WORD_LANG)")
 		tess        = fs.String("tesseract", "", "path to the tesseract executable (default: auto-detect)")
 		minText     = fs.Int("min-text", convert.DefaultMinTextChars, "text-layer characters below which a page counts as scanned")
 		dpi         = fs.Int("dpi", render.DefaultDPI, "resolution used to render pages before OCR")
 		jobs        = fs.Int("jobs", convert.DefaultJobs(), "pages to OCR at the same time")
+		sparse      = fs.Bool("ocr-sparse", false, "second OCR pass that recovers text inside pictures/coloured boxes (about twice the OCR time)")
 		verbose     = fs.Bool("v", false, "verbose: one progress line per page plus diagnostics")
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator (command line)")
-		addr        = fs.String("addr", defaultAddr, "address for the browser page; 0.0.0.0:PORT shares it on the network, 127.0.0.1:PORT keeps it to this computer")
+		addr        = fs.String("addr", defaultListenAddr(), "address for the browser page; 0.0.0.0:PORT shares it on the network, 127.0.0.1:PORT keeps it to this computer (env PORT sets the port)")
 		noBrowser   = fs.Bool("no-browser", false, "do not open the browser automatically")
 		noAutoExit  = fs.Bool("no-auto-exit", false, "keep running after the browser page is closed (always on when shared on the network)")
 		showVersion = fs.Bool("version", false, "print version and exit")
@@ -100,6 +117,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		MinTextChars:  *minText,
 		DPI:           *dpi,
 		Jobs:          *jobs,
+		SparsePass:    *sparse,
 		Lang:          *lang,
 		TesseractPath: *tess,
 	}

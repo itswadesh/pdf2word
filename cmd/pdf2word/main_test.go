@@ -137,6 +137,18 @@ func TestDefaultAddrIsSharedOnPort9090(t *testing.T) {
 	if !listensRemotely(defaultAddr) {
 		t.Fatal("the default address must be reachable from the network")
 	}
+	t.Setenv("PORT", "")
+	if got := defaultListenAddr(); got != defaultAddr {
+		t.Errorf("without PORT: %q", got)
+	}
+	t.Setenv("PORT", "8080")
+	if got := defaultListenAddr(); got != "0.0.0.0:8080" {
+		t.Errorf("with PORT=8080: %q", got)
+	}
+	t.Setenv("PDF2WORD_LANG", "ori")
+	if got := envOr("PDF2WORD_LANG", "eng"); got != "ori" {
+		t.Errorf("PDF2WORD_LANG: %q", got)
+	}
 }
 
 func TestListensRemotely(t *testing.T) {

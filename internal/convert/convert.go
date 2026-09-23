@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
 
 	"pdf2word/internal/docx"
 	"pdf2word/internal/model"
@@ -99,6 +100,10 @@ type Options struct {
 	Lang         string // Tesseract language(s); empty means ocr.DefaultLang
 	DPI          int    // resolution for rendering pages before OCR; default render.DefaultDPI
 	Jobs         int    // pages OCR'd concurrently; default DefaultJobs()
+	// SparsePass runs a second OCR pass in sparse mode and adds the words it
+	// finds where the first pass found nothing (headings in coloured boxes
+	// that layout analysis files as pictures). Roughly doubles OCR time.
+	SparsePass bool
 
 	// TesseractPath is an explicit tesseract executable; empty means
 	// auto-detect (see ocr.Find).
@@ -246,6 +251,9 @@ func BuildDocument(ctx context.Context, in string, opts Options) (*model.Documen
 	if s.ocrSetup != nil {
 		doc.Setup = pdflayout.MergeSetup(doc.Setup, s.ocrSetup)
 	}
+	if s.langWarning != "" {
+		rep.warnf("%s", s.langWarning)
+	}
 	if w := s.imagesOpenWarning(); w != "" {
 		rep.warnf("%s", w)
 	}
@@ -288,9 +296,10 @@ type session struct {
 	images    ImageSource
 	imagesErr error // set once if the image source could not be opened
 
-	engOnce sync.Once
-	engine  ocr.Engine
-	engErr  error
+	engOnce     sync.Once
+	engine      ocr.Engine
+	engErr      error
+	langWarning string // set when requested OCR languages were missing
 
 	imagesFailedPages int
 	ocrSetup          *model.PageSetup // page setup derived from OCR'd pages
@@ -536,12 +545,55 @@ func ocrWords(words []ocr.Word, imgW, imgH int, pageW, pageH float64) []pdflayou
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
+// sparseAdditions returns the words of a sparse pass that the normal pass
+// missed: confident, at least two letters long, and not overlapping any word
+// already found. Sparse mode has no paragraph structure worth keeping, so
+// only these gap-fillers are taken.
+func sparseAdditions(found, sparse []ocr.Word) []ocr.Word {
+	var out []ocr.Word
+	for _, w := range sparse {
+		if w.Conf < 60 || letters(w.Text) < 2 {
+			continue
+		}
+		cx, cy := w.Left+w.Width/2, w.Top+w.Height/2
+		covered := false
+		for _, f := range found {
+			if cx >= f.Left-f.Height && cx <= f.Left+f.Width+f.Height && cy >= f.Top-f.Height/2 && cy <= f.Top+f.Height+f.Height/2 {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			w.Block += 900000 // keep sparse words in their own paragraphs
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+func letters(s string) int {
+	n := 0
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			n++
+		}
+	}
+	return n
+}
+
 // ocrLayout recognises words with their boxes on a rendered page image,
 // converts the boxes to page points and assembles a laid-out page.
 func (s *session) ocrLayout(ctx context.Context, we ocr.WordEngine, page *model.Page, img pdfimage.Image, assets *pdflayout.PageAssets) ([]model.Block, float64, float64, *model.PageSetup, error) {
 	words, err := we.RecognizeWords(ctx, img.Data, img.Ext)
 	if err != nil {
 		return nil, 0, 0, nil, err
+	}
+	if se, ok := we.(ocr.SparseWordEngine); ok && s.opts.SparsePass {
+		if extra, err := se.RecognizeWordsSparse(ctx, img.Data, img.Ext); err == nil {
+			words = append(words, sparseAdditions(words, extra)...)
+		} else if ctx.Err() != nil {
+			return nil, 0, 0, nil, ctx.Err()
+		}
 	}
 	w, h := page.Width, page.Height
 	if assets != nil && assets.Width > 0 {
@@ -594,7 +646,7 @@ func (s *session) ensureEngine(ctx context.Context) (ocr.Engine, error) {
 			s.engErr = err
 			return
 		}
-		t := &ocr.Tesseract{Path: path, Lang: s.opts.Lang}
+		t := &ocr.Tesseract{Path: path, Lang: orDefault(s.opts.Lang, ocr.DefaultLang)}
 		if s.opts.Jobs > 1 {
 			t.Threads = 1 // one process per page; do not also multithread each
 		}
@@ -602,7 +654,20 @@ func (s *session) ensureEngine(ctx context.Context) (ocr.Engine, error) {
 			s.engErr = fmt.Errorf("tesseract is not runnable: %w", err)
 			return
 		}
-		s.opts.Logf("using %s (lang %s, %d parallel page(s))", path, orDefault(s.opts.Lang, ocr.DefaultLang), s.opts.Jobs)
+		// Keep only the languages this installation actually has, so a
+		// request like eng+ori degrades gracefully where ori is missing.
+		if langs, err := t.Languages(ctx); err == nil && len(langs) > 0 {
+			keep, dropped := ocr.SelectLanguages(t.Lang, langs)
+			if keep == "" {
+				s.engErr = fmt.Errorf("tesseract at %s has none of the languages %q (available: %s)", path, t.Lang, strings.Join(langs, ", "))
+				return
+			}
+			if len(dropped) > 0 {
+				s.langWarning = fmt.Sprintf("OCR language(s) %s not installed for %s; using %s", strings.Join(dropped, ", "), path, keep)
+				t.Lang = keep
+			}
+		}
+		s.opts.Logf("using %s (lang %s, %d parallel page(s))", path, t.Lang, s.opts.Jobs)
 		s.engine = t
 	})
 	return s.engine, s.engErr

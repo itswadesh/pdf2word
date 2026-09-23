@@ -533,6 +533,33 @@ func TestWrite_TableGridSpanAndBorderColor(t *testing.T) {
 	}
 }
 
+// Odia (and every other complex script) needs the complex-script font and
+// size twins, or Word shows boxes. Ported from the original pdf2word tests.
+func TestWrite_ComplexScriptText(t *testing.T) {
+	doc := &model.Document{Pages: []model.Page{{Number: 1, Blocks: []model.Block{
+		{Kind: model.Heading, Level: 1, Align: model.AlignCenter, Lines: []model.Line{line(run("ଓଡ଼ିଆ ଭାଷା & ସାହିତ୍ୟ", true, false, 24, "Times New Roman"))}},
+	}}}}
+	zr := openZip(t, render(t, doc))
+	body := readPart(t, zr, "word/document.xml")
+	if !strings.Contains(body, "ଓଡ଼ିଆ ଭାଷା &amp; ସାହିତ୍ୟ") {
+		t.Error("Odia text not present or ampersand not escaped")
+	}
+	for _, want := range []string{`<w:b/><w:bCs/>`, `<w:sz w:val="48"/><w:szCs w:val="48"/>`, `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("run properties missing %s", want)
+		}
+	}
+	styles := readPart(t, zr, "word/styles.xml")
+	if !strings.Contains(styles, `w:cs="Nirmala UI"`) {
+		t.Error("complex-script font missing from document defaults; Odia would render as boxes")
+	}
+
+	doc.ComplexScriptFont = "Kalinga"
+	if s := readPart(t, openZip(t, render(t, doc)), "word/styles.xml"); !strings.Contains(s, `w:cs="Kalinga"`) {
+		t.Error("ComplexScriptFont override not applied")
+	}
+}
+
 func TestWrite_PlainPagesKeepStyleSpacing(t *testing.T) {
 	// Pages without layout information (OCR, fallback) must not get explicit
 	// zero spacing, so the Normal style's paragraph spacing still applies.

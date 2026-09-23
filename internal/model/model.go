@@ -255,4 +255,7 @@ type Document struct {
 	// Setup, when set, drives the Word page size and margins; otherwise
 	// US Letter with one-inch margins is used.
 	Setup *PageSetup
+	// ComplexScriptFont is the font Word uses for Indic, Arabic and other
+	// complex scripts; "" selects the writer's default.
+	ComplexScriptFont string
 }

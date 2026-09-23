@@ -513,3 +513,13 @@ pipeline. Phase 2 feeds OCR output through the same assembly:
 | Tesseract ≥ 4 (external binary) | OCR at runtime, optional | Apache-2.0 |
 
 Go 1.27, no cgo.
+
+## 15. Merge with the original pdf2word (2026-09-23) — implemented
+
+The earlier `itswadesh/pdf2word` (poppler + hOCR, Odia default) is absorbed. Ported behaviour:
+
+- **Odia built in.** `ori.traineddata` ships in the Windows bundle and `tesseract-ocr-ori` in the Docker image. `-lang` (or `PDF2WORD_LANG`) accepts `ori`, `eng+ori`, etc.
+- **Language fallback.** Before OCR the session asks Tesseract for its installed languages, keeps only those requested that exist, and warns once about the rest. If none exist the conversion fails with the available list.
+- **Complex-script output.** The document defaults carry `w:cs` = `Document.ComplexScriptFont` (default Nirmala UI) and `w:bidi="or-IN"`; every run keeps `szCs`/`bCs`/`iCs` twins; per-run fonts set only `ascii`/`hAnsi` so the complex-script font is never overridden by a Latin PDF font.
+- **Sparse pass** (`-ocr-sparse`, `Options.SparsePass`). A second Tesseract run with `--psm 11` on the same page image; words with confidence ≥ 60, ≥ 2 letters, whose centre is not inside (or within one word-height of) a word from the normal pass are appended in their own paragraph groups. Off by default (doubles OCR time).
+- **`PORT`** overrides the listen port when `-addr` is not given; the container listens on `0.0.0.0:$PORT`.

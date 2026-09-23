@@ -96,7 +96,23 @@ type WordEngine interface {
 // -c variable rather than the "tsv" config file, which minimal installs
 // (including the bundled runtime) do not ship.
 func (t *Tesseract) RecognizeWords(ctx context.Context, img []byte, ext string) ([]Word, error) {
-	out, err := t.run(ctx, img, ext, "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0")
+	return t.recognizeWords(ctx, img, ext, 0)
+}
+
+// RecognizeWordsSparse is a second pass in Tesseract's sparse mode (page
+// segmentation 11): it reads text anywhere, including inside regions the
+// normal layout analysis filed as pictures, such as headings printed in
+// coloured boxes. It implements SparseWordEngine.
+func (t *Tesseract) RecognizeWordsSparse(ctx context.Context, img []byte, ext string) ([]Word, error) {
+	return t.recognizeWords(ctx, img, ext, 11)
+}
+
+func (t *Tesseract) recognizeWords(ctx context.Context, img []byte, ext string, psm int) ([]Word, error) {
+	args := []string{"-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"}
+	if psm > 0 {
+		args = append(args, "--psm", strconv.Itoa(psm))
+	}
+	out, err := t.run(ctx, img, ext, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +121,52 @@ func (t *Tesseract) RecognizeWords(ctx context.Context, img []byte, ext string) 
 		return nil, fmt.Errorf("tesseract did not produce TSV output")
 	}
 	return words, nil
+}
+
+// SparseWordEngine is implemented by engines that can run a sparse-text
+// pass in addition to the normal one.
+type SparseWordEngine interface {
+	WordEngine
+	RecognizeWordsSparse(ctx context.Context, img []byte, ext string) ([]Word, error)
+}
+
+// Languages returns the language codes the installation has data for.
+func (t *Tesseract) Languages(ctx context.Context) ([]string, error) {
+	out, err := exec.CommandContext(ctx, t.path(), "--list-langs").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s --list-langs: %w: %s", t.path(), err, firstLine(out))
+	}
+	var langs []string
+	for _, line := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, ":") || strings.Contains(line, " ") {
+			continue // header ("List of available languages in ...:")
+		}
+		langs = append(langs, line)
+	}
+	return langs, nil
+}
+
+// SelectLanguages keeps the requested "+"-joined languages that are
+// available, returning the usable string and the ones that were dropped.
+func SelectLanguages(requested string, available []string) (string, []string) {
+	have := map[string]bool{}
+	for _, l := range available {
+		have[l] = true
+	}
+	var keep, dropped []string
+	for _, l := range strings.Split(requested, "+") {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			continue
+		}
+		if have[l] {
+			keep = append(keep, l)
+		} else {
+			dropped = append(dropped, l)
+		}
+	}
+	return strings.Join(keep, "+"), dropped
 }
 
 // run executes tesseract on img with the given output config (e.g. "tsv"

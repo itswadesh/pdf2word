@@ -10,6 +10,8 @@ noted below.
   https://github.com/tesseract-ocr/tesseract
 - `tessdata/eng.traineddata`: Apache License 2.0, from tessdata_fast
   https://github.com/tesseract-ocr/tessdata_fast
+- `tessdata/ori.traineddata` (Odia): Apache License 2.0, from tessdata_fast
+  https://github.com/tesseract-ocr/tessdata_fast/raw/main/ori.traineddata
 - Runtime libraries shipped with that build (MSYS2/MinGW-w64 packages):
   Leptonica (BSD-2-Clause), libjpeg (IJG), libpng (PNG Reference Library
   License), libtiff (libtiff License), libwebp and libsharpyuv (BSD-3-Clause),

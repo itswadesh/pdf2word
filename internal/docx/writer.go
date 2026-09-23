@@ -53,11 +53,15 @@ func Write(w io.Writer, doc *model.Document) error {
 		}
 	}
 
+	csFont := doc.ComplexScriptFont
+	if csFont == "" {
+		csFont = DefaultComplexScriptFont
+	}
 	parts := []struct{ name, body string }{
 		{"[Content_Types].xml", contentTypesXML(extList)},
 		{"_rels/.rels", rootRelsXML},
 		{"word/document.xml", body},
-		{"word/styles.xml", stylesXML},
+		{"word/styles.xml", fmt.Sprintf(stylesXMLTemplate, escapeAttr(csFont))},
 		{"word/_rels/document.xml.rels", documentRelsXML(dw.images)},
 		{"docProps/core.xml", fmt.Sprintf(coreXMLTemplate, stamp, stamp)},
 		{"docProps/app.xml", appXML},
@@ -301,8 +305,10 @@ func (dw *docWriter) writeRun(r model.Run) {
 	sb.WriteString("<w:r>")
 	var props strings.Builder
 	if r.Font != "" {
+		// The Latin font from the PDF; complex scripts keep the document's
+		// complex-script font, which is the one with the right glyphs.
 		f := escapeAttr(r.Font)
-		fmt.Fprintf(&props, `<w:rFonts w:ascii="%s" w:hAnsi="%s" w:cs="%s"/>`, f, f, f)
+		fmt.Fprintf(&props, `<w:rFonts w:ascii="%s" w:hAnsi="%s"/>`, f, f)
 	}
 	if r.Bold {
 		props.WriteString("<w:b/><w:bCs/>")

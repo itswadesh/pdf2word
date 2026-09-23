@@ -58,17 +58,24 @@ func documentRelsXML(images []imagePart) string {
 	return sb.String()
 }
 
-// stylesXML defines Normal, Heading1 and Heading2 with sensible defaults
-// (Calibri 11pt body, bold 16pt / 13pt headings).
-const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+// DefaultComplexScriptFont is asked for complex scripts (Odia, Hindi,
+// Bengali, Arabic, ...). Word ignores the Latin font for those runs; without
+// a font that has the glyphs the text shows as boxes. Nirmala UI ships with
+// Windows and covers all Indic scripts.
+const DefaultComplexScriptFont = "Nirmala UI"
+
+// stylesXMLTemplate defines Normal, Heading1 and Heading2 with sensible
+// defaults (Calibri 11pt body, bold 16pt / 13pt headings). %s is the
+// complex-script font.
+const stylesXMLTemplate = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:docDefaults>
     <w:rPrDefault>
       <w:rPr>
-        <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/>
+        <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="%s"/>
         <w:sz w:val="22"/>
         <w:szCs w:val="22"/>
-        <w:lang w:val="en-US"/>
+        <w:lang w:val="en-US" w:bidi="or-IN"/>
       </w:rPr>
     </w:rPrDefault>
     <w:pPrDefault>

@@ -250,6 +250,40 @@ func TestTesseract_RecognizeWordsReal(t *testing.T) {
 	var _ WordEngine = (*Tesseract)(nil)
 }
 
+func TestSelectLanguages(t *testing.T) {
+	avail := []string{"eng", "ori", "osd"}
+	if got, dropped := SelectLanguages("eng+ori", avail); got != "eng+ori" || len(dropped) != 0 {
+		t.Errorf("eng+ori -> %q dropped %v", got, dropped)
+	}
+	if got, dropped := SelectLanguages("eng+hin", avail); got != "eng" || len(dropped) != 1 || dropped[0] != "hin" {
+		t.Errorf("eng+hin -> %q dropped %v", got, dropped)
+	}
+	if got, dropped := SelectLanguages("deu", avail); got != "" || len(dropped) != 1 {
+		t.Errorf("deu -> %q dropped %v", got, dropped)
+	}
+}
+
+func TestTesseract_LanguagesReal(t *testing.T) {
+	p, err := Find("")
+	if err != nil {
+		t.Skipf("tesseract not installed: %v", err)
+	}
+	langs, err := (&Tesseract{Path: p}).Languages(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, l := range langs {
+		if l == "eng" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("eng missing from %v", langs)
+	}
+	var _ SparseWordEngine = (*Tesseract)(nil)
+}
+
 func TestTesseract_Name(t *testing.T) {
 	if (&Tesseract{}).Name() != "tesseract" {
 		t.Fatal("unexpected engine name")

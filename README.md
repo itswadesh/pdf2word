@@ -18,8 +18,13 @@ PDFs on the page that opens, and save the Word files it gives back.
 - Page breaks are preserved so the Word document follows the PDF's pagination.
 - Live progress: a page counter and bar while it works, per file.
 - One executable, no installer, no cgo. The PDF renderer (PDFium, as
-  WebAssembly) and, on Windows, the Tesseract OCR runtime with English
-  language data are built in. Copy the exe to another machine and it works.
+  WebAssembly) and, on Windows, the Tesseract OCR runtime with English and
+  Odia (ଓଡ଼ିଆ) language data are built in. Copy the exe to another machine
+  and it works.
+- Indic and other complex scripts come out readable: the Word document sets
+  Nirmala UI as its complex-script font and marks runs with the
+  complex-script size and weight twins, so Odia, Hindi, Bengali or Tamil text
+  does not turn into boxes.
 
 ## Using the app
 
@@ -34,9 +39,12 @@ PDFs on the page that opens, and save the Word files it gives back.
 
 The page has no settings: pages with fewer than 20 characters of real text
 are read with OCR, in English. To change that for the app, start it with the
-corresponding flags, e.g. `pdf2word.exe -lang eng+hin` or
-`pdf2word.exe -min-text 50` (extra languages need their Tesseract
-`traineddata` files installed).
+corresponding flags, e.g. `pdf2word.exe -lang ori` for Odia scans,
+`pdf2word.exe -lang eng+ori` for mixed pages, or `pdf2word.exe -min-text 50`.
+The environment variable `PDF2WORD_LANG` sets the same default without a
+flag. English and Odia are built in; other languages need their Tesseract
+`traineddata` files installed. A requested language that is not installed is
+skipped with a warning rather than failing the conversion.
 
 Everything runs locally. The server listens on the loopback address only,
 refuses requests from other hosts or origins, and stores uploads in a
@@ -77,12 +85,17 @@ or wrap it in a service manager such as NSSM.
 ## Running it as a server (Docker / Dokploy)
 
 The repository has a `Dockerfile` and a `docker-compose.yml`. The image is
-Debian with Tesseract installed from the distribution; the PDF engine is
-inside the Go binary, so nothing else is needed.
+Debian with Tesseract and its English and Odia data installed from the
+distribution; the PDF engine is inside the Go binary, so nothing else is
+needed.
 
 ```sh
 docker compose up -d --build     # then open http://localhost:9090/
 ```
+
+The container reads two environment variables: `PORT` (the port to listen
+on, default 9090, as Cloud Run, Fly and Render set it) and `PDF2WORD_LANG`
+(OCR languages, default `eng+ori`). Both are set in the compose file.
 
 On **Dokploy**: create a *Compose* service, point it at this repository
 (branch `main`, compose path `docker-compose.yml`), deploy, then add a domain
@@ -91,23 +104,24 @@ live in the container's temp space and are removed an hour after conversion.
 There is no login, so put the domain behind Dokploy's access controls or a
 VPN if the server is reachable from the internet. More OCR languages: add
 `tesseract-ocr-<lang>` to the `apt-get install` line in the Dockerfile and
-pass `-lang eng+<lang>` in the compose `command`.
+set `PDF2WORD_LANG=eng+<lang>` in the compose `environment`.
 
 ## Requirements
 
 | Purpose | Requirement |
 |---|---|
-| Run on Windows x64 | Nothing else: Tesseract 5.4 (English) is inside the exe |
+| Run on Windows x64 | Nothing else: Tesseract 5.4 (English and Odia) is inside the exe |
 | Run on macOS / Linux | Tesseract 4 or 5 on your `PATH` (`brew install tesseract`, `apt install tesseract-ocr`) |
 | Build from source | Go 1.27 or newer |
 
 On Windows the bundled Tesseract is unpacked on first start to
-`%LOCALAPPDATA%\pdf2word\tesseract-<version>\` (about 27 MB) and reused
+`%LOCALAPPDATA%\pdf2word\tesseract-<version>\` (about 29 MB) and reused
 afterwards. To use a different Tesseract, for example one with more
 languages installed, pass `-tesseract path\to\tesseract.exe` or set
 `TESSERACT_CMD`; those always win over the bundled copy. Extra languages for
-the bundled copy: put their `.traineddata` files into that folder's
-`tessdata` subfolder and start with `-lang eng+hin`.
+the bundled copy: put their `.traineddata` files (from
+[tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast)) into that
+folder's `tessdata` subfolder and start with `-lang eng+hin`.
 
 Licences for the bundled runtime are in
 `internal/tessbundle/win64/NOTICE.md`. Text-only PDFs never use Tesseract.
@@ -121,14 +135,15 @@ pdf2word [flags] input.pdf [output.docx]
 
   -o string          output .docx path (default: input name with .docx)
   -ocr string        OCR mode: auto, off or force (default "auto")
-  -lang string       Tesseract language(s), e.g. eng or eng+deu (default "eng")
+  -lang string       Tesseract language(s), e.g. eng, ori or eng+ori (default "eng", env PDF2WORD_LANG)
+  -ocr-sparse        second OCR pass that recovers text inside pictures and coloured boxes (about twice the OCR time)
   -tesseract string  path to the tesseract executable (default: auto-detect)
   -dpi int           resolution used to render pages before OCR (default 300)
   -jobs int          pages to OCR at the same time (default: CPUs, at most 8)
   -min-text int      text-layer characters below which a page counts as scanned (default 20)
   -v                 verbose: one progress line per page plus diagnostics
   -no-progress       disable the progress indicator
-  -addr string       address for the browser page (default "0.0.0.0:9090"; 127.0.0.1:PORT = this computer only)
+  -addr string       address for the browser page (default "0.0.0.0:9090", env PORT sets the port; 127.0.0.1:PORT = this computer only)
   -no-browser        app mode: do not open the browser automatically
   -no-auto-exit      app mode: keep running after the page is closed (only relevant with a 127.0.0.1 address)
   -version           print version and exit
@@ -137,6 +152,7 @@ pdf2word [flags] input.pdf [output.docx]
 ```sh
 pdf2word invoice.pdf                      # -> invoice.docx
 pdf2word -ocr force -lang eng+fra scan.pdf
+pdf2word -lang ori -ocr-sparse odia-book.pdf   # Odia scan, also read boxed headings
 pdf2word -addr 127.0.0.1:8080 -no-browser # app mode on a fixed port
 ```
 
@@ -176,6 +192,17 @@ minutes on a multi-core PC. Text PDFs convert in seconds.
 - OCR quality depends on scan quality and language data; dotted leaders and
   tables of contents produce noise.
 - Encrypted PDFs are not supported.
+
+## History
+
+This codebase replaces the original `pdf2word` (August 2026): a single-file Go
+server that ran poppler's `pdftoppm` and Tesseract in hOCR mode, written for
+Odia (ଓଡ଼ିଆ) scans. Its history is merged in, and what mattered from it was
+ported: Odia language data in the bundled runtime and the Docker image,
+`PDF2WORD_LANG` and `PORT` as environment variables, the complex-script font
+and run properties in the Word output so Indic text renders, and the sparse
+second OCR pass (`-ocr-sparse`) that recovers headings printed inside
+coloured boxes. The poppler dependency is gone: PDFium renders the pages.
 
 ## Development
 

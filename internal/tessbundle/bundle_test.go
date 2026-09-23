@@ -27,8 +27,10 @@ func TestPath_UnpacksOnceAndRuns(t *testing.T) {
 	if !strings.HasPrefix(exe, Dir()) {
 		t.Errorf("exe %q is not under Dir() %q", exe, Dir())
 	}
-	if !fileExists(filepath.Join(Dir(), "tessdata", "eng.traineddata")) {
-		t.Error("eng.traineddata missing from the unpacked bundle")
+	for _, lang := range []string{"eng", "ori"} {
+		if !fileExists(filepath.Join(Dir(), "tessdata", lang+".traineddata")) {
+			t.Errorf("%s.traineddata missing from the unpacked bundle", lang)
+		}
 	}
 
 	// A second call must reuse the unpacked copy, not rewrite it.

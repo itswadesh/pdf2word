@@ -513,6 +513,50 @@ func TestOCRWords_FiltersNoiseAndSnapsSizes(t *testing.T) {
 
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 
+func TestSparseAdditions(t *testing.T) {
+	mk := func(text string, left, top, w, h int, conf float64) ocr.Word {
+		return ocr.Word{Text: text, Left: left, Top: top, Width: w, Height: h, LineTop: top, LineHeight: h, Conf: conf}
+	}
+	found := []ocr.Word{mk("Body", 100, 100, 80, 40, 95), mk("text", 200, 100, 80, 40, 95)}
+	sparse := []ocr.Word{
+		mk("Body", 102, 101, 78, 39, 90),     // same word again: overlaps
+		mk("HEADING", 400, 500, 300, 60, 88), // new: inside a picture region
+		mk("x", 800, 500, 20, 30, 90),        // too short
+		mk("maybe", 900, 500, 100, 30, 40),   // too uncertain
+	}
+	got := sparseAdditions(found, sparse)
+	if len(got) != 1 || got[0].Text != "HEADING" || got[0].Block < 900000 {
+		t.Fatalf("sparse additions = %+v", got)
+	}
+}
+
+// sparseEngine answers the normal pass with body words and the sparse pass
+// with one extra heading.
+type sparseEngine struct{ wordEngine }
+
+func (e *sparseEngine) RecognizeWordsSparse(context.Context, []byte, string) ([]ocr.Word, error) {
+	return []ocr.Word{{Text: "BOXED", Left: 40, Top: 60, Width: 20, Height: 5, LineTop: 60, LineHeight: 5, Block: 7, Par: 1, Line: 1, Conf: 91}}, nil
+}
+
+func TestBuildDocument_SparsePassAddsMissedText(t *testing.T) {
+	img := []pdfimage.Image{{Data: []byte("fake-png"), Ext: "png", Width: 100, Height: 130}}
+	fi := &fakeImages{pages: map[int][]pdfimage.Image{1: img, 2: img}}
+	without, _, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, Engine: &sparseEngine{}, OpenImages: opener(fi)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	with, _, err := BuildDocument(context.Background(), fixture("text.pdf"), Options{OCR: OCRForce, SparsePass: true, Engine: &sparseEngine{}, OpenImages: opener(fi)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(pageText(without.Pages[0]), "BOXED") {
+		t.Fatal("sparse words must not appear without SparsePass")
+	}
+	if !strings.Contains(pageText(with.Pages[0]), "BOXED") {
+		t.Fatalf("sparse pass text missing:\n%s", describeBlocks(with.Pages[0].Blocks))
+	}
+}
+
 func describeBlocks(bs []model.Block) string {
 	var sb strings.Builder
 	for i, b := range bs {
