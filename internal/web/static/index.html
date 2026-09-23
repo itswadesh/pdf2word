@@ -318,7 +318,7 @@
 <body>
 <div class="page">
   <header class="intro">
-    <h1>Just drop any PDF, and it will convert to editable Word format. It works for scanned images as well.</h1>
+    <h1>Just drop a PDF and get it back as an editable Word document. Scanned pages work too.</h1>
   </header>
 
   <div class="desk-left">
@@ -344,7 +344,7 @@
         </button>
       </div>
     </div>
-    <p id="sheet-hint" class="visually-hidden">You can also drag PDF files anywhere onto this page. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Each file's progress is listed under Your files.</p>
+    <p id="sheet-hint" class="visually-hidden">Drag PDF files anywhere on this page, or press Enter to choose them. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Progress for each file is listed under Your files.</p>
     <input type="file" id="file" accept=".pdf" multiple hidden>
   </div>
 
@@ -355,10 +355,10 @@
       <p id="notice-text"></p>
       <button class="link" id="notice-close" type="button">Dismiss</button>
     </div>
-    <div class="offline hidden" id="offline" role="status">Lost contact with the converter. Trying again.</div>
+    <div class="offline hidden" id="offline" role="status">Can't reach the converter. Retrying.</div>
     <div class="about" id="about">
-      <p>Text PDFs keep their fonts, headings, tables and pictures. Scanned pages are read with text recognition, so you get editable text, not a picture of the page.</p>
-      <p>Files stay on the computer running the converter and are deleted an hour later. The Word file downloads by itself when it is ready.</p>
+      <p>Text PDFs keep their fonts, headings, tables and pictures, and every page breaks where the original did. Scanned pages are read with text recognition, so you get editable text, not a picture of the page.</p>
+      <p>Files stay on the computer that runs the converter and are deleted an hour later. The Word file downloads by itself when it's ready.</p>
     </div>
     <div class="tray-head hidden" id="tray-head">
       <span id="tray-summary"></span>
@@ -459,7 +459,7 @@
         setView(row, body);
         schedulePoll(0);
       } else {
-        fail(row, body.error || ('The converter answered with status ' + xhr.status + '.'));
+        fail(row, body.error || ('The converter answered with an error (status ' + xhr.status + ').'));
       }
     });
     xhr.addEventListener('error', () => { row.xhr = null; fail(row, 'The upload did not reach the converter. Check the connection and try again.'); });
@@ -577,14 +577,14 @@
   }
   function phaseText(v) {
     if (v.state === 'uploading') return 'Uploading';
-    if (v.state === 'queued') return 'Waiting for the file ahead of it';
+    if (v.state === 'queued') return 'Waiting its turn';
     if (!v.total) return 'Opening the PDF';
     if (v.phase === 'reading') return 'Reading pages';
     return v.stage === 'ocr' ? 'Recognising text' : 'Converting pages';
   }
   function detailText(v) {
     if (v.state === 'uploading') return v.total ? fmtSize(v.done) + ' of ' + fmtSize(v.total) : '';
-    if (v.state === 'running' && v.total) return v.done + ' of ' + v.total + ' pages';
+    if (v.state === 'running' && v.total) return 'page ' + v.done + ' of ' + v.total;
     return '';
   }
 
@@ -614,7 +614,7 @@
       const a = document.createElement('a');
       a.className = 'btn';
       a.href = v.download;
-      a.textContent = 'Save Word file';
+      a.textContent = 'Download Word file';
       a.setAttribute('download', '');
       actions.appendChild(a);
       if (!row.downloaded) { row.downloaded = true; a.click(); }
@@ -652,27 +652,27 @@
 
   function statusText(v) {
     switch (v.state) {
-      case 'uploading': return 'Uploading, ' + (detailText(v) || 'starting');
-      case 'queued': return 'Waiting for the file ahead of it';
+      case 'uploading': return 'Uploading' + (detailText(v) ? ': ' + detailText(v) : '');
+      case 'queued': return 'Waiting its turn';
       case 'running': {
         if (!v.total) return 'Opening the PDF';
-        let s = phaseText(v) + ', ' + detailText(v) + ' (' + Math.round(100 * overall(v)) + '%)';
+        let s = phaseText(v) + ': ' + detailText(v) + ' (' + Math.round(100 * overall(v)) + '%)';
         const left = remaining(v);
         if (left !== null) s += ', about ' + fmtDuration(left) + ' left';
         return s;
       }
       case 'done': {
         const r = v.report || {};
-        let s = 'Done: ' + plural(r.pages, 'page');
+        let s = 'Converted ' + plural(r.pages, 'page');
+        if (v.elapsedMs > 1500) s += ' in ' + fmtDuration(v.elapsedMs);
         const parts = [];
         if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with text recognition');
         if (r.emptyPages) parts.push(plural(r.emptyPages, 'page') + ' came out empty');
-        if (parts.length) s += ' (' + parts.join(', ') + ')';
-        if (v.elapsedMs > 1500) s += ' in ' + fmtDuration(v.elapsedMs);
-        return s + '. The Word file has been downloaded.';
+        if (parts.length) s += ' (' + parts.join('; ') + ')';
+        return s + '. The Word file downloaded.';
       }
       case 'cancelled': return 'Stopped';
-      case 'error': return "Couldn't convert: " + (v.message || 'unknown error');
+      case 'error': return "Couldn't convert this file: " + (v.message || 'unknown error');
     }
     return '';
   }
@@ -721,9 +721,10 @@
       count.textContent = '';
       count.append(String(Math.round(pct)));
       const small = document.createElement('small'); small.textContent = '%'; count.appendChild(small);
-      sheetStatus.textContent = phaseText(active) + (detailText(active) ? ', ' + detailText(active) : '');
+      sheetStatus.textContent = phaseText(active);
       const left = remaining(active);
-      sheetEta.textContent = left === null ? '' : 'about ' + fmtDuration(left) + ' left';
+      const eta = [detailText(active), left === null ? '' : 'about ' + fmtDuration(left) + ' left'].filter(Boolean);
+      sheetEta.textContent = eta.join(', ');
       document.title = Math.round(pct) + '% ' + TITLE;
     } else {
       sheet.classList.add('indeterminate');

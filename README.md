@@ -45,7 +45,7 @@ PDFs on the page that opens, and save the Word files it gives back.
    Only files named `.pdf` and no larger than 100 MB are accepted; others
    are skipped with a notice. The limit can be changed with `-max-upload`.
 3. Watch the counter. When a file is done its Word document downloads by
-   itself; the "Save Word file" button downloads it again.
+   itself; the "Download Word file" button downloads it again.
 4. Close the console window (or press Ctrl+C in it) to stop the program.
 
 The page has no settings: pages with fewer than 20 characters of real text
