@@ -1,0 +1,8 @@
+.git
+bin/
+out/
+dist/
+docs/
+*.docx
+# Windows-only Tesseract bundle: not compiled into Linux builds
+internal/tessbundle/win64/

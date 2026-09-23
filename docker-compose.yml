@@ -1,0 +1,31 @@
+services:
+  pdf2word:
+    build:
+      context: .
+      args:
+        VERSION: compose
+    image: pdf2word:latest
+    restart: unless-stopped
+    # Standalone use: open http://<host>:9090/. On Dokploy you can remove
+    # the port mapping and attach a domain to service "pdf2word", port 9090.
+    ports:
+      - "9090:9090"
+    environment:
+      # One OpenMP thread per Tesseract process; pages are OCR'd in parallel
+      # processes instead (see -jobs).
+      OMP_THREAD_LIMIT: "1"
+    command: ["-addr", "0.0.0.0:9090", "-no-browser", "-jobs", "4"]
+    # Uploads and results live in the container's temp directory and are
+    # removed an hour after a conversion finishes; nothing needs a volume.
+    tmpfs:
+      - /tmp:size=2g
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9090/api/info"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

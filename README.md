@@ -74,6 +74,25 @@ netsh advfirewall firewall add rule name="pdf2word" dir=in action=allow protocol
 To keep it running after you log off, run it as a scheduled task at startup
 or wrap it in a service manager such as NSSM.
 
+## Running it as a server (Docker / Dokploy)
+
+The repository has a `Dockerfile` and a `docker-compose.yml`. The image is
+Debian with Tesseract installed from the distribution; the PDF engine is
+inside the Go binary, so nothing else is needed.
+
+```sh
+docker compose up -d --build     # then open http://localhost:9090/
+```
+
+On **Dokploy**: create a *Compose* service, point it at this repository
+(branch `main`, compose path `docker-compose.yml`), deploy, then add a domain
+to the `pdf2word` service on port 9090. Everything runs on one host; uploads
+live in the container's temp space and are removed an hour after conversion.
+There is no login, so put the domain behind Dokploy's access controls or a
+VPN if the server is reachable from the internet. More OCR languages: add
+`tesseract-ocr-<lang>` to the `apt-get install` line in the Dockerfile and
+pass `-lang eng+<lang>` in the compose `command`.
+
 ## Requirements
 
 | Purpose | Requirement |
