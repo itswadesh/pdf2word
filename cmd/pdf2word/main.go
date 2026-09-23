@@ -96,6 +96,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		noProgress  = fs.Bool("no-progress", false, "disable the progress indicator (command line)")
 		addr        = fs.String("addr", defaultListenAddr(), "address for the browser page; 0.0.0.0:PORT shares it on the network, 127.0.0.1:PORT keeps it to this computer (env PORT sets the port)")
 		maxUploadMB = fs.Int("max-upload", int(web.DefaultMaxUploadBytes>>20), "largest PDF the browser page accepts, in MB")
+		publicURL   = fs.String("public-url", envOr("PUBLIC_URL", ""), "public address of the page, e.g. https://pdf2word.example.com; fills in the canonical link, the sharing tags and the sitemap (env PUBLIC_URL)")
 		noBrowser   = fs.Bool("no-browser", false, "do not open the browser automatically")
 		noAutoExit  = fs.Bool("no-auto-exit", false, "keep running after the browser page is closed (always on when shared on the network)")
 		showVersion = fs.Bool("version", false, "print version and exit")
@@ -143,6 +144,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			base:        base,
 			verbose:     *verbose,
 			maxUpload:   int64(*maxUploadMB) << 20,
+			publicURL:   *publicURL,
 		}, stdout, stderr)
 	}
 	if len(rest) > 2 {
@@ -199,7 +201,8 @@ type serveOptions struct {
 	remote      bool // listening on a network interface: accept any Host
 	base        convert.Options
 	verbose     bool
-	maxUpload   int64 // bytes; 0 means web.DefaultMaxUploadBytes
+	maxUpload   int64  // bytes; 0 means web.DefaultMaxUploadBytes
+	publicURL   string // public address of the page, for the canonical link and sitemap
 	// ready, if set, is called with the page URL once the server listens
 	// (used by tests).
 	ready func(url string)
@@ -219,7 +222,7 @@ func serve(ctx context.Context, so serveOptions, stdout, stderr io.Writer) int {
 	if so.verbose {
 		logf = func(format string, a ...any) { fmt.Fprintf(stderr, format+"\n", a...) }
 	}
-	srv, err := web.New(web.Config{Base: so.base, Version: version, Logf: logf, AllowRemote: so.remote, MaxUploadBytes: so.maxUpload})
+	srv, err := web.New(web.Config{Base: so.base, Version: version, Logf: logf, AllowRemote: so.remote, MaxUploadBytes: so.maxUpload, PublicURL: so.publicURL})
 	if err != nil {
 		fmt.Fprintf(stderr, "pdf2word: %v\n", err)
 		return 1

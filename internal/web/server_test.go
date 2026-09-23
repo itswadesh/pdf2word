@@ -124,6 +124,153 @@ func TestIndexServed(t *testing.T) {
 	}
 }
 
+// The page is the product's shop window: it has to carry the title,
+// description, one keyword-bearing h1, headed sections and the
+// WebApplication data that search engines read.
+func TestIndexSEOHead(t *testing.T) {
+	_, ts := newTestServer(t)
+	resp, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	page := string(body)
+
+	title := between(page, "<title>", "</title>")
+	if !strings.Contains(strings.ToLower(title), "free pdf to word converter") {
+		t.Errorf("title = %q, want the primary keyword in it", title)
+	}
+	if n := len(title); n < 30 || n > 60 {
+		t.Errorf("title is %d characters; search results show about 30-60", n)
+	}
+	desc := attrOf(page, `<meta name="description" content="`)
+	if n := len(desc); n < 120 || n > 160 {
+		t.Errorf("meta description is %d characters (%q); want 120-160", n, desc)
+	}
+	if strings.EqualFold(desc, title) {
+		t.Error("the description must not restate the title")
+	}
+	if n := strings.Count(page, "<h1>"); n != 1 {
+		t.Errorf("%d h1 elements, want exactly 1", n)
+	}
+	h1 := between(page, "<h1>", "</h1>")
+	if !strings.Contains(strings.ToLower(h1), "pdf to word converter") {
+		t.Errorf("h1 = %q, want the keyword in it", h1)
+	}
+	if n := strings.Count(page, "<h2>"); n < 4 {
+		t.Errorf("%d h2 sections; the page needs supporting content", n)
+	}
+	for _, want := range []string{
+		`<link rel="canonical"`, `property="og:title"`, `property="og:description"`,
+		`name="twitter:card"`, `name="robots"`, `"@type": "WebApplication"`,
+		`"price": "0"`, `"isAccessibleForFree": true`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("head is missing %s", want)
+		}
+	}
+	// Ratings must come from real reviews, so the page claims none.
+	if strings.Contains(page, "aggregateRating") {
+		t.Error("aggregateRating must not be declared without real ratings behind it")
+	}
+	// The structured data has to parse, or search engines drop it silently.
+	var ld map[string]any
+	if err := json.Unmarshal([]byte(between(page, `<script type="application/ld+json">`, "</script>")), &ld); err != nil {
+		t.Fatalf("JSON-LD does not parse: %v", err)
+	}
+	if ld["@context"] != "https://schema.org" || ld["name"] == "" {
+		t.Errorf("JSON-LD = %+v", ld)
+	}
+	if offer, ok := ld["offers"].(map[string]any); !ok || offer["price"] != "0" {
+		t.Errorf("offers = %+v, want a free price", ld["offers"])
+	}
+	if feats, ok := ld["featureList"].([]any); !ok || len(feats) < 3 {
+		t.Errorf("featureList = %+v", ld["featureList"])
+	}
+	if strings.Contains(page, "%PUBLIC_URL%") {
+		t.Error("the public-URL placeholder was left in the page")
+	}
+	for _, kw := range []string{"PDF to DOCX", "scanned", "OCR", "free"} {
+		if !strings.Contains(strings.ToLower(page), strings.ToLower(kw)) {
+			t.Errorf("page never mentions %q", kw)
+		}
+	}
+}
+
+func TestPublicURLAndCrawlerFiles(t *testing.T) {
+	// Without a public address: relative canonical, no sitemap.
+	_, ts := newTestServer(t)
+	page := get(t, ts, "/")
+	if !strings.Contains(page, `<link rel="canonical" href="/">`) {
+		t.Errorf("canonical without a public URL should be relative:\n%s", between(page, "<link rel=\"canonical\"", ">"))
+	}
+	robots := get(t, ts, "/robots.txt")
+	if !strings.Contains(robots, "Disallow: /api/") || strings.Contains(robots, "Sitemap:") {
+		t.Errorf("robots.txt = %q", robots)
+	}
+	resp, err := ts.Client().Get(ts.URL + "/sitemap.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("sitemap without a public URL: status %d, want 404", resp.StatusCode)
+	}
+
+	// With one (trailing slash trimmed): absolute canonical, og:url and sitemap.
+	s, err := New(Config{Base: convert.Options{Engine: &fakeEngine{}}, WorkDir: t.TempDir(), PublicURL: "https://pdf2word.example.com/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { pub.Close(); s.Close() })
+
+	page = get(t, pub, "/")
+	for _, want := range []string{
+		`<link rel="canonical" href="https://pdf2word.example.com/">`,
+		`<meta property="og:url" content="https://pdf2word.example.com/">`,
+		`"url": "https://pdf2word.example.com/"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page missing %s", want)
+		}
+	}
+	if !strings.Contains(get(t, pub, "/robots.txt"), "Sitemap: https://pdf2word.example.com/sitemap.xml") {
+		t.Error("robots.txt should point at the sitemap")
+	}
+	sitemap := get(t, pub, "/sitemap.xml")
+	if !strings.Contains(sitemap, "<loc>https://pdf2word.example.com/</loc>") || !strings.Contains(sitemap, "<urlset") {
+		t.Errorf("sitemap.xml = %q", sitemap)
+	}
+}
+
+func get(t *testing.T, ts *httptest.Server, path string) string {
+	t.Helper()
+	resp, err := ts.Client().Get(ts.URL + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
+}
+
+func between(s, open, close string) string {
+	i := strings.Index(s, open)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i+len(open):]
+	j := strings.Index(rest, close)
+	if j < 0 {
+		return ""
+	}
+	return rest[:j]
+}
+
+func attrOf(page, prefix string) string { return between(page, prefix, `"`) }
+
 func TestInfo(t *testing.T) {
 	_, ts := newTestServer(t)
 	resp, err := ts.Client().Get(ts.URL + "/api/info")

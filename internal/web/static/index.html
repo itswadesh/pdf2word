@@ -4,7 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>PDF to Word Converter</title>
+<title>Free PDF to Word Converter - Convert PDF to DOCX Online</title>
+<meta name="description" content="Drop in a PDF and get an editable Word DOCX back. Fonts, tables, images and page breaks stay put, scanned pages are read with OCR, and there is no sign-up.">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
+<link rel="canonical" href="%PUBLIC_URL%/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PDF to Word Converter">
+<meta property="og:title" content="Free PDF to Word Converter - Convert PDF to DOCX Online">
+<meta property="og:description" content="Convert PDF to Word for free. The DOCX keeps the fonts, tables, pictures and page breaks of the original, and scanned pages are read with text recognition.">
+<meta property="og:url" content="%PUBLIC_URL%/">
+<meta property="og:locale" content="en">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Free PDF to Word Converter - Convert PDF to DOCX Online">
+<meta name="twitter:description" content="Convert PDF to Word for free. The DOCX keeps the fonts, tables, pictures and page breaks of the original, and scanned pages are read with text recognition.">
+<meta name="theme-color" content="#E3E7EB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1B2329" media="(prefers-color-scheme: dark)">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Free PDF to Word Converter",
+  "alternateName": "PDF to DOCX Converter",
+  "url": "%PUBLIC_URL%/",
+  "description": "Converts PDF files to editable Word (.docx) documents. Text PDFs keep their fonts, tables, pictures and pagination; scanned pages are read with OCR.",
+  "applicationCategory": "UtilitiesApplication",
+  "applicationSubCategory": "File converter",
+  "operatingSystem": "Any, in a web browser",
+  "browserRequirements": "Requires JavaScript",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  },
+  "featureList": [
+    "Convert PDF to Word DOCX",
+    "Keeps fonts, headings, tables, pictures and page breaks",
+    "OCR for scanned PDFs",
+    "No sign-up and no watermark",
+    "Several files at once"
+  ],
+  "fileFormat": ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  "license": "https://opensource.org/licenses/MIT",
+  "sameAs": "https://github.com/itswadesh/pdf2word"
+}
+</script>
 <style>
   /* A sheet of paper on a desk. Progress is highlighter ink filling the
      page from the top; everything around the sheet stays quiet. */
@@ -73,7 +118,7 @@
     padding: 28px 16px 48px;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "intro" "sheet" "tray";
+    grid-template-areas: "intro" "sheet" "tray" "info" "colophon";
     row-gap: 28px;
   }
   .intro { grid-area: intro; max-width: 30em; }
@@ -82,17 +127,62 @@
   h1 {
     font-family: var(--display);
     font-weight: 600;
-    font-size: clamp(27px, 4.4vw, 40px);
-    line-height: 1.1;
+    font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.05;
     letter-spacing: -0.01em;
     margin: 0;
     text-wrap: balance;
   }
+  .lede {
+    margin: 14px 0 0;
+    color: var(--ink-soft);
+    max-width: 32em;
+  }
+
+  /* Reading matter below the tool: how it works, what survives, questions. */
+  .info {
+    grid-area: info;
+    border-top: 1px solid var(--desk-deep);
+    padding-top: 30px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px 56px;
+  }
+  .info-wide { grid-column: 1 / -1; }
+  .info h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 20px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+  }
+  .info p { margin: 0; }
+  .info p, .info li, .info dd { color: var(--ink-soft); max-width: 36em; }
+  .steps { margin: 0; padding-left: 1.3em; }
+  .steps li { margin-bottom: 7px; }
+  .steps li:last-child { margin-bottom: 0; }
+  .qa { margin: 0; max-width: 42em; }
+  .qa dt { font-family: var(--display); font-weight: 600; color: var(--ink); margin-top: 16px; }
+  .qa dt:first-of-type { margin-top: 0; }
+  .qa dd { margin: 4px 0 0; }
+  .colophon {
+    grid-area: colophon;
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  .colophon p { margin: 0; max-width: 46em; }
+  .info a, .colophon a { color: inherit; text-underline-offset: 3px; }
+  .info a:hover, .colophon a:hover { color: var(--ink); }
+  .info a:focus-visible, .colophon a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  @media (min-width: 720px) {
+    .info { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   @media (min-width: 880px) {
     .page {
       grid-template-columns: 400px minmax(0, 1fr);
-      grid-template-areas: "sheet intro" "sheet tray";
-      grid-template-rows: auto 1fr;
+      grid-template-areas: "sheet intro" "sheet tray" "info info" "colophon colophon";
+      grid-template-rows: auto 1fr auto auto;
       column-gap: 64px;
       row-gap: 36px;
       padding-top: 44px;
@@ -303,7 +393,8 @@
   @media (prefers-contrast: more) {
     .file { border-color: var(--ink); }
     .btn { outline: 2px solid var(--ink); outline-offset: -2px; }
-    .link, .size, .about, .tray-head { color: var(--ink); }
+    .link, .size, .about, .tray-head, .lede, .colophon,
+    .info p, .info li, .info dd { color: var(--ink); }
   }
   @media (max-width: 480px) {
     .page { padding-top: 20px; row-gap: 22px; }
@@ -318,7 +409,8 @@
 <body>
 <div class="page">
   <header class="intro">
-    <h1>Just drop a PDF and get it back as an editable Word document. Scanned pages work too.</h1>
+    <h1>Free PDF to Word converter</h1>
+    <p class="lede">Drop a PDF and get it back as an editable Word document, laid out like the original. Scanned pages are read with text recognition, so you can edit those too.</p>
   </header>
 
   <div class="desk-left">
@@ -357,8 +449,7 @@
     </div>
     <div class="offline hidden" id="offline" role="status">Can't reach the converter. Retrying.</div>
     <div class="about" id="about">
-      <p>Text PDFs keep their fonts, headings, tables and pictures, and every page breaks where the original did. Scanned pages are read with text recognition, so you get editable text, not a picture of the page.</p>
-      <p>Files stay on the computer that runs the converter and are deleted an hour later. The Word file downloads by itself when it's ready.</p>
+      <p>Files you drop appear here, one row each, with the page they are on and how long is left. The Word file downloads by itself as soon as it is ready.</p>
     </div>
     <div class="tray-head hidden" id="tray-head">
       <span id="tray-summary"></span>
@@ -366,6 +457,54 @@
     </div>
     <ol class="files" id="files"></ol>
   </section>
+
+  <section class="info">
+    <div class="info-col">
+      <h2>How to convert a PDF to Word</h2>
+      <ol class="steps">
+        <li>Drop your PDF on the sheet above, or click it to pick files. Several at once is fine.</li>
+        <li>Wait while the pages are read. The counter shows which page it is on and how long is left.</li>
+        <li>The Word file downloads by itself. Open it in Word, Google Docs, LibreOffice or Pages and edit it.</li>
+      </ol>
+    </div>
+
+    <div class="info-col">
+      <h2>What comes across</h2>
+      <p>Fonts, sizes, bold and italic, headings, indents and alignment all survive the trip. Ruled tables become real Word tables you can type in. Pictures land where they were. Every line breaks where the PDF broke it and every page break falls where it fell, so the DOCX has the same pages as the PDF.</p>
+    </div>
+
+    <div class="info-col">
+      <h2>Scanned PDFs and photos of paper</h2>
+      <p>A PDF that is only pictures has no text to copy out. Those pages go through text recognition, so you get words you can edit instead of a picture of words. English and Odia are built in, and the person running the converter can add more languages.</p>
+    </div>
+
+    <div class="info-col">
+      <h2>Free, with nothing to sign up for</h2>
+      <p>No account, no email address, no watermark on the result and no daily limit. Files up to 100 MB are accepted. The converter is open source and runs on the computer or server you point it at, so your PDFs are not handed to anyone else, and everything is deleted an hour after conversion.</p>
+    </div>
+
+    <div class="info-col info-wide">
+      <h2>Questions</h2>
+      <dl class="qa">
+        <dt>Is this PDF to DOCX converter really free?</dt>
+        <dd>Yes. It is open source, there is no paid tier, and nothing is added to the file you get back.</dd>
+        <dt>Will the Word document look like the PDF?</dt>
+        <dd>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</dd>
+        <dt>Can it convert a scanned PDF to Word?</dt>
+        <dd>Yes. Pages without selectable text are recognised automatically, including files where a print driver turned the text into outlines.</dd>
+        <dt>What file do I get?</dt>
+        <dd>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</dd>
+        <dt>Is there a limit on file size or number of files?</dt>
+        <dd>100 MB per file by default, and as many files as you like, one after another. Whoever runs the converter can raise or lower the size limit.</dd>
+        <dt>What happens to my files?</dt>
+        <dd>They stay on the machine running the converter and are deleted an hour after the conversion finishes. Each browser only ever sees its own files.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <p>An open source converter built in Go. The PDF engine and the text recognition are inside the program, so it works without an internet connection. <a href="https://github.com/itswadesh/pdf2word">Source code and releases on GitHub</a>.</p>
+  </footer>
 
   <div class="visually-hidden" id="announcer" role="status" aria-live="polite"></div>
 </div>
@@ -379,7 +518,7 @@
   const fileInput = $('file'), filesList = $('files'), about = $('about');
   const trayHead = $('tray-head'), traySummary = $('tray-summary'), clearDone = $('clear-done');
   const announcer = $('announcer');
-  const TITLE = 'PDF to Word Converter';
+  const TITLE = document.title; // restored when nothing is converting
 
   // Rows for files dropped on this page (and conversions of ours that were
   // still running when the page was reloaded). key -> row.
@@ -725,7 +864,7 @@
       const left = remaining(active);
       const eta = [detailText(active), left === null ? '' : 'about ' + fmtDuration(left) + ' left'].filter(Boolean);
       sheetEta.textContent = eta.join(', ');
-      document.title = Math.round(pct) + '% ' + TITLE;
+      document.title = Math.round(pct) + '% converting your PDF';
     } else {
       sheet.classList.add('indeterminate');
       fill.style.height = (pct > 0 ? pct : 0) + '%';

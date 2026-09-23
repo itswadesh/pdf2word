@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -40,8 +41,13 @@ type Config struct {
 	// AllowRemote accepts requests addressed to any host, not just
 	// localhost. Set it when the listener is bound to a network interface.
 	AllowRemote bool
-	Version     string
-	Logf        func(format string, args ...any)
+	// PublicURL is the address the page is reachable at from outside, such
+	// as https://pdf2word.example.com. It fills in the canonical link, the
+	// sharing tags and the sitemap. Empty (a local or office instance)
+	// leaves those relative and serves no sitemap.
+	PublicURL string
+	Version   string
+	Logf      func(format string, args ...any)
 }
 
 // clientCookie identifies a browser so that each one sees only the files it
@@ -55,6 +61,8 @@ type Server struct {
 	jobs    *jobStore
 	sem     chan struct{} // one conversion at a time
 	ownsDir bool
+
+	page []byte // index.html with the public URL filled in
 
 	mu         sync.Mutex
 	lastSeen   time.Time // last request from the page
@@ -73,6 +81,12 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Logf == nil {
 		cfg.Logf = func(string, ...any) {}
 	}
+	cfg.PublicURL = strings.TrimRight(strings.TrimSpace(cfg.PublicURL), "/")
+	page, err := static.ReadFile("static/index.html")
+	if err != nil {
+		return nil, fmt.Errorf("page missing from build: %w", err)
+	}
+	page = []byte(strings.ReplaceAll(string(page), "%PUBLIC_URL%", cfg.PublicURL))
 	ownsDir := false
 	if cfg.WorkDir == "" {
 		dir, err := os.MkdirTemp("", "pdf2word-web-")
@@ -91,9 +105,12 @@ func New(cfg Config) (*Server, error) {
 		jobs:     newJobStore(cfg.WorkDir),
 		sem:      make(chan struct{}, 1),
 		ownsDir:  ownsDir,
+		page:     page,
 		lastSeen: time.Now(),
 	}
 	s.mux.HandleFunc("GET /{$}", s.handleIndex)
+	s.mux.HandleFunc("GET /robots.txt", s.handleRobots)
+	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
 	s.mux.HandleFunc("POST /api/ping", s.handlePing)
 	s.mux.HandleFunc("POST /api/convert", s.handleConvert)
@@ -204,13 +221,34 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	b, err := static.ReadFile("static/index.html")
-	if err != nil {
-		http.Error(w, "page missing from build", http.StatusInternalServerError)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(s.page)
+}
+
+// handleRobots keeps crawlers out of the job API and points them at the
+// sitemap when the page has a public address.
+func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	body := "User-agent: *\nDisallow: /api/\n"
+	if s.cfg.PublicURL != "" {
+		body += "\nSitemap: " + s.cfg.PublicURL + "/sitemap.xml\n"
+	}
+	io.WriteString(w, body)
+}
+
+// handleSitemap lists the one page this server has. Without a public
+// address there is nothing to submit, so there is no sitemap either.
+func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.PublicURL == "" {
+		http.NotFound(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(b)
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>%s/</loc><changefreq>monthly</changefreq><priority>1.0</priority></url>
+</urlset>
+`, html.EscapeString(s.cfg.PublicURL))
 }
 
 // InfoView tells the page about the environment.

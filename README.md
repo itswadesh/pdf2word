@@ -104,9 +104,16 @@ needed.
 docker compose up -d --build     # then open http://localhost:9090/
 ```
 
-The container reads two environment variables: `PORT` (the port to listen
-on, default 9090, as Cloud Run, Fly and Render set it) and `PDF2WORD_LANG`
-(OCR languages, default `eng+ori`). Both are set in the compose file.
+The container reads three environment variables: `PORT` (the port to listen
+on, default 9090, as Cloud Run, Fly and Render set it), `PDF2WORD_LANG`
+(OCR languages, default `eng+ori`) and `PUBLIC_URL` (the address the page is
+reachable at from outside). They are set in the compose file.
+
+Set `PUBLIC_URL` once a domain points at the service, for example
+`PUBLIC_URL=https://pdf2word.example.com`. It fills in the canonical link
+and the sharing tags in the page and turns on `/sitemap.xml`; `/robots.txt`
+is always served and keeps crawlers out of `/api/`. Without it the page
+still works, it just has no absolute address to declare.
 
 On **Dokploy**: create a *Compose* service, point it at this repository
 (branch `main`, compose path `docker-compose.yml`), deploy, then add a domain
@@ -157,6 +164,7 @@ pdf2word [flags] input.pdf [output.docx]
   -no-progress       disable the progress indicator
   -addr string       address for the browser page (default "0.0.0.0:9090", env PORT sets the port; 127.0.0.1:PORT = this computer only)
   -max-upload int    app mode: largest PDF the page accepts, in MB (default 100)
+  -public-url string app mode: public address of the page, e.g. https://pdf2word.example.com (env PUBLIC_URL)
   -no-browser        app mode: do not open the browser automatically
   -no-auto-exit      app mode: keep running after the page is closed (only relevant with a 127.0.0.1 address)
   -version           print version and exit

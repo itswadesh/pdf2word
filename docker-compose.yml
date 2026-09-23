@@ -17,6 +17,9 @@ services:
       PORT: "9090"
       # OCR languages (English and Odia are in the image).
       PDF2WORD_LANG: "eng+ori"
+      # Public address, once a domain points here. It fills in the canonical
+      # link, the sharing tags and /sitemap.xml, which search engines need.
+      # PUBLIC_URL: "https://pdf2word.example.com"
     command: ["-no-browser", "-jobs", "4"]
     # Uploads and results live in the container's temp directory and are
     # removed an hour after a conversion finishes; nothing needs a volume.
