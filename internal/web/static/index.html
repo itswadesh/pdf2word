@@ -15,9 +15,10 @@
     --paper-fold: #ECEBE4;
     --paper-shadow: rgba(27, 39, 51, .22);
     --ink: #1B2733;
-    --ink-soft: #566370;
+    --ink-soft: #4F5C68;
     --ink-on-paper: #1B2733;
     --ink-soft-on-paper: #66717B;
+    --paper-line: #D3D9DF;
     --mark: #F7D648;
     --mark-wash: rgba(247, 214, 72, .30);
     --ok: #2A7454;
@@ -64,49 +65,48 @@
   }
   body.dragging { background: color-mix(in srgb, var(--desk) 86%, var(--mark)); }
 
+  /* Phones: the promise, then the sheet, then the files. Wider: the sheet
+     at left as the object on the desk, one reading column at right. */
   .page {
-    max-width: 1040px;
+    max-width: 1060px;
     margin: 0 auto;
     padding: 28px 16px 48px;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "intro" "sheet" "tray";
     row-gap: 28px;
   }
-  .intro { max-width: 44em; }
-  .brand {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 15px;
-    color: var(--ink-soft);
-    margin: 0 0 12px;
-  }
+  .intro { grid-area: intro; max-width: 30em; }
+  .desk-left { grid-area: sheet; }
+  .tray { grid-area: tray; }
   h1 {
     font-family: var(--display);
     font-weight: 600;
-    font-size: clamp(27px, 4.4vw, 42px);
+    font-size: clamp(27px, 4.4vw, 40px);
     line-height: 1.1;
     letter-spacing: -0.01em;
     margin: 0;
     text-wrap: balance;
   }
-
-  /* Two columns from tablet width: the sheet at left, the tray at right. */
   @media (min-width: 880px) {
     .page {
-      grid-template-columns: 380px minmax(0, 1fr);
-      column-gap: 56px;
-      row-gap: 40px;
+      grid-template-columns: 400px minmax(0, 1fr);
+      grid-template-areas: "sheet intro" "sheet tray";
+      grid-template-rows: auto 1fr;
+      column-gap: 64px;
+      row-gap: 36px;
       padding-top: 44px;
+      align-items: start;
     }
-    .intro { grid-column: 1 / -1; }
-    .desk-left { position: sticky; top: 32px; align-self: start; }
+    .desk-left { position: sticky; top: 32px; }
+    .intro { padding-top: 6px; }
   }
 
   /* The sheet: drop target and live progress display in one. */
   .sheet-wrap { display: flex; justify-content: center; }
   .sheet {
     position: relative;
-    width: min(340px, 100%);
+    width: min(400px, 100%);
     aspect-ratio: 8.5 / 11;
     background: var(--paper);
     color: var(--ink-on-paper);
@@ -129,11 +129,31 @@
     z-index: 3;
     pointer-events: none;
   }
+  /* Letterhead and the page's text lines: what the highlighter sweeps over. */
+  .letterhead {
+    position: absolute; top: 16px; left: 20px;
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    color: var(--ink-soft-on-paper);
+    z-index: 1;
+  }
+  .lines {
+    position: absolute; left: 13%; right: 13%; top: 15%;
+    display: flex; flex-direction: column; gap: 10px;
+    z-index: 1;
+  }
+  .lines i { display: block; height: 6px; border-radius: 3px; background: var(--paper-line); }
+  .lines i:first-child { height: 10px; width: 58%; margin-bottom: 4px; }
+  .lines i:nth-child(2) { width: 100%; }
+  .lines i:nth-child(3) { width: 94%; }
+  .lines i:nth-child(4) { width: 100%; }
+  .lines i:nth-child(5) { width: 90%; }
+  .lines i:nth-child(6) { width: 44%; }
   .fill {
     position: absolute; left: 0; right: 0; top: 0;
     height: 0;
     background: var(--mark-wash);
     transition: height .4s linear;
+    z-index: 1;
   }
   .band {
     position: absolute; left: 0; right: 0; top: 0;
@@ -143,6 +163,7 @@
     box-shadow: 0 0 14px 2px var(--mark);
     opacity: 0;
     transition: top .4s linear, opacity .3s ease;
+    z-index: 1;
   }
   .sheet.busy .band { opacity: 1; }
   .sheet.busy.indeterminate .band { animation: sweep 2.4s ease-in-out infinite; }
@@ -156,7 +177,7 @@
     width: 100%; height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 6px;
-    padding: 24px;
+    padding: 44% 24px 24px; /* content sits below the text lines */
     background: none; border: 0; margin: 0;
     color: inherit; font: inherit; text-align: center;
     cursor: pointer;
@@ -168,7 +189,7 @@
   .sheet-idle strong {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 24px;
+    font-size: 26px;
     line-height: 1.15;
   }
   .sheet-idle span { color: var(--ink-soft-on-paper); font-size: 16px; }
@@ -176,7 +197,7 @@
   .count {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 64px;
+    font-size: 68px;
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -230,7 +251,7 @@
     min-width: 0; overflow-wrap: anywhere;
   }
   .size { color: var(--ink-soft); font-size: 15px; white-space: nowrap; }
-  .file-status { margin: 4px 0 0; }
+  .file-status { margin: 4px 0 0; font-size: 16px; }
   .file.error .file-status { color: var(--alert); }
   .file.done .file-status { color: var(--ok); }
   .bar {
@@ -244,7 +265,7 @@
   .file-actions { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; margin-top: 12px; }
   .file-actions:empty { display: none; }
   .btn, .link {
-    font: inherit; font-size: 15px;
+    font: inherit; font-size: 16px;
     cursor: pointer;
     min-height: 36px;
   }
@@ -287,7 +308,9 @@
   @media (max-width: 480px) {
     .page { padding-top: 20px; row-gap: 22px; }
     .sheet { width: min(300px, 84vw); }
+    .sheet-idle strong { font-size: 22px; }
     .count { font-size: 52px; }
+    .lines { gap: 8px; }
     .file-head { flex-wrap: wrap; gap: 2px 12px; }
   }
 </style>
@@ -295,13 +318,14 @@
 <body>
 <div class="page">
   <header class="intro">
-    <p class="brand">PDF to Word Converter</p>
     <h1>Just drop any PDF, and it will convert to editable Word format. It works for scanned images as well.</h1>
   </header>
 
   <div class="desk-left">
     <div class="sheet-wrap">
       <div class="sheet" id="sheet">
+        <span class="letterhead" aria-hidden="true">PDF to Word Converter</span>
+        <span class="lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
         <span class="fill" id="fill" aria-hidden="true"></span>
         <span class="band" id="band" aria-hidden="true"></span>
         <button class="pick" id="pick" type="button" aria-label="Choose PDF files to convert" aria-describedby="sheet-hint">
@@ -333,8 +357,8 @@
     </div>
     <div class="offline hidden" id="offline" role="status">Lost contact with the converter. Trying again.</div>
     <div class="about" id="about">
-      <p>Text PDFs keep their fonts, headings, tables and pictures. Scanned pages are read with text recognition, so the result is editable text rather than a picture of the page.</p>
-      <p>Files stay on the computer running the converter and are deleted an hour after conversion. The Word file downloads by itself when it is ready.</p>
+      <p>Text PDFs keep their fonts, headings, tables and pictures. Scanned pages are read with text recognition, so you get editable text, not a picture of the page.</p>
+      <p>Files stay on the computer running the converter and are deleted an hour later. The Word file downloads by itself when it is ready.</p>
     </div>
     <div class="tray-head hidden" id="tray-head">
       <span id="tray-summary"></span>
