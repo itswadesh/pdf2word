@@ -112,8 +112,8 @@ func TestServe_ServesPageAndStopsOnCancel(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || !strings.Contains(string(body), "Drop PDF files here") {
-		t.Fatalf("status %d; page missing drop zone", resp.StatusCode)
+	if resp.StatusCode != 200 || !strings.Contains(string(body), "Choose a PDF") {
+		t.Fatalf("status %d; page missing the file picker", resp.StatusCode)
 	}
 
 	cancel()

@@ -51,392 +51,507 @@
 }
 </script>
 <style>
-  /* A sheet of paper on a desk. Progress is highlighter ink filling the
-     page from the top; everything around the sheet stays quiet. */
+  /* The page is a gauge. What the server has read is inked; what it has not
+     is still blank. The boundary between them is the progress, and it is the
+     same boundary everywhere: the fill edge, the scan band and the split in
+     the numeral all sit at --p.
+
+     Two rules govern the tokens. They are named for their ROLE, never for an
+     object, and no surface ever ships without its on-surface. That is what
+     makes a half-populated dark mode impossible. */
+  @property --p { syntax: "<percentage>"; inherits: true; initial-value: 0%; }
+
   :root {
-    --desk: #E3E7EB;
-    --desk-deep: #C4CCD4;
-    --paper: #FFFFFE;
-    --paper-fold: #ECEBE4;
-    --paper-shadow: rgba(27, 39, 51, .22);
-    --ink: #1B2733;
-    --ink-soft: #4F5C68;
-    --ink-on-paper: #1B2733;
-    --ink-soft-on-paper: #66717B;
-    --paper-line: #D3D9DF;
-    --mark: #F7D648;
-    --mark-wash: rgba(247, 214, 72, .30);
-    --ok: #2A7454;
-    --alert: #AE3F34;
-    --focus: #2B5FD9;
-    --display: "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Segoe UI", sans-serif;
-    --body: "Cambria", "Charter", "Georgia", "Times New Roman", serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --desk: #1B2329;
-      --desk-deep: #35424C;
-      --paper-shadow: rgba(0, 0, 0, .6);
-      --ink: #E9EDF0;
-      --ink-soft: #A7B2BB;
-      --ok: #7FCDA6;
-      --alert: #F09A90;
-      --focus: #8FB0FF;
-    }
-  }
-  :root[data-theme="dark"] {
-    --desk: #1B2329;
-    --desk-deep: #35424C;
-    --paper-shadow: rgba(0, 0, 0, .6);
-    --ink: #E9EDF0;
-    --ink-soft: #A7B2BB;
-    --ok: #7FCDA6;
-    --alert: #F09A90;
-    --focus: #8FB0FF;
+    color-scheme: light dark;
+
+    --bg:              #E7EBEF;
+    --on-bg:           #121A22;
+    --on-bg-soft:      #48545F;
+    --hairline:        #C6D0D8;
+
+    --surface:         #FCFCFB;
+    --on-surface:      #121A22;
+    --on-surface-soft: #586470;
+    --surface-edge:    #737D87;
+    --surface-rule:    #DCE1E6;
+    --surface-tint:    #F7EEDC;
+
+    --read:            #1A2733;
+    --on-read:         #F5F7F9;
+    --on-read-soft:    #AEBAC5;
+    --read-rule:       #33414E;
+
+    --band:            #FFC93C;
+    --band-edge:       #8A4F00;
+
+    --accent:          #9C4708;
+    --ok:              #12694A;
+    --ok-on-read:      #6FE3AE;
+    --danger:          #A62A20;
+    --danger-on-read:  #FFB3A7;
+    --warn:            #8A4F00;
+    --track:           #CBD3DB;
+    --fill:            #1A2733;
+    --focus:           #1B48C4;
+    --btn:             #16202A;
+    --on-btn:          #FFFFFF;
+    --btn-hover:       #000000;
+
+    --shade-contact:   rgba(18, 26, 34, .20);
+    --shade-cast:      rgba(18, 26, 34, .26);
+
+    --ui:  ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text",
+           "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --num: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono",
+           "Roboto Mono", Menlo, Consolas, monospace;
+
+    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px; --s5: 24px;
+    --s6: 32px; --s7: 48px; --s8: 64px;
+
+    --r-gauge: 4px;
+    --r-ctl:   8px;
+    --r-pill:  999px;
+
+    --lift-rest:  0 1px 1px var(--shade-contact), 0 18px 34px -16px var(--shade-cast);
+    --lift-hover: 0 1px 1px var(--shade-contact), 0 26px 44px -18px var(--shade-cast);
   }
 
-  * { box-sizing: border-box; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:              #0C1115;
+      --on-bg:           #E6ECF1;
+      --on-bg-soft:      #A2AEB9;
+      --hairline:        #29333C;
+
+      --surface:         #151D24;
+      --on-surface:      #E6ECF1;
+      --on-surface-soft: #98A5B1;
+      --surface-edge:    #5F6B77;
+      --surface-rule:    #242F38;
+      --surface-tint:    #33291A;
+
+      --read:            #B5C2CD;
+      --on-read:         #0E151C;
+      --on-read-soft:    #3D4955;
+      --read-rule:       #94A3B0;
+
+      --band:            #FFD15C;
+      --band-edge:       #5A3400;
+
+      --accent:          #F0A64B;
+      --ok:              #58D39B;
+      --ok-on-read:      #0C5137;
+      --danger:          #FF9B8F;
+      --danger-on-read:  #8E1F16;
+      --warn:            #F0BE6A;
+      --track:           #2B363F;
+      --fill:            #B5C2CD;
+      --focus:           #8AB4FF;
+      --btn:             #E6ECF1;
+      --on-btn:          #0C1115;
+      --btn-hover:       #FFFFFF;
+
+      --shade-contact:   rgba(0, 0, 0, .66);
+      --shade-cast:      rgba(0, 0, 0, .45);
+    }
+  }
+  /* Repeated in full, deliberately: a partial copy here would be the same
+     half-populated-mode bug in a new place. */
+  :root[data-theme="dark"] {
+    --bg:              #0C1115;
+    --on-bg:           #E6ECF1;
+    --on-bg-soft:      #A2AEB9;
+    --hairline:        #29333C;
+
+    --surface:         #151D24;
+    --on-surface:      #E6ECF1;
+    --on-surface-soft: #98A5B1;
+    --surface-edge:    #5F6B77;
+    --surface-rule:    #242F38;
+    --surface-tint:    #33291A;
+
+    --read:            #B5C2CD;
+    --on-read:         #0E151C;
+    --on-read-soft:    #3D4955;
+    --read-rule:       #94A3B0;
+
+    --band:            #FFD15C;
+    --band-edge:       #5A3400;
+
+    --accent:          #F0A64B;
+    --ok:              #58D39B;
+    --ok-on-read:      #0C5137;
+    --danger:          #FF9B8F;
+    --danger-on-read:  #8E1F16;
+    --warn:            #F0BE6A;
+    --track:           #2B363F;
+    --fill:            #B5C2CD;
+    --focus:           #8AB4FF;
+    --btn:             #E6ECF1;
+    --on-btn:          #0C1115;
+    --btn-hover:       #FFFFFF;
+
+    --shade-contact:   rgba(0, 0, 0, .66);
+    --shade-cast:      rgba(0, 0, 0, .45);
+  }
+
+  * { box-sizing: border-box; min-width: 0; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    background: var(--desk);
-    color: var(--ink);
-    font-family: var(--body);
-    font-size: 17px;
-    line-height: 1.5;
+    background: var(--bg);
+    color: var(--on-bg);
+    font: 400 17px/1.6 var(--ui);
     min-height: 100vh;
-    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
   }
-  body.dragging { background: color-mix(in srgb, var(--desk) 86%, var(--mark)); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+  .hidden { display: none !important; }
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
 
-  /* Phones: the promise, then the sheet, then the files. Wider: the sheet
-     at left as the object on the desk, one reading column at right. */
+  /* The drag ring lives on the viewport, so dropping is signalled without
+     re-tinting every surface on the page. */
+  .drag-ring {
+    position: fixed; inset: 0; pointer-events: none; z-index: 9;
+    box-shadow: inset 0 0 0 0 transparent;
+    transition: box-shadow .15s ease;
+  }
+  body.dragging .drag-ring { box-shadow: inset 0 0 0 3px var(--accent); }
+
   .page {
-    max-width: 1060px;
-    margin: 0 auto;
-    padding: 28px 16px 48px;
+    max-width: 1080px;
+    margin-inline: auto;
+    padding: var(--s5) var(--s4) var(--s7);
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "intro" "sheet" "tray" "info" "colophon";
-    row-gap: 28px;
+    grid-template-areas: "head" "gauge" "tray" "info" "foot";
+    row-gap: var(--s6);
   }
-  .intro { grid-area: intro; max-width: 30em; }
-  .desk-left { grid-area: sheet; }
-  .tray { grid-area: tray; }
+  .intro    { grid-area: head; }
+  .gauge-col { grid-area: gauge; }
+  .tray     { grid-area: tray; }
+  .info     { grid-area: info; }
+  .colophon { grid-area: foot; }
+
   h1 {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: clamp(30px, 5vw, 44px);
-    line-height: 1.05;
-    letter-spacing: -0.01em;
     margin: 0;
+    font-size: clamp(28px, 4.2vw, 40px);
+    line-height: 1.08;
+    font-weight: 700;
+    letter-spacing: -.02em;
     text-wrap: balance;
   }
   .lede {
-    margin: 14px 0 0;
-    color: var(--ink-soft);
-    max-width: 32em;
+    margin: var(--s3) 0 0;
+    color: var(--on-bg-soft);
+    max-width: 42ch;
+    text-wrap: pretty;
+  }
+  .trust {
+    margin: var(--s2) 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    font-weight: 500;
+    color: var(--on-bg-soft);
   }
 
-  /* Reading matter below the tool: how it works, what survives, questions. */
+  /* ---- the gauge ------------------------------------------------------ */
+  .gauge {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--r-gauge);
+    background: var(--surface);
+    border: 1px solid var(--surface-edge);
+    box-shadow: var(--lift-rest);
+    transition: box-shadow .18s ease, border-color .18s ease;
+  }
+  .gauge:hover { box-shadow: var(--lift-hover); }
+  .gauge__face { position: absolute; inset: 0; display: block; }
+  /* At rest the glyph is a watermark behind the call to action; it comes up
+     to full strength while converting, which is when the ink boundary
+     sweeping across it is the thing worth looking at. */
+  .gauge:not(.busy) .gauge__face { opacity: .38; }
+  .gauge__unread { color: var(--surface-rule); }
+  .gauge__read {
+    color: var(--read-rule);
+    background: var(--read);
+    clip-path: inset(0 0 calc(100% - var(--p)) 0);
+  }
+  .gauge__face svg { width: 100%; height: 100%; display: block; }
+  .gauge__band {
+    position: absolute; left: 0; right: 0; top: var(--p);
+    height: 2px; margin-top: -1px;
+    background: var(--band);
+    outline: 1px solid var(--band-edge);
+    opacity: 0;
+  }
+  .gauge.busy .gauge__band { opacity: 1; }
+  .gauge.ocr .gauge__band {
+    background: repeating-linear-gradient(90deg, var(--band) 0 6px, transparent 6px 10px);
+  }
+  .gauge.sweeping .gauge__band { display: none; }
+  .gauge__sweep {
+    position: absolute; left: 0; right: 0; top: 0; height: 24%;
+    background: linear-gradient(180deg, transparent, var(--surface-tint), transparent);
+    opacity: 0; pointer-events: none;
+  }
+  .gauge.sweeping .gauge__sweep { opacity: 1; animation: sweep 2.4s ease-in-out infinite; }
+  @keyframes sweep { 0% { transform: translateY(-20%); } 50% { transform: translateY(400%); } 100% { transform: translateY(-20%); } }
+
+  .gauge.dragover { border-color: var(--accent); border-width: 2px; }
+  .gauge.dragover .gauge__unread { background: var(--surface-tint); }
+  .gauge.stopped .gauge__band { display: none; }
+  .gauge__stopline {
+    position: absolute; left: 0; right: 0; top: var(--p);
+    height: 2px; margin-top: -1px; background: var(--danger); display: none;
+  }
+  .gauge.stopped .gauge__stopline { display: block; }
+  .gauge.stopped { border-color: var(--danger); }
+  .gauge.cancelled .gauge__stopline { background: var(--on-bg-soft); }
+  .gauge.cancelled { border-color: var(--on-bg-soft); }
+
+  /* Two readouts, complementary clips: each half only ever sits on one known
+     surface, so text over a moving background cannot happen. */
+  .readout {
+    position: absolute; inset: 0;
+    display: grid; place-content: center; justify-items: center;
+    padding: var(--s5); text-align: center; gap: var(--s1);
+  }
+  .readout--paper { color: var(--on-surface); clip-path: inset(var(--p) 0 0 0); }
+  .readout--ink   { color: var(--on-read);    clip-path: inset(0 0 calc(100% - var(--p)) 0); }
+  .readout.hidden { display: none !important; }
+  .count {
+    font-family: var(--num);
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(52px, 13vw, 84px);
+    line-height: .92;
+    font-weight: 600;
+    letter-spacing: -.03em;
+  }
+  .count-unit { font-size: .42em; font-weight: 500; margin-left: .06em; }
+
+  .gauge__idle {
+    position: absolute; inset: 0;
+    display: grid; place-content: center; justify-items: center;
+    gap: var(--s2); padding: var(--s5); text-align: center;
+  }
+  .pick {
+    min-height: 48px; width: min(280px, 100%);
+    padding: 0 var(--s5);
+    background: var(--btn); color: var(--on-btn);
+    border: 0; border-radius: var(--r-ctl);
+    font: 600 16px/1 var(--ui);
+    cursor: pointer;
+  }
+  .pick:hover { background: var(--btn-hover); }
+  .gauge__limit { font-size: 14px; color: var(--on-surface-soft); }
+  .gauge__drophint { display: none; font-size: 14px; color: var(--on-surface-soft); }
+  @media (hover: hover) and (pointer: fine) { .gauge__drophint { display: block; } }
+
+  /* ---- status strip: always present, so nothing below it ever shifts --- */
+  .strip {
+    display: flex; align-items: center; gap: var(--s3);
+    min-height: 56px; margin-top: var(--s3);
+  }
+  .strip__dot {
+    flex: none; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--on-bg-soft);
+  }
+  .strip.running .strip__dot { background: var(--accent); border-color: var(--accent); }
+  .strip.done    .strip__dot { background: var(--ok); border-color: var(--ok); border-radius: 50%; }
+  .strip.error   .strip__dot { background: var(--danger); border-color: var(--danger); border-radius: 0; }
+  .strip__label { font-size: 16px; line-height: 1.3; font-weight: 600; }
+  .strip__detail {
+    font-family: var(--num); font-variant-numeric: tabular-nums;
+    font-size: 14px; color: var(--on-bg-soft);
+  }
+  .strip__note { margin: 0 0 var(--s3); font-size: 14px; color: var(--on-bg-soft); }
+
+  /* ---- notices -------------------------------------------------------- */
+  .notice, .offline {
+    display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); align-items: baseline;
+    margin: 0 0 var(--s4); padding: var(--s2) 0 var(--s2) var(--s3);
+    border-left: 3px solid var(--warn); border-radius: var(--r-ctl);
+    font-size: 16px; overflow-wrap: anywhere;
+  }
+  .notice { color: var(--warn); }
+  .notice p { margin: 0; flex: 1 1 16em; }
+  .offline { border-left-color: var(--on-bg-soft); color: var(--on-bg-soft); }
+
+  .tray-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--s4); font-size: 14px; color: var(--on-bg-soft); margin-bottom: var(--s1);
+  }
+
+  /* ---- file rows ------------------------------------------------------ */
+  .files { list-style: none; margin: 0; padding: 0; }
+  .file { border-top: 1px solid var(--hairline); padding: var(--s4) 0 var(--s5); }
+  .file:last-child { border-bottom: 1px solid var(--hairline); }
+  .file-head { display: flex; justify-content: space-between; gap: var(--s4); align-items: baseline; }
+  .name {
+    margin: 0; font-size: 17px; line-height: 1.3; font-weight: 600;
+    overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .size {
+    font-family: var(--num); font-variant-numeric: tabular-nums;
+    font-size: 14px; font-weight: 500; color: var(--on-bg-soft); white-space: nowrap;
+  }
+  .file-status { margin: var(--s1) 0 0; font-size: 14px; line-height: 1.45; color: var(--on-bg-soft); }
+  .file.error .file-status { font-size: 17px; line-height: 1.6; color: var(--danger); }
+  .file.done  .file-status { color: var(--ok); }
+  .bar { height: 4px; margin-top: var(--s3); background: var(--track); border-radius: var(--r-pill); overflow: hidden; }
+  .bar > span { display: block; height: 100%; width: 0; background: var(--fill); border-radius: var(--r-pill); }
+  .file.done .bar > span { background: var(--ok); }
+  .file-actions { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); align-items: center; margin-top: var(--s3); }
+  .file-actions:empty { display: none; }
+
+  .btn, .link { font: 600 16px/1 var(--ui); cursor: pointer; min-height: 44px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--btn); color: var(--on-btn);
+    border: 0; border-radius: var(--r-ctl); padding: 0 var(--s4);
+    text-decoration: none;
+  }
+  .btn:hover { background: var(--btn-hover); }
+  .link {
+    display: inline-flex; align-items: center;
+    background: none; border: 0; padding: 0 10px; margin-inline: -10px;
+    color: var(--on-bg); font-weight: 400;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .link:hover { color: var(--accent); }
+  .notes { margin: var(--s3) 0 0; padding-left: 18px; color: var(--on-bg-soft); font-size: 14px; line-height: 1.45; }
+  .notes li { margin: 2px 0; overflow-wrap: anywhere; }
+
+  /* ---- reading matter below the tool ---------------------------------- */
   .info {
-    grid-area: info;
-    border-top: 1px solid var(--desk-deep);
-    padding-top: 30px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 30px 56px;
+    border-top: 1px solid var(--hairline);
+    padding-top: var(--s6);
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s6) var(--s8);
   }
   .info-wide { grid-column: 1 / -1; }
-  .info h2 {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 20px;
-    line-height: 1.2;
-    margin: 0 0 8px;
-  }
+  .info h2 { margin: 0 0 var(--s2); font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; }
   .info p { margin: 0; }
-  .info p, .info li, .info dd { color: var(--ink-soft); max-width: 36em; }
+  .info p, .info li, .info dd { color: var(--on-bg-soft); max-width: 68ch; }
   .steps { margin: 0; padding-left: 1.3em; }
-  .steps li { margin-bottom: 7px; }
+  .steps li { margin-bottom: var(--s2); }
   .steps li:last-child { margin-bottom: 0; }
-  .qa { margin: 0; max-width: 42em; }
-  .qa dt { font-family: var(--display); font-weight: 600; color: var(--ink); margin-top: 16px; }
+  .qa { margin: 0; }
+  .qa dt { font-weight: 600; color: var(--on-bg); margin-top: var(--s4); }
   .qa dt:first-of-type { margin-top: 0; }
-  .qa dd { margin: 4px 0 0; }
-  .colophon {
-    grid-area: colophon;
-    color: var(--ink-soft);
-    font-size: 15px;
-  }
-  .colophon p { margin: 0; max-width: 46em; }
-  .info a, .colophon a { color: inherit; text-underline-offset: 3px; }
-  .info a:hover, .colophon a:hover { color: var(--ink); }
-  .info a:focus-visible, .colophon a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .qa dd { margin: var(--s1) 0 0; }
 
+  .colophon { color: var(--on-bg-soft); font-size: 15px; line-height: 1.55; border-top: 1px solid var(--hairline); padding-top: var(--s5); }
+  .colophon p { margin: 0; max-width: 68ch; }
+  .colophon a { color: var(--accent); text-underline-offset: 3px; }
+
+  /* ---- wider ---------------------------------------------------------- */
   @media (min-width: 720px) {
     .info { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-  @media (min-width: 880px) {
+  @media (min-width: 600px) {
+    .gauge { aspect-ratio: 17 / 22; max-width: 420px; margin-inline: auto; }
+  }
+  @media (min-width: 900px) {
     .page {
-      grid-template-columns: 400px minmax(0, 1fr);
-      grid-template-areas: "sheet intro" "sheet tray" "info info" "colophon colophon";
-      grid-template-rows: auto 1fr auto auto;
-      column-gap: 64px;
-      row-gap: 36px;
-      padding-top: 44px;
+      grid-template-columns: 420px minmax(0, 1fr);
+      grid-template-areas: "gauge head" "gauge tray" "info info" "foot foot";
+      column-gap: var(--s8);
+      row-gap: var(--s6);
+      padding: var(--s7) var(--s5) var(--s8);
       align-items: start;
     }
-    .desk-left { position: sticky; top: 32px; }
-    .intro { padding-top: 6px; }
+    .gauge-col { position: sticky; top: var(--s6); }
+    .gauge { margin-inline: 0; }
   }
 
-  /* The sheet: drop target and live progress display in one. */
-  .sheet-wrap { display: flex; justify-content: center; }
-  .sheet {
-    position: relative;
-    width: min(400px, 100%);
-    aspect-ratio: 8.5 / 11;
-    background: var(--paper);
-    color: var(--ink-on-paper);
-    border-radius: 2px;
-    box-shadow: 0 1px 2px var(--paper-shadow), 0 12px 30px -12px var(--paper-shadow);
-    overflow: hidden;
-    text-align: center;
-    transition: transform .18s ease, box-shadow .18s ease;
-  }
-  .sheet:hover, .sheet.over, .sheet:has(.pick:focus-visible) {
-    transform: translateY(-4px);
-    box-shadow: 0 2px 3px var(--paper-shadow), 0 24px 40px -14px var(--paper-shadow);
-  }
-  .sheet.over { outline: 3px solid var(--mark); outline-offset: -3px; }
-  .sheet::before { /* folded corner */
-    content: "";
-    position: absolute; top: 0; right: 0;
-    width: 38px; height: 38px;
-    background: linear-gradient(to bottom left, var(--desk) 50%, var(--paper-fold) 50%);
-    z-index: 3;
-    pointer-events: none;
-  }
-  /* Letterhead and the page's text lines: what the highlighter sweeps over. */
-  .letterhead {
-    position: absolute; top: 16px; left: 20px;
-    font-family: var(--display); font-weight: 600; font-size: 12px;
-    color: var(--ink-soft-on-paper);
-    z-index: 1;
-  }
-  .lines {
-    position: absolute; left: 13%; right: 13%; top: 15%;
-    display: flex; flex-direction: column; gap: 10px;
-    z-index: 1;
-  }
-  .lines i { display: block; height: 6px; border-radius: 3px; background: var(--paper-line); }
-  .lines i:first-child { height: 10px; width: 58%; margin-bottom: 4px; }
-  .lines i:nth-child(2) { width: 100%; }
-  .lines i:nth-child(3) { width: 94%; }
-  .lines i:nth-child(4) { width: 100%; }
-  .lines i:nth-child(5) { width: 90%; }
-  .lines i:nth-child(6) { width: 44%; }
-  .fill {
-    position: absolute; left: 0; right: 0; top: 0;
-    height: 0;
-    background: var(--mark-wash);
-    transition: height .4s linear;
-    z-index: 1;
-  }
-  .band {
-    position: absolute; left: 0; right: 0; top: 0;
-    height: 6px;
-    margin-top: -3px;
-    background: var(--mark);
-    box-shadow: 0 0 14px 2px var(--mark);
-    opacity: 0;
-    transition: top .4s linear, opacity .3s ease;
-    z-index: 1;
-  }
-  .sheet.busy .band { opacity: 1; }
-  .sheet.busy.indeterminate .band { animation: sweep 2.4s ease-in-out infinite; }
-  @keyframes sweep {
-    0%   { top: 4%; }
-    50%  { top: 96%; }
-    100% { top: 4%; }
-  }
-  .pick {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px;
-    padding: 44% 24px 24px; /* content sits below the text lines */
-    background: none; border: 0; margin: 0;
-    color: inherit; font: inherit; text-align: center;
-    cursor: pointer;
-    z-index: 2;
-  }
-  .pick:focus-visible { outline: 3px solid var(--focus); outline-offset: -6px; border-radius: 2px; }
-  .pick > span { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; }
-  .pick > span.hidden { display: none; }
-  .sheet-idle strong {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 26px;
-    line-height: 1.15;
-  }
-  .sheet-idle span { color: var(--ink-soft-on-paper); font-size: 16px; }
-  .sheet-idle .sheet-limit { font-size: 13px; margin-top: 10px; }
-  .count {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 68px;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
-  .count small { font-size: 26px; font-weight: 400; color: var(--ink-soft-on-paper); margin-left: 4px; }
-  .sheet-status { font-size: 17px; }
-  .sheet-eta { font-size: 15px; color: var(--ink-soft-on-paper); min-height: 1.4em; }
-  .sheet-file {
-    font-size: 14px; color: var(--ink-soft-on-paper);
-    max-width: 100%; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .sheet-more { font-size: 13px; color: var(--ink-soft-on-paper); margin-top: 14px; }
-  .sheet.finished .count { color: var(--ok); }
-  .sheet.finished .band { opacity: 0; }
-
-  /* The tray: messages and the files. */
-  .tray { min-width: 0; }
-  .about { color: var(--ink-soft); max-width: 34em; }
-  .about p { margin: 0 0 12px; }
-  .about.hidden { display: none; }
-
-  .notice, .offline {
-    display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline;
-    margin: 0 0 20px;
-    padding: 0 0 0 14px;
-    border-left: 3px solid var(--alert);
-    font-size: 15px;
-    overflow-wrap: anywhere;
-  }
-  .notice p { margin: 0; flex: 1 1 16em; }
-  .offline { border-left-color: var(--ink-soft); color: var(--ink-soft); }
-  .notice.hidden, .offline.hidden { display: none; }
-
-  .tray-head {
-    display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
-    font-size: 15px; color: var(--ink-soft);
-    margin-bottom: 4px;
-  }
-  .tray-head.hidden { display: none; }
-
-  .files { list-style: none; margin: 0; padding: 0; }
-  .file {
-    border-top: 1px solid var(--desk-deep);
-    padding: 16px 0 18px;
-  }
-  .file:last-child { border-bottom: 1px solid var(--desk-deep); }
-  .file-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
-  .name {
-    margin: 0;
-    font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.25;
-    min-width: 0; overflow-wrap: anywhere;
-  }
-  .size { color: var(--ink-soft); font-size: 15px; white-space: nowrap; }
-  .file-status { margin: 4px 0 0; font-size: 16px; }
-  .file.error .file-status { color: var(--alert); }
-  .file.done .file-status { color: var(--ok); }
-  .bar {
-    height: 4px; margin-top: 10px;
-    background: var(--desk-deep);
-    border-radius: 2px; overflow: hidden;
-  }
-  .bar > span { display: block; height: 100%; width: 0; background: var(--mark); transition: width .4s linear; }
-  .file.done .bar > span { background: var(--ok); }
-  .file.error .bar > span, .file.cancelled .bar > span { background: var(--desk-deep); }
-  .file-actions { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; margin-top: 12px; }
-  .file-actions:empty { display: none; }
-  .btn, .link {
-    font: inherit; font-size: 16px;
-    cursor: pointer;
-    min-height: 36px;
-  }
-  .btn {
-    display: inline-flex; align-items: center;
-    background: var(--ink); color: var(--desk);
-    border: 0; border-radius: 3px;
-    padding: 6px 16px;
-    text-decoration: none;
-    font-family: var(--display); font-weight: 600; letter-spacing: .01em;
-  }
-  .btn:hover { filter: brightness(1.15); }
-  .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .link {
-    background: none; border: 0; padding: 0;
-    color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px;
-  }
-  .link:hover { color: var(--ink); }
-  .notes { margin: 10px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 14px; line-height: 1.45; }
-  .notes.hidden { display: none; }
-  .notes li { margin: 2px 0; overflow-wrap: anywhere; }
-
-  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .hidden { display: none !important; }
-
-  @media (pointer: coarse) {
-    .btn, .link { min-height: 44px; }
-    .btn { padding: 10px 18px; }
-  }
   @media (prefers-reduced-motion: reduce) {
-    .sheet, .fill, .band, .bar > span { transition: none; }
-    .sheet.busy.indeterminate .band { animation: none; top: 50%; }
-    .sheet:hover, .sheet.over, .sheet:has(.pick:focus-visible) { transform: none; }
+    .gauge, .gauge__band, .bar > span, .drag-ring { transition: none; }
+    .gauge.sweeping .gauge__sweep { animation: none; opacity: 0; }
   }
   @media (prefers-contrast: more) {
-    .file { border-color: var(--ink); }
-    .btn { outline: 2px solid var(--ink); outline-offset: -2px; }
-    .link, .size, .about, .tray-head, .lede, .colophon,
-    .info p, .info li, .info dd { color: var(--ink); }
-  }
-  @media (max-width: 480px) {
-    .page { padding-top: 20px; row-gap: 22px; }
-    .sheet { width: min(300px, 84vw); }
-    .sheet-idle strong { font-size: 22px; }
-    .count { font-size: 52px; }
-    .lines { gap: 8px; }
-    .file-head { flex-wrap: wrap; gap: 2px 12px; }
+    :root { --hairline: var(--on-bg-soft); --surface-edge: var(--on-bg); --on-bg-soft: var(--on-bg); }
+    .btn { outline: 2px solid var(--on-btn); outline-offset: -2px; }
   }
 </style>
 </head>
 <body>
+<div class="drag-ring" aria-hidden="true"></div>
 <div class="page">
   <header class="intro">
     <h1>Free PDF to Word converter</h1>
-    <p class="lede">Drop a PDF and get it back as an editable Word document, laid out like the original. Scanned pages are read with text recognition, so you can edit those too.</p>
+    <p class="lede">Drop in a PDF and get an editable Word document back, laid out like the original.</p>
+    <p class="trust">No sign-up. Nothing is added to your file.</p>
   </header>
 
-  <div class="desk-left">
-    <div class="sheet-wrap">
-      <div class="sheet" id="sheet">
-        <span class="letterhead" aria-hidden="true">PDF to Word Converter</span>
-        <span class="lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        <span class="fill" id="fill" aria-hidden="true"></span>
-        <span class="band" id="band" aria-hidden="true"></span>
-        <button class="pick" id="pick" type="button" aria-label="Choose PDF files to convert" aria-describedby="sheet-hint">
-          <span class="sheet-idle" id="sheet-idle" aria-hidden="true">
-            <strong>Drop PDF files here</strong>
-            <span>or click to choose</span>
-            <span class="sheet-limit">.pdf files up to <span id="limit">100 MB</span></span>
-          </span>
-          <span class="sheet-busy hidden" id="sheet-busy" aria-hidden="true">
-            <span class="count" id="count"></span>
-            <span class="sheet-status" id="sheet-status"></span>
-            <span class="sheet-eta" id="sheet-eta"></span>
-            <span class="sheet-file" id="sheet-file"></span>
-            <span class="sheet-more">Click to add more files</span>
-          </span>
-        </button>
+  <div class="gauge-col">
+    <!-- The gauge. What has been read is inked, what has not is blank, and the
+         boundary between them is the progress. One document glyph, drawn twice
+         in two finishes, so the whole interior is a single object. -->
+    <div class="gauge" id="sheet">
+      <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+        <symbol id="doc" viewBox="0 0 170 220">
+          <g fill="currentColor">
+            <rect x="26" y="24" width="74" height="8" rx="2"/>
+            <rect x="26" y="48" width="118" height="5" rx="2"/>
+            <rect x="26" y="59" width="118" height="5" rx="2"/>
+            <rect x="26" y="70" width="104" height="5" rx="2"/>
+            <rect x="26" y="81" width="118" height="5" rx="2"/>
+            <rect x="26" y="92" width="61" height="5" rx="2"/>
+          </g>
+          <g fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="26" y="112" width="118" height="42" rx="2"/>
+            <path d="M26 126h118M26 140h118M66 112v42M105 112v42"/>
+            <rect x="26" y="168" width="52" height="34" rx="2"/>
+            <path d="M26 194l14-13 10 9 9-11 19 18"/>
+          </g>
+          <g fill="currentColor">
+            <circle cx="62" cy="180" r="4"/>
+            <rect x="88" y="170" width="56" height="5" rx="2"/>
+            <rect x="88" y="181" width="56" height="5" rx="2"/>
+            <rect x="88" y="192" width="38" height="5" rx="2"/>
+          </g>
+        </symbol>
+      </svg>
+
+      <span class="gauge__face gauge__unread" aria-hidden="true"><svg viewBox="0 0 170 220" preserveAspectRatio="xMidYMid slice"><use href="#doc"/></svg></span>
+      <span class="gauge__face gauge__read" id="fill" aria-hidden="true"><svg viewBox="0 0 170 220" preserveAspectRatio="xMidYMid slice"><use href="#doc"/></svg></span>
+      <span class="gauge__sweep" aria-hidden="true"></span>
+      <span class="gauge__band" id="band" aria-hidden="true"></span>
+      <span class="gauge__stopline" aria-hidden="true"></span>
+
+      <!-- Two readouts with complementary clips: each half only ever sits on
+           one known surface, so text over a moving background cannot happen. -->
+      <span class="gauge__busy hidden" id="sheet-busy" aria-hidden="true">
+        <span class="readout readout--paper">
+          <span class="count"><span id="count"></span><span class="count-unit hidden" id="count-unit">%</span></span>
+        </span>
+        <span class="readout readout--ink">
+          <span class="count"><span id="count-ink"></span><span class="count-unit hidden" id="count-unit-ink">%</span></span>
+        </span>
+      </span>
+
+      <div class="gauge__idle" id="sheet-idle">
+        <button class="pick" id="pick" type="button" aria-describedby="sheet-hint">Choose a PDF</button>
+        <span class="gauge__limit">.pdf, up to <span id="limit">100 MB</span></span>
+        <span class="gauge__drophint">or drop it anywhere on this page</span>
       </div>
     </div>
-    <p id="sheet-hint" class="visually-hidden">Drag PDF files anywhere on this page, or press Enter to choose them. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Progress for each file is listed under Your files.</p>
+
+    <!-- Always present, so nothing below it moves when a conversion starts. -->
+    <div class="strip" id="strip">
+      <span class="strip__dot" id="strip-dot" aria-hidden="true"></span>
+      <span class="strip__label" id="sheet-status">Ready</span>
+      <span class="strip__detail" id="sheet-eta"></span>
+    </div>
+    <p class="strip__note hidden" id="ocr-note">Scanned pages take longer.</p>
+
+    <p id="sheet-hint" class="visually-hidden">Choose a PDF to convert, or drag PDF files anywhere on this page. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Progress for each file is listed under Your files.</p>
     <input type="file" id="file" accept=".pdf" multiple hidden>
   </div>
 
@@ -448,9 +563,6 @@
       <button class="link" id="notice-close" type="button">Dismiss</button>
     </div>
     <div class="offline hidden" id="offline" role="status">Can't reach the converter. Retrying.</div>
-    <div class="about" id="about">
-      <p>Files you drop appear here, one row each, with the page they are on and how long is left. The Word file downloads by itself as soon as it is ready.</p>
-    </div>
     <div class="tray-head hidden" id="tray-head">
       <span id="tray-summary"></span>
       <button class="link hidden" id="clear-done" type="button">Clear finished</button>
@@ -514,7 +626,10 @@
   const $ = (id) => document.getElementById(id);
   const sheet = $('sheet'), fill = $('fill'), band = $('band'), pick = $('pick');
   const sheetIdle = $('sheet-idle'), sheetBusy = $('sheet-busy');
-  const count = $('count'), sheetStatus = $('sheet-status'), sheetEta = $('sheet-eta'), sheetFile = $('sheet-file');
+  const count = $('count'), sheetStatus = $('sheet-status'), sheetEta = $('sheet-eta');
+  const countInk = $('count-ink');
+  const countUnit = $('count-unit'), countUnitInk = $('count-unit-ink');
+  const strip = $('strip'), ocrNote = $('ocr-note');
   const fileInput = $('file'), filesList = $('files'), about = $('about');
   const trayHead = $('tray-head'), traySummary = $('tray-summary'), clearDone = $('clear-done');
   const announcer = $('announcer');
@@ -540,14 +655,17 @@
 
   // --- picking files -------------------------------------------------------
   pick.addEventListener('click', () => fileInput.click());
+  // The whole gauge is a drop target, so tapping anywhere on it opens the
+  // picker too - except on a real control, which handles its own click.
+  sheet.addEventListener('click', (e) => { if (e.target.closest('button, a')) return; fileInput.click(); });
   fileInput.addEventListener('change', () => { queueFiles(fileInput.files); fileInput.value = ''; });
 
   let dragDepth = 0;
-  document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); sheet.classList.add('over'); });
+  document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); sheet.classList.add('dragover'); });
   document.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
   document.addEventListener('dragleave', () => { if (--dragDepth <= 0) endDrag(); });
   document.addEventListener('drop', (e) => { e.preventDefault(); endDrag(); queueFiles(e.dataTransfer.files); });
-  function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); sheet.classList.remove('over'); }
+  function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); sheet.classList.remove('dragover'); }
 
   // Only files named *.pdf and no larger than the limit are uploaded. The
   // rest are listed in a notice that stays until dismissed; the server
@@ -684,7 +802,7 @@
     row.view = v;
     applyView(row);
     announceChange(row, prev);
-    if (v.state === 'done' && prev.state !== 'done') {
+    if (isTerminal(v.state) && !isTerminal(prev.state)) {
       flash = { view: v, until: Date.now() + 4000 };
       setTimeout(renderSheet, 4100);
     }
@@ -723,7 +841,7 @@
   }
   function detailText(v) {
     if (v.state === 'uploading') return v.total ? fmtSize(v.done) + ' of ' + fmtSize(v.total) : '';
-    if (v.state === 'running' && v.total) return 'page ' + v.done + ' of ' + v.total;
+    if (v.state === 'running' && v.total) return 'Page ' + v.done + ' of ' + v.total;
     return '';
   }
 
@@ -823,59 +941,91 @@
     for (const r of rows.values()) if (r.view.state === 'queued') return r.view;
     return null;
   }
+  // One boundary drives the whole gauge: --p is the fill edge, the scan band
+  // and the split in the numeral. The readout is written to both faces, so
+  // each half only ever sits on one known surface.
+  function setP(pct) { sheet.style.setProperty('--p', Math.max(0, Math.min(100, pct)) + '%'); }
+  function setReadout(num, showUnit) {
+    count.textContent = num; countInk.textContent = num;
+    countUnit.classList.toggle('hidden', !showUnit);
+    countUnitInk.classList.toggle('hidden', !showUnit);
+  }
+  function joinDetail() {
+    return Array.prototype.filter.call(arguments, Boolean).join(' · ');
+  }
+  function setStrip(kind, label, detail) {
+    strip.className = 'strip' + (kind ? ' ' + kind : '');
+    sheetStatus.textContent = label;
+    sheetEta.textContent = detail || '';
+  }
+  function gaugeState() {
+    const keep = sheet.classList.contains('dragover') ? ' dragover' : '';
+    sheet.className = 'gauge' + keep +
+      Array.prototype.filter.call(arguments, Boolean).map(function (c) { return ' ' + c; }).join('');
+  }
+
   function renderSheet() {
     const active = activeView();
     const now = Date.now();
+
     if (!active && flash && flash.until > now) {
+      const v = flash.view;
       showBusy();
-      sheet.classList.add('finished');
-      sheet.classList.remove('indeterminate');
-      fill.style.height = '100%';
-      band.style.top = '100%';
-      count.textContent = 'Done';
-      sheetStatus.textContent = 'The Word file is downloading';
-      sheetEta.textContent = '';
-      sheetFile.textContent = flash.view.filename;
+      if (v.state === 'done') {
+        gaugeState('busy', 'done'); setP(100);
+        setReadout('Done', false);
+        setStrip('done', 'Done', joinDetail('Word file downloaded', v.filename));
+      } else if (v.state === 'cancelled') {
+        gaugeState('busy', 'cancelled'); setP(100 * overall(v));
+        setReadout('Stopped', false);
+        setStrip('', 'Stopped by you', v.filename || '');
+      } else {
+        gaugeState('busy', 'stopped'); setP(100 * overall(v));
+        setReadout('Stopped', false);
+        setStrip('error', 'Stopped', joinDetail(v.filename, 'see the file below'));
+      }
       document.title = TITLE;
       return;
     }
-    sheet.classList.remove('finished');
+
     if (!active) {
-      sheet.classList.remove('busy', 'indeterminate');
       sheetBusy.classList.add('hidden');
       sheetIdle.classList.remove('hidden');
-      fill.style.height = '0';
-      band.style.top = '0';
+      gaugeState(); setP(0);
+      setStrip('', 'Ready', '');
+      ocrNote.classList.add('hidden');
       document.title = TITLE;
       return;
     }
+
     showBusy();
-    sheetFile.textContent = active.filename || '';
     const pct = 100 * overall(active);
-    const determinate = active.state === 'uploading' ? active.total > 0 : (active.state === 'running' && active.total > 0);
+    const left = remaining(active);
+    const detail = [detailText(active), left === null ? '' : 'about ' + fmtDuration(left) + ' left']
+      .filter(Boolean).join(', ');
+    const ocr = active.stage === 'ocr';
+    if (ocr) ocrNote.classList.remove('hidden');
+
+    const determinate = active.state === 'uploading'
+      ? active.total > 0
+      : (active.state === 'running' && active.total > 0);
+
     if (determinate) {
-      sheet.classList.remove('indeterminate');
-      fill.style.height = pct + '%';
-      band.style.top = pct + '%';
-      count.textContent = '';
-      count.append(String(Math.round(pct)));
-      const small = document.createElement('small'); small.textContent = '%'; count.appendChild(small);
-      sheetStatus.textContent = phaseText(active);
-      const left = remaining(active);
-      const eta = [detailText(active), left === null ? '' : 'about ' + fmtDuration(left) + ' left'].filter(Boolean);
-      sheetEta.textContent = eta.join(', ');
+      gaugeState('busy', ocr ? 'ocr' : '');
+      setP(pct);
+      setReadout(String(Math.round(pct)), true);
+      setStrip('running', phaseText(active), joinDetail(active.filename, detail));
       document.title = Math.round(pct) + '% converting your PDF';
     } else {
-      sheet.classList.add('indeterminate');
-      fill.style.height = (pct > 0 ? pct : 0) + '%';
-      count.textContent = '';
-      sheetStatus.textContent = phaseText(active);
-      sheetEta.textContent = '';
+      // An unknown percentage is never shown as a number.
+      gaugeState('busy', 'sweeping');
+      setP(pct);
+      setReadout('', false);
+      setStrip('running', phaseText(active), joinDetail(active.filename, detail));
       document.title = TITLE;
     }
   }
   function showBusy() {
-    sheet.classList.add('busy');
     sheetIdle.classList.add('hidden');
     sheetBusy.classList.remove('hidden');
   }
@@ -883,7 +1033,7 @@
   // --- the tray ------------------------------------------------------------------------
   function renderTray() {
     const all = Array.from(rows.values());
-    about.classList.toggle('hidden', all.length > 0);
+    if (about) about.classList.toggle('hidden', all.length > 0);
     trayHead.classList.toggle('hidden', all.length === 0);
     if (!all.length) return;
     const done = all.filter((r) => r.view.state === 'done').length;
