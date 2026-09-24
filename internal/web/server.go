@@ -4,6 +4,7 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -64,6 +65,7 @@ type Server struct {
 	ownsDir bool
 
 	page     []byte        // index.html with the public URL and privacy copy filled in
+	etag     string        // strong validator for that page
 	stop     chan struct{} // closed by Close to end the retention sweeper
 	stopOnce sync.Once
 
@@ -79,6 +81,11 @@ const DefaultMaxUploadBytes = 100 << 20
 // Retention: uploads and results are deleted this long after a conversion
 // finishes, on a timer, so the promise the page makes does not depend on
 // somebody else turning up with another file.
+// pageCacheControl lets a CDN hold the page briefly and serve a stale copy
+// while it revalidates, so a slow origin is felt once rather than on every
+// visit. The browser always revalidates, so a deploy is picked up at once.
+const pageCacheControl = "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
+
 const retention = time.Hour
 
 // pruneInterval is how often the sweeper runs; a variable so tests can
@@ -151,6 +158,7 @@ func New(cfg Config) (*Server, error) {
 		sem:      make(chan struct{}, 1),
 		ownsDir:  ownsDir,
 		page:     page,
+		etag:     fmt.Sprintf(`"%x"`, sha256.Sum256(page)),
 		stop:     make(chan struct{}),
 		lastSeen: time.Now(),
 	}
@@ -185,7 +193,13 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 		s.touch()
-		w.Header().Set("Cache-Control", "no-store")
+		// The page itself is identical for every visitor, so it may be cached
+		// by the browser and by a CDN. Everything else is per-visitor state.
+		if r.URL.Path == "/" {
+			w.Header().Set("Cache-Control", pageCacheControl)
+		} else {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		s.mux.ServeHTTP(w, r)
 	})
 }
@@ -240,6 +254,15 @@ func (s *Server) touch() {
 	s.mu.Unlock()
 }
 
+// isHTTPS reports whether the visitor's connection is secure, including
+// when TLS was terminated by a proxy in front of this server.
+func isHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
 func loopbackHost(hostport string) bool {
 	host := hostport
 	if h, _, err := net.SplitHostPort(hostport); err == nil {
@@ -276,15 +299,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.pageOpened = true
 	s.mu.Unlock()
-	if s.clientID(r) == "" {
-		if id, err := newID(); err == nil {
-			http.SetCookie(w, &http.Cookie{
-				Name: clientCookie, Value: id, Path: "/",
-				HttpOnly: true, SameSite: http.SameSiteStrictMode,
-			})
-		}
-	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("ETag", s.etag)
+	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, s.etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Write(s.page)
 }
 
@@ -353,10 +373,23 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"busy": s.Busy()})
 }
 
-// handleJobs lists the requesting browser's own jobs.
+// handleJobs lists the requesting browser's own jobs. It is also where a
+// browser picks up its identity: the page is cached and so cannot carry a
+// per-visitor cookie, and the page polls this endpoint as soon as it
+// loads. The cookie applies from the next request onwards, so a caller
+// that sent none is still answered from the cookie-less bucket here.
 func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	client := s.clientID(r)
+	if client == "" {
+		if id, err := newID(); err == nil {
+			http.SetCookie(w, &http.Cookie{
+				Name: clientCookie, Value: id, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteStrictMode,
+				Secure: isHTTPS(r),
+			})
+		}
+	}
 	views := []JobView{}
 	for _, j := range s.jobs.list() {
 		if j.client == client {
@@ -372,7 +405,14 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 // unguessable id alone. Non-owners are told the job does not exist rather
 // than that it is forbidden, so ids cannot be probed.
 func (s *Server) owns(r *http.Request, j *job) bool {
-	return j.client == "" || j.client == s.clientID(r)
+	if j.client == "" {
+		return true // created without a session; the unguessable id is the capability
+	}
+	c := s.clientID(r)
+	if c == "" {
+		return true // a caller that keeps no cookies (curl, the CLI) likewise
+	}
+	return j.client == c
 }
 
 func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
@@ -429,7 +469,20 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	mode := convert.OCRAuto
 	lang := s.cfg.Base.Lang
+	// Usually the page already has its identity from the first poll. If the
+	// visitor dropped a file before that returned, mint it here so the job
+	// is filed under the id their next poll will send.
 	client := s.clientID(r)
+	if client == "" {
+		if id, err := newID(); err == nil {
+			client = id
+			http.SetCookie(w, &http.Cookie{
+				Name: clientCookie, Value: client, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteStrictMode,
+				Secure: isHTTPS(r),
+			})
+		}
+	}
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {

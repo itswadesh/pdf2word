@@ -696,14 +696,72 @@ func TestAllowRemoteAcceptsForeignHost(t *testing.T) {
 	}
 }
 
+// The page has to be cacheable by a CDN, which means no per-visitor
+// Set-Cookie on it and a validator so repeat visits are cheap.
+func TestPageIsCacheableAndRevalidates(t *testing.T) {
+	_, ts := newTestServer(t)
+	resp, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	cc := resp.Header.Get("Cache-Control")
+	if strings.Contains(cc, "no-store") {
+		t.Errorf("Cache-Control = %q; no-store keeps it out of every CDN and out of the back/forward cache", cc)
+	}
+	if !strings.Contains(cc, "s-maxage") {
+		t.Errorf("Cache-Control = %q; want a shared-cache lifetime", cc)
+	}
+	tag := resp.Header.Get("ETag")
+	if tag == "" {
+		t.Fatal("no ETag, so every revalidation re-sends the whole page")
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/", nil)
+	req.Header.Set("If-None-Match", tag)
+	again, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(again.Body)
+	again.Body.Close()
+	if again.StatusCode != http.StatusNotModified {
+		t.Errorf("revalidation returned %d, want 304", again.StatusCode)
+	}
+	if len(body) != 0 {
+		t.Errorf("304 carried %d bytes of body", len(body))
+	}
+
+	// API responses stay private.
+	api, err := ts.Client().Get(ts.URL + "/api/jobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	api.Body.Close()
+	if !strings.Contains(api.Header.Get("Cache-Control"), "no-store") {
+		t.Errorf("API Cache-Control = %q, want no-store", api.Header.Get("Cache-Control"))
+	}
+}
+
 // Each browser gets a cookie on first visit and only lists its own jobs, so
 // people sharing one server do not see each other's files.
 func TestJobsAreScopedPerBrowser(t *testing.T) {
 	_, ts := newTestServer(t)
 	data, _ := os.ReadFile(fixture("text.pdf"))
 
-	// First visit sets the cookie.
-	resp, err := ts.Client().Get(ts.URL + "/")
+	// The first API call mints the cookie; the page itself is cacheable and
+	// must not carry a per-visitor Set-Cookie.
+	page, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page.Body.Close()
+	for _, c := range page.Cookies() {
+		if c.Name == clientCookie {
+			t.Fatalf("the cacheable page set a per-visitor cookie: %+v", c)
+		}
+	}
+	resp, err := ts.Client().Get(ts.URL + "/api/jobs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -715,7 +773,7 @@ func TestJobsAreScopedPerBrowser(t *testing.T) {
 		}
 	}
 	if cookie == nil || cookie.Value == "" || !cookie.HttpOnly {
-		t.Fatalf("index did not set an HttpOnly %s cookie: %+v", clientCookie, resp.Cookies())
+		t.Fatalf("the first API call did not set an HttpOnly %s cookie: %+v", clientCookie, resp.Cookies())
 	}
 
 	uploadAs := func(c *http.Cookie, name string) JobView {
@@ -758,7 +816,7 @@ func TestJobsAreScopedPerBrowser(t *testing.T) {
 	other := &http.Cookie{Name: clientCookie, Value: "someone-else"}
 	mine := uploadAs(cookie, "mine.pdf")
 	uploadAs(other, "theirs.pdf")
-	uploadAs(nil, "anonymous.pdf")
+	anon := uploadAs(nil, "anonymous.pdf")
 
 	if got := listAs(cookie); len(got) != 1 || got[0] != "mine.pdf" {
 		t.Errorf("my list = %v, want [mine.pdf]", got)
@@ -766,8 +824,14 @@ func TestJobsAreScopedPerBrowser(t *testing.T) {
 	if got := listAs(other); len(got) != 1 || got[0] != "theirs.pdf" {
 		t.Errorf("their list = %v, want [theirs.pdf]", got)
 	}
-	if got := listAs(nil); len(got) != 1 || got[0] != "anonymous.pdf" {
-		t.Errorf("cookie-less list = %v, want [anonymous.pdf]", got)
+	// An upload that arrives without a session is given one, so it belongs
+	// to that browser rather than to a shared bucket every stranger can
+	// list. A caller that keeps no cookies reaches it by its id instead.
+	if got := listAs(nil); len(got) != 0 {
+		t.Errorf("cookie-less list = %v, want nothing shared between strangers", got)
+	}
+	if v := waitForJob(t, ts, anon.ID); v.Filename != "anonymous.pdf" {
+		t.Errorf("a cookie-less client could not follow its own job by id: %+v", v)
 	}
 	// The owner can still reach its own job by id.
 	waitForJob(t, ts, mine.ID, cookie)
