@@ -50,8 +50,9 @@ type Config struct {
 	Logf      func(format string, args ...any)
 }
 
-// clientCookie identifies a browser so that each one sees only the files it
-// uploaded. Jobs stay reachable by their (unguessable) id regardless.
+// clientCookie identifies a browser so that each one sees only the files
+// it uploaded, on every endpoint: listing, polling, cancelling and
+// downloading all check it.
 const clientCookie = "pdf2word_client"
 
 // Server is the HTTP application. Create it with New.
@@ -62,7 +63,9 @@ type Server struct {
 	sem     chan struct{} // one conversion at a time
 	ownsDir bool
 
-	page []byte // index.html with the public URL filled in
+	page     []byte        // index.html with the public URL and privacy copy filled in
+	stop     chan struct{} // closed by Close to end the retention sweeper
+	stopOnce sync.Once
 
 	mu         sync.Mutex
 	lastSeen   time.Time // last request from the page
@@ -72,6 +75,34 @@ type Server struct {
 // DefaultMaxUploadBytes is the largest PDF the page accepts unless
 // Config.MaxUploadBytes says otherwise: 100 MB.
 const DefaultMaxUploadBytes = 100 << 20
+
+// Retention: uploads and results are deleted this long after a conversion
+// finishes, on a timer, so the promise the page makes does not depend on
+// somebody else turning up with another file.
+const retention = time.Hour
+
+// pruneInterval is how often the sweeper runs; a variable so tests can
+// shorten it.
+var pruneInterval = 5 * time.Minute
+
+// The two versions of the page's privacy copy. Every sentence in both has
+// to be true of the deployment it is served by.
+const (
+	localPrivacyCopy = "No account, no email address, no watermark on the result and no daily limit. " +
+		"Files up to 100 MB are accepted. This copy of the converter runs on your own computer, so the " +
+		"PDFs never travel anywhere, and everything is deleted an hour after conversion."
+	hostedPrivacyCopy = "No account, no email address, no watermark on the result and no daily limit. " +
+		"Files up to 100 MB are accepted. Your PDF is uploaded to this server to be converted, is never " +
+		"shared with anyone, and is deleted an hour after the conversion finishes whether or not anyone " +
+		"else visits. Only the browser that uploaded a file can see or download the result. If you would " +
+		"rather the file never left your own machine, the converter is open source and you can run this " +
+		"same program yourself."
+	localFilesAnswer = "They stay on the machine running the converter and are deleted an hour after the " +
+		"conversion finishes, on a timer. Each browser only sees the files it uploaded."
+	hostedFilesAnswer = "They are uploaded to this server, kept only while the conversion runs, and deleted " +
+		"an hour after it finishes, on a timer that does not wait for another visitor. Only the browser " +
+		"that uploaded a file can list or download it, and nothing is passed to anyone else."
+)
 
 // New prepares a Server. Call Close to remove its working directory.
 func New(cfg Config) (*Server, error) {
@@ -86,7 +117,21 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("page missing from build: %w", err)
 	}
-	page = []byte(strings.ReplaceAll(string(page), "%PUBLIC_URL%", cfg.PublicURL))
+	// The page must tell the truth about where the file goes, and that
+	// depends on who can reach this server. A copy bound to loopback only
+	// converts the operator's own files on their own machine; one reachable
+	// from the network is taking documents from other people.
+	privacy, filesAnswer := localPrivacyCopy, localFilesAnswer
+	if cfg.AllowRemote {
+		privacy, filesAnswer = hostedPrivacyCopy, hostedFilesAnswer
+	}
+	for from, to := range map[string]string{
+		"%PUBLIC_URL%":   cfg.PublicURL,
+		"%PRIVACY%":      privacy,
+		"%FILES_ANSWER%": filesAnswer,
+	} {
+		page = []byte(strings.ReplaceAll(string(page), from, to))
+	}
 	ownsDir := false
 	if cfg.WorkDir == "" {
 		dir, err := os.MkdirTemp("", "pdf2word-web-")
@@ -106,8 +151,10 @@ func New(cfg Config) (*Server, error) {
 		sem:      make(chan struct{}, 1),
 		ownsDir:  ownsDir,
 		page:     page,
+		stop:     make(chan struct{}),
 		lastSeen: time.Now(),
 	}
+	go s.sweep()
 	s.mux.HandleFunc("GET /{$}", s.handleIndex)
 	s.mux.HandleFunc("GET /robots.txt", s.handleRobots)
 	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
@@ -143,8 +190,24 @@ func (s *Server) Handler() http.Handler {
 	})
 }
 
+// sweep deletes finished jobs once they are older than the retention
+// period, on the clock rather than on the next upload.
+func (s *Server) sweep() {
+	t := time.NewTicker(pruneInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.stop:
+			return
+		case <-t.C:
+			s.jobs.prune(retention)
+		}
+	}
+}
+
 // Close removes the working directory if the server created it.
 func (s *Server) Close() error {
+	s.stopOnce.Do(func() { close(s.stop) })
 	for _, j := range s.jobs.list() {
 		j.cancel()
 	}
@@ -303,9 +366,18 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, views)
 }
 
+// owns reports whether this request may act on the job. A job created by
+// a browser carries that browser's client id and is reachable only by it;
+// one created without a cookie (curl, a script) is reachable by its own
+// unguessable id alone. Non-owners are told the job does not exist rather
+// than that it is forbidden, so ids cannot be probed.
+func (s *Server) owns(r *http.Request, j *job) bool {
+	return j.client == "" || j.client == s.clientID(r)
+}
+
 func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 	j, ok := s.jobs.get(r.PathValue("id"))
-	if !ok {
+	if !ok || !s.owns(r, j) {
 		writeError(w, http.StatusNotFound, "no such job")
 		return
 	}
@@ -314,7 +386,7 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	j, ok := s.jobs.get(r.PathValue("id"))
-	if !ok {
+	if !ok || !s.owns(r, j) {
 		writeError(w, http.StatusNotFound, "no such job")
 		return
 	}
@@ -324,7 +396,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	j, ok := s.jobs.get(r.PathValue("id"))
-	if !ok {
+	if !ok || !s.owns(r, j) {
 		writeError(w, http.StatusNotFound, "no such job")
 		return
 	}

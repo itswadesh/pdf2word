@@ -86,11 +86,20 @@ func decode(t *testing.T, resp *http.Response, v any) {
 	}
 }
 
-func waitForJob(t *testing.T, ts *httptest.Server, id string) JobView {
+// waitForJob polls until the job reaches a terminal state. Pass the owning
+// browser's cookie when the job was uploaded with one: jobs are only
+// visible to the browser that created them.
+func waitForJob(t *testing.T, ts *httptest.Server, id string, as ...*http.Cookie) JobView {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := ts.Client().Get(ts.URL + "/api/jobs/" + id)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/jobs/"+id, nil)
+		for _, c := range as {
+			if c != nil {
+				req.AddCookie(c)
+			}
+		}
+		resp, err := ts.Client().Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -270,6 +279,146 @@ func between(s, open, close string) string {
 }
 
 func attrOf(page, prefix string) string { return between(page, prefix, `"`) }
+
+// The page promises where the file goes. A server reachable from the
+// network must not repeat the self-hosted claim that the PDF never leaves
+// your machine, because for every visitor but the operator it is false.
+func TestPrivacyCopyMatchesTheDeployment(t *testing.T) {
+	local, ts := newTestServer(t)
+	page := get(t, ts, "/")
+	if strings.Contains(page, "%PRIVACY%") || strings.Contains(page, "%FILES_ANSWER%") {
+		t.Fatal("copy placeholders were left in the page")
+	}
+	if !strings.Contains(page, "runs on your own computer") {
+		t.Error("a loopback-only server should say the files stay put")
+	}
+	if !local.cfg.AllowRemote && strings.Contains(page, "uploaded to this server") {
+		t.Error("a local server must not use the hosted wording")
+	}
+
+	s, err := New(Config{Base: convert.Options{Engine: &fakeEngine{}}, WorkDir: t.TempDir(), AllowRemote: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { pub.Close(); s.Close() })
+	hosted := get(t, pub, "/")
+	for _, want := range []string{
+		"uploaded to this server",
+		"deleted an hour after the conversion finishes whether or not anyone else visits",
+		"Only the browser that uploaded a file can see or download the result",
+		"run this same program yourself",
+	} {
+		if !strings.Contains(hosted, want) {
+			t.Errorf("hosted page missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"runs on the computer or server you point it at",
+		"your PDFs are not handed to anyone else",
+		"runs on your own computer",
+	} {
+		if strings.Contains(hosted, forbidden) {
+			t.Errorf("hosted page still claims %q, which is false for its visitors", forbidden)
+		}
+	}
+}
+
+// "deleted an hour after conversion" has to be the clock's job, not the
+// next visitor's.
+func TestFinishedJobsAreDeletedOnATimer(t *testing.T) {
+	old := pruneInterval
+	pruneInterval = 10 * time.Millisecond
+	t.Cleanup(func() { pruneInterval = old })
+
+	s, err := New(Config{Base: convert.Options{Engine: &fakeEngine{}}, WorkDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	j, err := s.jobs.create("old.pdf", convert.OCRAuto, "eng", "someone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(j.input, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	j.finish(convert.Report{Pages: 1}, nil)
+	j.mu.Lock()
+	j.finished = time.Now().Add(-2 * retention) // finished long ago
+	j.mu.Unlock()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, still := s.jobs.get(j.id); !still {
+			if _, err := os.Stat(j.dir); !os.IsNotExist(err) {
+				t.Fatalf("job forgotten but its directory survives: %v", err)
+			}
+			return // swept without any upload happening
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("an expired job was never swept; retention still waits for the next upload")
+}
+
+// "Only the browser that uploaded a file can see or download it" has to be
+// enforced, not just printed.
+func TestOneBrowserCannotReachAnothersJob(t *testing.T) {
+	_, ts := newTestServer(t)
+	data, _ := os.ReadFile(fixture("text.pdf"))
+
+	mine := &http.Cookie{Name: clientCookie, Value: "browser-one"}
+	theirs := &http.Cookie{Name: clientCookie, Value: "browser-two"}
+
+	do := func(method, path string, c *http.Cookie) *http.Response {
+		req, _ := http.NewRequest(method, ts.URL+path, nil)
+		if c != nil {
+			req.AddCookie(c)
+		}
+		resp, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, _ := mw.CreateFormFile("file", "private.pdf")
+	fw.Write(data)
+	mw.Close()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/convert", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(mine)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created JobView
+	decode(t, resp, &created)
+	if created.ID == "" {
+		t.Fatal("upload did not create a job")
+	}
+	waitForJob(t, ts, created.ID, mine) // finishes; the owner can still poll it
+
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/jobs/" + created.ID},
+		{http.MethodGet, "/api/jobs/" + created.ID + "/download"},
+		{http.MethodPost, "/api/jobs/" + created.ID + "/cancel"},
+	} {
+		r := do(tc.method, tc.path, theirs)
+		r.Body.Close()
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("another browser got %d from %s %s; want 404", r.StatusCode, tc.method, tc.path)
+		}
+	}
+	r := do(http.MethodGet, "/api/jobs/"+created.ID, mine)
+	r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("the owner was locked out of its own job: %d", r.StatusCode)
+	}
+}
 
 func TestInfo(t *testing.T) {
 	_, ts := newTestServer(t)
@@ -620,8 +769,8 @@ func TestJobsAreScopedPerBrowser(t *testing.T) {
 	if got := listAs(nil); len(got) != 1 || got[0] != "anonymous.pdf" {
 		t.Errorf("cookie-less list = %v, want [anonymous.pdf]", got)
 	}
-	// Direct access by id keeps working for everyone (ids are unguessable).
-	waitForJob(t, ts, mine.ID)
+	// The owner can still reach its own job by id.
+	waitForJob(t, ts, mine.ID, cookie)
 }
 
 func TestIdleTracking(t *testing.T) {
