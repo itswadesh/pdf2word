@@ -1,0 +1,131 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>The challenges of converting PDF to Word</h1>
+      <p class="lede">A PDF records where each letter goes on a page, not what the text means. Turning it back into a Word document means working out paragraphs, tables and reading order that the file never stored.</p>
+    </div>
+  </section>
+
+  <section class="section" id="why">
+    <div class="wrap narrow">
+      <h2>A printout, not a manuscript</h2>
+      <div class="prose">
+        <p>A Word document is a manuscript: paragraphs, headings, lists and tables that flow onto as many pages as they need. A PDF is closer to a printout: it says "draw these letters in this font at this spot", page by page, and nothing more. That is why a PDF looks the same everywhere, and why getting an editable document back out of one is hard.</p>
+        <p>Below are the twelve problems any PDF to Word converter has to solve, and how this one deals with each. Where it does not handle something yet, it says so.</p>
+      </div>
+      <nav class="toc" aria-label="The twelve challenges">
+        <ol>
+          <li><a href="#c1">Letters, not paragraphs</a></li>
+          <li><a href="#c2">Reading order</a></li>
+          <li><a href="#c3">Fonts you do not have</a></li>
+          <li><a href="#c4">Text that does not say what it shows</a></li>
+          <li><a href="#c5">Scanned pages</a></li>
+          <li><a href="#c6">Text turned into shapes</a></li>
+          <li><a href="#c7">Tables that are only lines</a></li>
+          <li><a href="#c8">Line breaks or flowing text</a></li>
+          <li><a href="#c9">Headers and footers</a></li>
+          <li><a href="#c10">Indian and other complex scripts</a></li>
+          <li><a href="#c11">Colours and drawings</a></li>
+          <li><a href="#c12">Passwords</a></li>
+        </ol>
+      </nav>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow challenges">
+      <article class="challenge" id="c1">
+        <h2><span class="challenge__n">1</span>Text is stored as letters, not paragraphs</h2>
+        <p>A PDF places each letter, or each run of letters, at an exact position. There is no "paragraph" or "line" in the file, so a converter has to rebuild them from the geometry.</p>
+        <p><span class="state state--ok">Handled</span> Letters are grouped into lines by their baseline and size, and lines into paragraphs by their spacing and indent. Wrapped prose is joined again, while list items and labels stay separate.</p>
+      </article>
+
+      <article class="challenge" id="c2">
+        <h2><span class="challenge__n">2</span>Reading order</h2>
+        <p>The order in which a PDF draws its text need not be the order you read it. A page in two columns, or a sidebar next to the main text, has to be untangled into one sequence.</p>
+        <p><span class="state state--part">Partly</span> Single-column pages come out in reading order. Pages in two or three columns are still read across, line by line, so their columns can mix.</p>
+      </article>
+
+      <article class="challenge" id="c3">
+        <h2><span class="challenge__n">3</span>Fonts you do not have</h2>
+        <p>A PDF usually carries the fonts it uses, often only the letters it needs. Word cannot use those, and the reader's computer may not have the original typeface, so lines can come out longer or shorter than they were.</p>
+        <p><span class="state state--ok">Handled</span> A missing typeface is replaced by Times New Roman, Arial or Courier New, and the character spacing is adjusted so each line still fits the width it had. The letters look different; the lines and pages fall in the same places.</p>
+      </article>
+
+      <article class="challenge" id="c4">
+        <h2><span class="challenge__n">4</span>Text that does not say what it shows</h2>
+        <p>To draw a letter, a PDF only needs the shape. The mapping back to real characters is optional, and some PDFs leave it out or get it wrong, so the text looks right on screen but copies out as nonsense.</p>
+        <p><span class="state state--no">Not yet</span> Such pages are not detected: their text comes across as the PDF states it. If you run the program yourself, <code>-ocr force</code> reads every page with OCR instead, which gets the words from what is shown.</p>
+      </article>
+
+      <article class="challenge" id="c5">
+        <h2><span class="challenge__n">5</span>Scanned pages</h2>
+        <p>A scan is a picture of a page. There is no text in it at all, only pixels, so the words have to be recognised before anything else can happen.</p>
+        <p><span class="state state--ok">Handled</span> Pages with almost no text are read with Tesseract OCR, and the words go through the same layout step as text pages. How well it works depends on the scan; bold and italic cannot be told apart. <a href="/scanned-pdf-to-word">Scanned PDF to Word</a></p>
+      </article>
+
+      <article class="challenge" id="c6">
+        <h2><span class="challenge__n">6</span>Text turned into shapes</h2>
+        <p>Some print drivers, "Microsoft: Print To PDF" among them, can turn letters into drawn outlines. The page has no text and no picture, so a simple check thinks it is empty.</p>
+        <p><span class="state state--ok">Handled</span> Such pages are drawn as a picture and read with OCR, like a scan.</p>
+      </article>
+
+      <article class="challenge" id="c7">
+        <h2><span class="challenge__n">7</span>Tables that are only lines</h2>
+        <p>A PDF has no tables, just text placed in a grid and lines drawn around it. A converter has to find the grid and put each piece of text in the right cell.</p>
+        <p><span class="state state--part">Partly</span> Grids of ruling lines become real Word tables, with cells merged across columns and the colours of the lines kept. Tables drawn without lines, and cells merged down a column, are not handled yet. <a href="/pdf-table-to-word">PDF tables to Word</a></p>
+      </article>
+
+      <article class="challenge" id="c8">
+        <h2><span class="challenge__n">8</span>Line breaks or flowing text</h2>
+        <p>Keep every line break and the Word pages match the PDF, but editing a sentence leaves ragged lines. Join the lines and the text reflows as you type, but the pages no longer match. A converter has to choose.</p>
+        <p><span class="state state--ok">Handled</span> By default every line breaks where the PDF broke it, so the pages match. If you run the program yourself, <code>-reflow</code> joins each paragraph instead.</p>
+      </article>
+
+      <article class="challenge" id="c9">
+        <h2><span class="challenge__n">9</span>Headers and footers</h2>
+        <p>Titles, page numbers and running heads are drawn on every page like any other text. Word keeps them in a separate header and footer, so they have to be recognised as repeating.</p>
+        <p><span class="state state--no">Not yet</span> They stay in the body of each page, where they were drawn.</p>
+      </article>
+
+      <article class="challenge" id="c10">
+        <h2><span class="challenge__n">10</span>Indian and other complex scripts</h2>
+        <p>Scripts such as Odia, Hindi, Bengali and Tamil join letters and marks into clusters, and need a font that has them. Without one, Word shows empty boxes.</p>
+        <p><span class="state state--part">Partly</span> The Word file asks for Nirmala UI, the Windows font that covers these scripts, so the text renders. Odia scans are read with Odia OCR; other scripts need their language data added by whoever runs the converter. <a href="/odia-pdf-to-word">Odia PDF to Word</a></p>
+      </article>
+
+      <article class="challenge" id="c11">
+        <h2><span class="challenge__n">11</span>Colours and drawings</h2>
+        <p>Coloured text, charts and diagrams are drawing instructions in a PDF, with no direct equivalent in a Word paragraph.</p>
+        <p><span class="state state--no">Not yet</span> Text comes out in black, and vector drawings other than table lines are left out. Pictures embedded in the PDF are kept, at their size and in their place.</p>
+      </article>
+
+      <article class="challenge" id="c12">
+        <h2><span class="challenge__n">12</span>Passwords</h2>
+        <p>A PDF that needs a password to open cannot be read without it.</p>
+        <p><span class="state state--no">Not yet</span> Such a PDF is refused as soon as you choose it, with a message saying so. Open it in a PDF reader that knows the password, save a copy without it, and convert that.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>Read more</h2>
+      <ul class="links">
+        <li><a class="go" href="/how-it-works">How the converter works<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/ai-in-pdf-to-word">The role of AI<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/handwriting-pdf-to-word">Handwriting in a PDF<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}

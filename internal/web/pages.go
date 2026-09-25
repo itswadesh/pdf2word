@@ -80,6 +80,21 @@ var sitePages = []pageDef{
 		Description: "What happens to a PDF on its way to Word: how text, tables and pictures are read, when OCR is used, and how the DOCX keeps the pages of the original.",
 	},
 	{
+		Path: "/pdf-to-word-challenges", File: "pdf-to-word-challenges.html",
+		Title:       "12 Challenges in Converting PDF to Word",
+		Description: "Why converting PDF to Word is hard: no paragraphs, missing fonts, tables that are only lines, scans, reading order and more, and how each is handled.",
+	},
+	{
+		Path: "/ai-in-pdf-to-word", File: "ai-in-pdf-to-word.html",
+		Title:       "The Role of AI in PDF to Word Conversion",
+		Description: "Where AI helps turn a PDF into Word: reading scans, finding layout and tables, handwriting, and the risk of made-up text. And where this converter uses it.",
+	},
+	{
+		Path: "/handwriting-pdf-to-word", File: "handwriting-pdf-to-word.html",
+		Title:       "Handwriting in a PDF to Word: How AI Reads It",
+		Description: "How AI reads handwriting in a scanned PDF and turns it into Word text, what makes it harder than print, which tools do it, and what this converter can do.",
+	},
+	{
 		Path: "/faq", File: "faq.html",
 		Title:       "PDF to Word Converter FAQ - Questions and Answers",
 		Description: "Answers about converting PDF to Word: is it free, will the DOCX look like the PDF, scanned pages and OCR, languages, file size limits and your files.",

@@ -1,0 +1,71 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>How AI reads handwriting in a PDF</h1>
+      <p class="lede">Handwriting is the hardest thing to get out of a scanned PDF and into Word. Here is why, how handwriting recognition works, how to do it well, and what this converter can and cannot do with it.</p>
+    </div>
+  </section>
+
+  <section class="section" id="harder">
+    <div class="wrap narrow">
+      <h2>Why handwriting is harder than print</h2>
+      <div class="prose">
+        <p>Printed letters come from a font: every "a" on the page has the same shape. Handwriting has no font. The same letter changes from writer to writer and from one word to the next, letters join and overlap, lines slope and wander, and a quick "n" can look like a "u".</p>
+        <p>So the methods that read print well, which match each shape against the letters of known fonts, fail on handwriting. It needs models trained on handwriting itself.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap narrow">
+      <h2>How AI recognises handwriting</h2>
+      <div class="prose">
+        <p>Handwritten text recognition, or HTR, uses neural networks trained on large collections of handwritten lines paired with what they say. Rather than cutting a word into letters, the network reads a whole line and uses the context around each stroke to decide between shapes that look alike.</p>
+        <p>Newer models join an image model, which looks at the strokes, with a language model, which knows which words are likely. That is why they read cursive far better than older systems, and also why they can guess a plausible word when the writing is unclear.</p>
+        <p>How well it works depends on the handwriting, the language, and how much handwriting like it the model was trained on. Neat print-style writing can come out almost perfectly; a hurried signature or a doctor's note rarely does.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="steps">
+    <div class="wrap">
+      <h2>Getting handwriting into Word</h2>
+      <ol class="steps">
+        <li><span class="step-n" aria-hidden="true">1</span><div><strong>Scan it well</strong><p>300 dpi or more, flat, straight and evenly lit. Every smudge and shadow costs accuracy.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Use a handwriting model</strong><p>Choose a tool that says it reads handwriting. The cloud document services from Google, Microsoft and Amazon do, for example.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">3</span><div><strong>Check every word</strong><p>Read the result against the page, above all names, numbers and dates, which a model can get wrong while still looking sure.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="here">
+    <div class="wrap narrow">
+      <h2>What this converter does with handwriting</h2>
+      <div class="prose">
+        <p>This converter is built for printed and typed text. Its OCR engine, Tesseract, is trained on print and is not meant for handwriting, so handwritten words on a scan usually come out wrong or are left out, while the printed parts of the same page convert as usual.</p>
+        <p>That makes it a good fit for a typed document with a few handwritten notes, or a printed form filled in by hand: convert it here and type the handwritten parts yourself. For a page that is all handwriting, use a handwriting service and check the result.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>Read more</h2>
+      <ul class="links">
+        <li><a class="go" href="/ai-in-pdf-to-word">The role of AI in PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-to-word-challenges">12 challenges in converting PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert a typed or printed PDF now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}

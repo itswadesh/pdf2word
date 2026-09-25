@@ -861,6 +861,32 @@
   .prose strong { color: var(--text); }
   .prose a, .steps a { color: var(--accent-text); text-underline-offset: 3px; }
   .faq-group + .faq-group { margin-top: var(--s7); }
+  /* articles: a contents list, and one card per challenge with its state */
+  .toc { margin-top: var(--s5); padding: var(--s4) var(--s5); background: var(--glass); border: 1px solid var(--glass-edge); border-radius: var(--r-md); box-shadow: var(--glass-hi), var(--glass-shadow); }
+  .toc ol { margin: 0; padding-left: 1.4em; columns: 2 16em; column-gap: var(--s6); }
+  .toc li { break-inside: avoid; }
+  .toc a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent-text); text-underline-offset: 3px; }
+  .challenges { display: grid; gap: var(--s4); }
+  .challenge {
+    padding: var(--s5); scroll-margin-top: 80px;
+    background: var(--glass); border: 1px solid var(--glass-edge); border-radius: var(--r-md);
+    box-shadow: var(--glass-hi), var(--glass-shadow);
+  }
+  .challenge h2 { display: flex; align-items: baseline; gap: var(--s3); margin: 0 0 var(--s3) !important; font-size: clamp(19px, 2.4vw, 22px) !important; }
+  .challenge__n {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent-text); font-size: 15px; font-weight: 700; transform: translateY(-2px);
+  }
+  .challenge p { margin: 0 0 var(--s3); color: var(--text-soft); }
+  .challenge p:last-child { margin-bottom: 0; }
+  .challenge a, .feature p a { color: var(--accent-text); text-underline-offset: 3px; }
+  .state {
+    display: inline-flex; align-items: center; margin-right: var(--s2); padding: 1px 10px;
+    border-radius: var(--r-pill); font-size: 14px; font-weight: 700; line-height: 1.6;
+  }
+  .state--ok { background: var(--ok-soft); color: var(--ok); }
+  .state--part { background: var(--warn-soft); color: var(--warn); }
+  .state--no { background: var(--surface-2); color: var(--text-soft); }
   .links { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 var(--s6); }
   .links .go { margin-top: 0; }
   .prose code { font-size: .92em; padding: 1px 5px; border-radius: 4px; background: var(--surface-2); color: var(--text); }
@@ -1023,6 +1049,9 @@
         <h2 class="foot__title" id="foot-guides">Learn</h2>
         <ul>
           <li><a href="/how-it-works"{{if eq .Path "/how-it-works"}} aria-current="page"{{end}}>How it works</a></li>
+          <li><a href="/pdf-to-word-challenges"{{if eq .Path "/pdf-to-word-challenges"}} aria-current="page"{{end}}>Why it is hard</a></li>
+          <li><a href="/ai-in-pdf-to-word"{{if eq .Path "/ai-in-pdf-to-word"}} aria-current="page"{{end}}>AI and PDF to Word</a></li>
+          <li><a href="/handwriting-pdf-to-word"{{if eq .Path "/handwriting-pdf-to-word"}} aria-current="page"{{end}}>Handwriting</a></li>
           <li><a href="/faq"{{if eq .Path "/faq"}} aria-current="page"{{end}}>Questions</a></li>
           <li><a href="/privacy"{{if eq .Path "/privacy"}} aria-current="page"{{end}}>Privacy</a></li>
         </ul>

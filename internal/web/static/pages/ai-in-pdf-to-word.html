@@ -1,0 +1,86 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>The role of AI in PDF to Word conversion</h1>
+      <p class="lede">AI now reads scans, finds tables and even deciphers handwriting. It is also the one part of a converter that can put words in a document that were never there. Here is where it helps, where it can hurt, and where this converter uses it.</p>
+    </div>
+  </section>
+
+  <section class="section" id="helps">
+    <div class="wrap">
+      <h2>Where AI helps</h2>
+      <div class="grid-2">
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-scan"/></svg></span>
+          <h3>Reading scanned text</h3>
+          <p>Modern OCR engines are neural networks trained on millions of lines of text. Tesseract, since version 4, reads with an LSTM network that recognises a whole line at once rather than letter by letter, which copes far better with uneven print and old scans.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-layout"/></svg></span>
+          <h3>Understanding the layout</h3>
+          <p>Models trained on large collections of documents can label the parts of a page, such as headings, paragraphs, captions, footnotes and tables, and work out the order to read them in. That matters most for magazines and papers set in columns.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></span>
+          <h3>Tables without lines</h3>
+          <p>A table with no ruling lines is only text lined up in columns. Table models learn to see rows and columns from that alignment alone, where fixed rules have nothing to go on.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-globe"/></svg></span>
+          <h3>Handwriting</h3>
+          <p>Handwriting varies from writer to writer and letter to letter, so it is read by models trained on handwriting itself. <a href="/handwriting-pdf-to-word">How AI reads handwriting</a>.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="risks">
+    <div class="wrap narrow">
+      <h2>Where AI can hurt</h2>
+      <div class="prose">
+        <p>Large language models are increasingly used to "clean up" a converted document: to fix OCR mistakes, rewrite awkward lines or fill gaps. They are good at producing text that reads well, which is exactly the danger in a conversion.</p>
+      </div>
+      <ul class="checklist checklist--not">
+        <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>They can invent words, figures or whole sentences that were never in the PDF, and the result still looks right.</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>A changed amount in an invoice, a date in a contract or a name in a certificate is easy to miss.</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>A document sent to a cloud AI service is handled under that service's terms, which may allow it to be kept.</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>The same PDF can come back differently each time.</li>
+      </ul>
+      <div class="prose">
+        <p>For a letter or a draft that may be fine. For anything where every word and number matters, the text should come from the document, not be written for it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="here">
+    <div class="wrap narrow">
+      <h2>How this converter uses AI</h2>
+      <div class="prose">
+        <p><strong>In one place: reading scanned pages.</strong> Tesseract's neural network turns a picture of text into words, in English or Odia. It runs inside the converter, so no document is sent to an AI service.</p>
+        <p><strong>Everywhere else it follows fixed rules.</strong> Lines, paragraphs, tables, fonts and page breaks are worked out from the geometry of the PDF, so the same PDF always gives the same Word file. Text that the PDF contains is copied exactly. On a scan, OCR can misread a word, but nothing writes new sentences into your document.</p>
+        <p>That choice has a cost: the things fixed rules cannot see yet, such as tables without lines and pages in columns, are listed on <a href="/pdf-to-word-challenges">the challenges page</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>Read more</h2>
+      <ul class="links">
+        <li><a class="go" href="/pdf-to-word-challenges">12 challenges in converting PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/handwriting-pdf-to-word">Handwriting in a PDF<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}
