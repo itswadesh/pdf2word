@@ -26,6 +26,9 @@ func TestSitePages(t *testing.T) {
 	for _, p := range sitePages {
 		known[p.Path] = true
 	}
+	for path := range assetFiles {
+		known[path] = true
+	}
 	titles, descs := map[string]string{}, map[string]string{}
 	internal := regexp.MustCompile(`href="(/[^"#]*)`)
 
@@ -66,7 +69,7 @@ func TestSitePages(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("%s: missing %s", p.Path, want)
 		}
-		for _, leftover := range []string{"%PUBLIC_URL%", "%PRIVACY%", "%FILES_ANSWER%", "{{", "}}"} {
+		for _, leftover := range []string{"%PUBLIC_URL%", "%PRIVACY%", "%FILES_ANSWER%", "{{"} {
 			if strings.Contains(page, leftover) {
 				t.Errorf("%s: %q left in the page", p.Path, leftover)
 			}
@@ -77,9 +80,6 @@ func TestSitePages(t *testing.T) {
 		}
 		if p.Tool && !strings.Contains(page, `data-lang="`+p.Lang+`"`) {
 			t.Errorf("%s: the converter does not start on %q", p.Path, p.Lang)
-		}
-		if strings.Contains(page, "application/ld+json") != p.Home {
-			t.Errorf("%s: structured data present = %v, want only on the home page", p.Path, !p.Home)
 		}
 		for _, m := range internal.FindAllStringSubmatch(page, -1) {
 			if href := m[1]; !strings.HasPrefix(href, "/api/") && !known[href] {

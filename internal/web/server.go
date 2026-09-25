@@ -70,6 +70,8 @@ type Server struct {
 	preview previewer // thumbnails of the page being converted
 
 	pages    map[string]*builtPage // by path, rendered with this deployment's copy
+	notFound *builtPage            // served with 404 for any other address
+	assets   map[string]asset      // icons and the sharing image, by path
 	stop     chan struct{}         // closed by Close to end the retention sweeper
 	stopOnce sync.Once
 
@@ -135,9 +137,13 @@ func New(cfg Config) (*Server, error) {
 	if cfg.AllowRemote {
 		privacy, filesAnswer = hostedPrivacyCopy, hostedFilesAnswer
 	}
-	pages, err := buildPages(cfg.PublicURL, privacy, filesAnswer)
+	pages, notFound, err := buildPages(cfg.PublicURL, privacy, filesAnswer)
 	if err != nil {
 		return nil, fmt.Errorf("pages: %w", err)
+	}
+	assets, err := loadAssets()
+	if err != nil {
+		return nil, fmt.Errorf("assets: %w", err)
 	}
 	ownsDir := false
 	if cfg.WorkDir == "" {
@@ -158,6 +164,8 @@ func New(cfg Config) (*Server, error) {
 		sem:      make(chan struct{}, 1),
 		ownsDir:  ownsDir,
 		pages:    pages,
+		notFound: notFound,
+		assets:   assets,
 		stop:     make(chan struct{}),
 		lastSeen: time.Now(),
 	}
@@ -169,6 +177,15 @@ func New(cfg Config) (*Server, error) {
 		}
 		s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) { s.servePage(w, r, p) })
 	}
+	for path, a := range s.assets {
+		s.mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", a.typ)
+			w.Write(a.body)
+		})
+	}
+	// Everything else: a known page asked for with a trailing slash moves to
+	// its address; any other address gets the not-found page.
+	s.mux.HandleFunc("GET /", s.handleNotFound)
 	s.mux.HandleFunc("GET /robots.txt", s.handleRobots)
 	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
@@ -204,6 +221,8 @@ func (s *Server) Handler() http.Handler {
 		// the browser and by a CDN. Everything else is per-visitor state.
 		if _, page := s.pages[r.URL.Path]; page {
 			w.Header().Set("Cache-Control", pageCacheControl)
+		} else if _, file := s.assets[r.URL.Path]; file {
+			w.Header().Set("Cache-Control", assetCacheControl)
 		} else {
 			w.Header().Set("Cache-Control", "no-store")
 		}
@@ -316,36 +335,60 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, p *builtPage)
 	w.Write(p.body)
 }
 
-// handleRobots keeps crawlers out of the job API and points them at the
-// sitemap when the page has a public address.
-func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	body := "User-agent: *\nDisallow: /api/\n"
-	if s.cfg.PublicURL != "" {
-		body += "\nSitemap: " + s.cfg.PublicURL + "/sitemap.xml\n"
+// handleNotFound redirects a known page asked for with a trailing slash to
+// its address, and answers anything else with the not-found page.
+func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	if p := strings.TrimSuffix(r.URL.Path, "/"); p != r.URL.Path {
+		if _, ok := s.pages[p]; ok {
+			http.Redirect(w, r, p, http.StatusMovedPermanently)
+			return
+		}
 	}
-	io.WriteString(w, body)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	w.Write(s.notFound.body)
 }
 
-// handleSitemap lists the site's pages. Without a public address there is
-// nothing to submit, so there is no sitemap either.
-func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.PublicURL == "" {
-		http.NotFound(w, r)
-		return
+// baseURL is the site's address: PUBLIC_URL when it is set, otherwise the
+// one this request came in on. The sitemap and robots.txt need an absolute
+// address either way; neither is cached, so a forged Host header only
+// reaches whoever sent it.
+func (s *Server) baseURL(r *http.Request) string {
+	if s.cfg.PublicURL != "" {
+		return s.cfg.PublicURL
 	}
+	scheme := "http"
+	if isHTTPS(r) {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
+// handleRobots keeps crawlers out of the job API and points them at the
+// sitemap.
+func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	io.WriteString(w, "User-agent: *\nDisallow: /api/\n\nSitemap: "+s.baseURL(r)+"/sitemap.xml\n")
+}
+
+// handleSitemap lists the site's pages, with when they last changed.
+func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	base := html.EscapeString(s.baseURL(r))
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 `)
 	for _, p := range sitePages {
+		if p.NoIndex {
+			continue
+		}
 		priority := "0.8"
 		if p.Home {
 			priority = "1.0"
 		}
-		fmt.Fprintf(&b, "  <url><loc>%s%s</loc><changefreq>monthly</changefreq><priority>%s</priority></url>\n",
-			html.EscapeString(s.cfg.PublicURL), html.EscapeString(p.Path), priority)
+		fmt.Fprintf(&b, "  <url><loc>%s%s</loc><lastmod>%s</lastmod><changefreq>monthly</changefreq><priority>%s</priority></url>\n",
+			base, html.EscapeString(p.Path), siteUpdated, priority)
 	}
 	b.WriteString("</urlset>\n")
 	io.WriteString(w, b.String())

@@ -6,20 +6,28 @@
 <meta name="color-scheme" content="light dark">
 <title>{{.Title}}</title>
 <meta name="description" content="{{.Description}}">
-<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
-<link rel="canonical" href="%PUBLIC_URL%{{.Path}}">
-<meta property="og:type" content="website">
+<meta name="robots" content="{{if .NoIndex}}noindex,follow{{else}}index,follow,max-snippet:-1,max-image-preview:large{{end}}">
+{{if not .NoIndex}}<link rel="canonical" href="%PUBLIC_URL%{{.Path}}">
+{{end}}
+<meta property="og:type" content="{{if .Article}}article{{else}}website{{end}}">
 <meta property="og:site_name" content="PDF to Word Converter">
 <meta property="og:title" content="{{.Title}}">
 <meta property="og:description" content="{{.Description}}">
-<meta property="og:url" content="%PUBLIC_URL%{{.Path}}">
-<meta property="og:locale" content="en">
-<meta name="twitter:card" content="summary">
+{{if not .NoIndex}}<meta property="og:url" content="%PUBLIC_URL%{{.Path}}">
+{{end}}<meta property="og:locale" content="en">
+<meta property="og:image" content="%PUBLIC_URL%/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pdf2word, a free PDF to Word converter: a PDF page becoming a DOCX page">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{.Title}}">
 <meta name="twitter:description" content="{{.Description}}">
+<meta name="twitter:image" content="%PUBLIC_URL%/og.png">
 <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23D4380D'/%3E%3Cpath d='M10 7h8.5l5 5v12.5a1.5 1.5 0 0 1-1.5 1.5H10a1.5 1.5 0 0 1-1.5-1.5v-16A1.5 1.5 0 0 1 10 7z' fill='%23fff'/%3E%3Cpath d='M11.5 15.5l1.6 6 1.9-5 1.9 5 1.6-6' fill='none' stroke='%23D4380D' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-48.png" type="image/png" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 {{if .Home}}<script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -51,8 +59,41 @@
   "license": "https://opensource.org/licenses/MIT",
   "sameAs": "https://github.com/itswadesh/pdf2word"
 }
-</script>{{end}}
-<style>
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "pdf2word",
+  "alternateName": "PDF to Word Converter",
+  "url": "%PUBLIC_URL%/"
+}
+</script>
+{{else if not .NoIndex}}<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "PDF to Word", "item": "%PUBLIC_URL%/"},
+    {"@type": "ListItem", "position": 2, "name": {{.NameJSON}}, "item": "%PUBLIC_URL%{{.Path}}"}
+  ]
+}
+</script>
+{{end}}{{if .Article}}<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{.TitleJSON}},
+  "description": {{.DescriptionJSON}},
+  "image": "%PUBLIC_URL%/og.png",
+  "datePublished": "{{.Published}}",
+  "dateModified": "{{.Updated}}",
+  "author": {"@type": "Organization", "name": "pdf2word", "url": "%PUBLIC_URL%/"},
+  "publisher": {"@type": "Organization", "name": "pdf2word", "logo": {"@type": "ImageObject", "url": "%PUBLIC_URL%/apple-touch-icon.png"}},
+  "mainEntityOfPage": "%PUBLIC_URL%{{.Path}}"
+}
+</script>
+{{end}}<style>
   /* One job, one surface. The converter is a single card in the middle of
      the page: idle it is a drop zone with one button, busy it shows the
      file going from PDF to DOCX, and it keeps its size in every state so

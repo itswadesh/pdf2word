@@ -208,23 +208,19 @@ func TestIndexSEOHead(t *testing.T) {
 }
 
 func TestPublicURLAndCrawlerFiles(t *testing.T) {
-	// Without a public address: relative canonical, no sitemap.
+	// Without a public address: a relative canonical, and a sitemap and
+	// robots.txt that use the address the request came in on.
 	_, ts := newTestServer(t)
 	page := get(t, ts, "/")
 	if !strings.Contains(page, `<link rel="canonical" href="/">`) {
 		t.Errorf("canonical without a public URL should be relative:\n%s", between(page, "<link rel=\"canonical\"", ">"))
 	}
 	robots := get(t, ts, "/robots.txt")
-	if !strings.Contains(robots, "Disallow: /api/") || strings.Contains(robots, "Sitemap:") {
+	if !strings.Contains(robots, "Disallow: /api/") || !strings.Contains(robots, "Sitemap: "+ts.URL+"/sitemap.xml") {
 		t.Errorf("robots.txt = %q", robots)
 	}
-	resp, err := ts.Client().Get(ts.URL + "/sitemap.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("sitemap without a public URL: status %d, want 404", resp.StatusCode)
+	if sm := get(t, ts, "/sitemap.xml"); !strings.Contains(sm, "<loc>"+ts.URL+"/</loc>") || !strings.Contains(sm, "<lastmod>") {
+		t.Errorf("sitemap without a public URL = %q", sm)
 	}
 
 	// With one (trailing slash trimmed): absolute canonical, og:url and sitemap.

@@ -131,10 +131,15 @@ layout (`internal/web/static/layout.html`) and the converter
 path, title and description in `internal/web/pages.go`.
 
 Set `PUBLIC_URL` once a domain points at the service, for example
-`PUBLIC_URL=https://pdf2word.example.com`. It fills in the canonical link
-and the sharing tags in the page and turns on `/sitemap.xml`; `/robots.txt`
-is always served and keeps crawlers out of `/api/`. Without it the page
-still works, it just has no absolute address to declare.
+`PUBLIC_URL=https://pdf2word.example.com`. It makes the canonical links,
+the sharing tags (with the 1200×630 image at `/og.png`) and the structured
+data (the site and the app on the home page, breadcrumbs on every page,
+Article on the guides) absolute, which search engines and link previews
+expect. `/sitemap.xml` and `/robots.txt` are always served; without
+`PUBLIC_URL` they use the address the request came in on. Unknown addresses
+get a not-found page (status 404, kept out of search), a page asked for with
+a trailing slash moves permanently to its address, and the icons are served
+as files (`/favicon.svg`, `/favicon-48.png`, `/apple-touch-icon.png`).
 
 On **Dokploy**: create a *Compose* service, point it at this repository
 (branch `main`, compose path `docker-compose.yml`), deploy, then add a domain
