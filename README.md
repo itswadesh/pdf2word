@@ -44,8 +44,11 @@ PDFs on the page that opens, and save the Word files it gives back.
 2. Drop one or more PDFs onto the page (or press "Choose a PDF").
    Only files named `.pdf` and no larger than 100 MB are accepted; others
    are skipped with a notice. The limit can be changed with `-max-upload`.
-   A window opens with the files you chose and the language of scanned
-   pages; nothing is uploaded until you press "Convert to Word".
+   A window opens and uploads the files straight away, without converting
+   them, so it can show the first page; the language of scanned pages
+   appears once they are up. Press "Convert to Word" to start. Closing the
+   window instead deletes the uploaded files at once (a file nobody starts
+   is otherwise deleted an hour after it was chosen).
 3. Watch the page being scanned: the window shows the page it is working
    on, the percentage and the time left, and "Stop converting" cancels it.
    Close the window to keep going in the background; the small page on the

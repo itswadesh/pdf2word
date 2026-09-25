@@ -19,6 +19,9 @@ import (
 type State string
 
 const (
+	// StateStaged is a file uploaded with hold=1: saved and counted, shown
+	// to its uploader, and converted only once they start it.
+	StateStaged    State = "staged"
 	StateQueued    State = "queued"
 	StateRunning   State = "running"
 	StateDone      State = "done"
@@ -44,6 +47,7 @@ type JobView struct {
 	Message   string      `json:"message,omitempty"`
 	Report    *ReportView `json:"report,omitempty"`
 	Download  string      `json:"download,omitempty"`
+	Pages     int         `json:"pages,omitempty"` // page count, known once a staged file has been opened
 	ElapsedMs int64       `json:"elapsedMs"`
 }
 
@@ -70,6 +74,7 @@ type job struct {
 	client   string // browser that uploaded it ("" for cookie-less clients)
 
 	state    State
+	pages    int // page count of a staged file
 	progress convert.Progress
 	message  string
 	report   *convert.Report
@@ -102,6 +107,7 @@ func (j *job) view(now time.Time) JobView {
 		Done:     j.progress.Done,
 		Total:    j.progress.Total,
 		Page:     j.progress.Page,
+		Pages:    j.pages,
 		Stage:    stageLabel(j.progress),
 		Message:  j.message,
 	}
@@ -237,28 +243,35 @@ func (s *jobStore) get(id string) (*job, bool) {
 	return j, ok
 }
 
-// active reports whether any job is queued or running.
+// active reports whether any job is queued or running. A staged file is
+// not work in progress: it waits for someone who may never come back.
 func (s *jobStore) active() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, j := range s.jobs {
-		if !j.currentState().terminal() {
+		if st := j.currentState(); !st.terminal() && st != StateStaged {
 			return true
 		}
 	}
 	return false
 }
 
-// prune removes finished jobs (and their files) older than maxAge.
-func (s *jobStore) prune(maxAge time.Duration) {
+// prune removes finished jobs, and staged files nobody started, once they
+// are older than maxAge, with their files. release is called first with
+// each id so anything holding the job's files open can let go.
+func (s *jobStore) prune(maxAge time.Duration, release func(id string)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cutoff := time.Now().Add(-maxAge)
 	for id, j := range s.jobs {
 		j.mu.Lock()
-		old := j.state.terminal() && !j.finished.IsZero() && j.finished.Before(cutoff)
+		old := (j.state.terminal() && !j.finished.IsZero() && j.finished.Before(cutoff)) ||
+			(j.state == StateStaged && j.created.Before(cutoff))
 		j.mu.Unlock()
 		if old {
+			if release != nil {
+				release(id)
+			}
 			os.RemoveAll(j.dir)
 			delete(s.jobs, id)
 		}

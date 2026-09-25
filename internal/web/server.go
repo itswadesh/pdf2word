@@ -108,10 +108,13 @@ const (
 		"rather the file never left your own machine, the converter is open source and you can run this " +
 		"same program yourself."
 	localFilesAnswer = "They stay on the machine running the converter and are deleted an hour after the " +
-		"conversion finishes, on a timer. Each browser only sees the files it uploaded."
+		"conversion finishes, on a timer. A file you choose but do not convert is deleted when you close " +
+		"its window, or an hour after it was chosen. Each browser only sees the files it uploaded."
 	hostedFilesAnswer = "They are uploaded to this server, kept only while the conversion runs, and deleted " +
-		"an hour after it finishes, on a timer that does not wait for another visitor. Only the browser " +
-		"that uploaded a file can list or download it, and nothing is passed to anyone else."
+		"an hour after it finishes, on a timer that does not wait for another visitor. A file is uploaded " +
+		"as soon as you choose it, so its first page can be shown; if you close the window instead of " +
+		"converting it, it is deleted there and then, and otherwise an hour later. Only the browser that " +
+		"uploaded a file can see it or download the result, and nothing is passed to anyone else."
 )
 
 // New prepares a Server. Call Close to remove its working directory.
@@ -175,6 +178,7 @@ func New(cfg Config) (*Server, error) {
 	s.mux.HandleFunc("GET /api/jobs", s.handleJobs)
 	s.mux.HandleFunc("GET /api/jobs/{id}", s.handleJob)
 	s.mux.HandleFunc("POST /api/jobs/{id}/cancel", s.handleCancel)
+	s.mux.HandleFunc("POST /api/jobs/{id}/start", s.handleStart)
 	s.mux.HandleFunc("GET /api/jobs/{id}/download", s.handleDownload)
 	s.mux.HandleFunc("GET /api/jobs/{id}/pages/{n}", s.handlePreview)
 	return s, nil
@@ -218,7 +222,7 @@ func (s *Server) sweep() {
 		case <-s.stop:
 			return
 		case <-t.C:
-			s.jobs.prune(retention)
+			s.jobs.prune(retention, s.preview.forget)
 		}
 	}
 }
@@ -405,7 +409,9 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	views := []JobView{}
 	for _, j := range s.jobs.list() {
-		if j.client == client {
+		// Staged files belong to the page that is choosing them, not to the
+		// list of conversions.
+		if j.client == client && j.currentState() != StateStaged {
 			views = append(views, j.view(now))
 		}
 	}
@@ -443,8 +449,69 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such job")
 		return
 	}
+	// A staged file was never started: it and its files simply go.
+	if j.currentState() == StateStaged {
+		v := j.view(time.Now())
+		v.State = StateCancelled
+		s.preview.forget(j.id)
+		s.jobs.remove(j.id)
+		writeJSON(w, http.StatusOK, v)
+		return
+	}
 	j.cancel()
 	writeJSON(w, http.StatusOK, j.view(time.Now()))
+}
+
+// handleStart converts a staged file, in the language sent in the form
+// field lang (the server's default when it is left out).
+func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
+	j, ok := s.jobs.get(r.PathValue("id"))
+	if !ok || !s.owns(r, j) {
+		writeError(w, http.StatusNotFound, "no such job")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	lang := strings.TrimSpace(r.FormValue("lang"))
+	if lang != "" && !langPattern.MatchString(lang) {
+		writeError(w, http.StatusBadRequest, "unknown language code "+strconv.Quote(lang))
+		return
+	}
+	j.mu.Lock()
+	if j.state != StateStaged {
+		j.mu.Unlock()
+		writeError(w, http.StatusConflict, "this file is not waiting to be converted")
+		return
+	}
+	if lang != "" {
+		j.lang = lang
+	}
+	j.state = StateQueued
+	j.mu.Unlock()
+	go s.run(j)
+	writeJSON(w, http.StatusAccepted, j.view(time.Now()))
+}
+
+// stage keeps an uploaded file without converting it, after checking that
+// PDFium can open it and counting its pages.
+func (s *Server) stage(w http.ResponseWriter, j *job) {
+	j.mu.Lock()
+	j.state = StateStaged
+	j.mu.Unlock()
+	n, err := s.preview.pages(j)
+	if err != nil {
+		s.preview.forget(j.id)
+		s.jobs.remove(j.id)
+		msg := j.filename + " could not be opened as a PDF"
+		if strings.Contains(strings.ToLower(err.Error()), "password") {
+			msg = j.filename + " is protected by a password, so it cannot be converted"
+		}
+		writeError(w, http.StatusUnprocessableEntity, msg)
+		return
+	}
+	j.mu.Lock()
+	j.pages = n
+	j.mu.Unlock()
+	writeJSON(w, http.StatusAccepted, j.view(time.Now()))
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -518,7 +585,7 @@ func (s *Server) defaultLang() string {
 	return ocr.DefaultLang
 }
 
-// handleConvert accepts a multipart upload (fields: ocr, lang, file) and
+// handleConvert accepts a multipart upload (fields: ocr, lang, hold, file) and
 // queues a conversion. Fields must precede the file part.
 func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	// The multipart framing adds a few hundred bytes to the file itself;
@@ -537,6 +604,7 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	mode := convert.OCRAuto
 	lang := s.cfg.Base.Lang
+	hold := false
 	// Usually the page already has its identity from the first poll. If the
 	// visitor dropped a file before that returned, mint it here so the job
 	// is filed under the id their next poll will send.
@@ -579,8 +647,11 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 				}
 				lang = l
 			}
+		case "hold":
+			v, _ := io.ReadAll(io.LimitReader(part, 8))
+			hold = strings.TrimSpace(string(v)) == "1"
 		case "file":
-			s.acceptFile(w, part, mode, lang, client)
+			s.acceptFile(w, part, mode, lang, client, hold)
 			return
 		default:
 			io.Copy(io.Discard, part)
@@ -588,7 +659,9 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode convert.OCRMode, lang, client string) {
+// acceptFile saves the upload and starts converting it, or with hold only
+// keeps it until the uploader starts it (see handleStart).
+func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode convert.OCRMode, lang, client string, hold bool) {
 	filename := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
 	if filename == "" || filename == "." || filename == "/" {
 		filename = "document.pdf"
@@ -618,7 +691,11 @@ func (s *Server) acceptFile(w http.ResponseWriter, part *multipart.Part, mode co
 		return
 	}
 	j.size = size
-	s.jobs.prune(time.Hour)
+	s.jobs.prune(retention, s.preview.forget)
+	if hold {
+		s.stage(w, j)
+		return
+	}
 	go s.run(j)
 	writeJSON(w, http.StatusAccepted, j.view(time.Now()))
 }

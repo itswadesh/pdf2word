@@ -58,18 +58,8 @@ func (p *previewer) thumbnail(j *job, n int, size previewSize) ([]byte, error) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// Checked under the lock that forget takes, so a document is never
-	// opened for a job whose conversion has already let go of it.
-	if j.currentState().terminal() {
-		return nil, errPreviewGone
-	}
-	if p.jobID != j.id {
-		p.closeLocked()
-		doc, err := pdfiumx.Open(j.input)
-		if err != nil {
-			return nil, err
-		}
-		p.doc, p.jobID = doc, j.id
+	if err := p.openLocked(j); err != nil {
+		return nil, err
 	}
 	if n < 1 || n > p.doc.Pages {
 		return nil, errNoSuchPage
@@ -80,6 +70,38 @@ func (p *previewer) thumbnail(j *job, n int, size previewSize) ([]byte, error) {
 	}
 	os.WriteFile(cached, b, 0o600) // a cache: failing to keep it costs a re-render, nothing more
 	return b, nil
+}
+
+// pages opens the job's PDF and returns its page count, leaving it open
+// for the first thumbnail, which is usually asked for next. It is how a
+// staged file is checked: a PDF PDFium cannot open is refused before
+// anyone waits for it to convert.
+func (p *previewer) pages(j *job) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := p.openLocked(j); err != nil {
+		return 0, err
+	}
+	return p.doc.Pages, nil
+}
+
+// openLocked makes the job's PDF the open document. It is checked under
+// the lock that forget takes, so a document is never opened for a job
+// whose conversion has already let go of it.
+func (p *previewer) openLocked(j *job) error {
+	if j.currentState().terminal() {
+		return errPreviewGone
+	}
+	if p.jobID == j.id {
+		return nil
+	}
+	p.closeLocked()
+	doc, err := pdfiumx.Open(j.input)
+	if err != nil {
+		return err
+	}
+	p.doc, p.jobID = doc, j.id
+	return nil
 }
 
 func renderThumbnail(doc *pdfiumx.Doc, n int, size previewSize) ([]byte, error) {
