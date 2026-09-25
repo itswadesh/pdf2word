@@ -73,7 +73,7 @@
     --text:          #0F172A;
     --text-soft:     #475569;
     --border:        #E2E8F0;
-    --edge:          #7B8BA2;
+    --edge:          #6B7B93; /* 3.4:1 on glass over the brightest glow */
 
     --accent:        #D4380D;
     --on-accent:     #FFFFFF;
@@ -81,7 +81,7 @@
     --accent-text:   #B93400;
     --accent-soft:   #FFF1EC;
 
-    --ok:            #15803D;
+    --ok:            #166534;
     --ok-soft:       #F0FDF4;
     --danger:        #B91C1C;
     --danger-soft:   #FEF2F2;
@@ -101,6 +101,17 @@
     --page-ink:      #CBD5E1;
     --scan-wash:     rgba(212, 56, 13, .10);
     --scan-glow:     rgba(212, 56, 13, .35);
+
+    --glass:         rgba(255, 255, 255, .56);
+    --glass-strong:  rgba(255, 255, 255, .84);
+    --glass-edge:    rgba(255, 255, 255, .80);
+    --glass-line:    rgba(15, 23, 42, .08);
+    --glass-hi:      inset 0 1px 0 rgba(255, 255, 255, .75);
+    --glass-shadow:  0 1px 2px rgba(15, 23, 42, .04), 0 12px 32px -16px rgba(15, 23, 42, .22);
+    --glow-1:        rgba(255, 120, 73, .40);
+    --glow-2:        rgba(96, 165, 250, .34);
+    --glow-3:        rgba(250, 204, 21, .26);
+    --glow-4:        rgba(244, 114, 182, .24);
 
     --ui: "Inter var", InterVariable, Inter, ui-sans-serif, system-ui, -apple-system,
           "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -153,6 +164,17 @@
       --page-ink:      #33415C;
       --scan-wash:     rgba(255, 120, 73, .16);
       --scan-glow:     rgba(255, 120, 73, .45);
+
+      --glass:         rgba(17, 26, 46, .58);
+      --glass-strong:  rgba(17, 26, 46, .86);
+      --glass-edge:    rgba(255, 255, 255, .10);
+      --glass-line:    rgba(255, 255, 255, .06);
+      --glass-hi:      inset 0 1px 0 rgba(255, 255, 255, .07);
+      --glass-shadow:  0 1px 2px rgba(0, 0, 0, .30), 0 12px 32px -16px rgba(0, 0, 0, .70);
+      --glow-1:        rgba(255, 120, 73, .20);
+      --glow-2:        rgba(96, 165, 250, .16);
+      --glow-3:        rgba(250, 204, 21, .07);
+      --glow-4:        rgba(244, 114, 182, .10);
     }
   }
   /* Repeated in full, deliberately. */
@@ -192,6 +214,17 @@
     --page-ink:      #33415C;
     --scan-wash:     rgba(255, 120, 73, .16);
     --scan-glow:     rgba(255, 120, 73, .45);
+
+    --glass:         rgba(17, 26, 46, .58);
+    --glass-strong:  rgba(17, 26, 46, .86);
+    --glass-edge:    rgba(255, 255, 255, .10);
+    --glass-line:    rgba(255, 255, 255, .06);
+    --glass-hi:      inset 0 1px 0 rgba(255, 255, 255, .07);
+    --glass-shadow:  0 1px 2px rgba(0, 0, 0, .30), 0 12px 32px -16px rgba(0, 0, 0, .70);
+    --glow-1:        rgba(255, 120, 73, .20);
+    --glow-2:        rgba(96, 165, 250, .16);
+    --glow-3:        rgba(250, 204, 21, .07);
+    --glow-4:        rgba(244, 114, 182, .10);
   }
 
   * { box-sizing: border-box; min-width: 0; }
@@ -203,6 +236,17 @@
     font: 400 16px/1.6 var(--ui);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+  }
+  /* The glow behind the glass. Fixed, so it is painted once and the page
+     slides over it; will-change keeps it on its own layer. */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(60vmax 45vmax at 0% 0%, var(--glow-1), transparent 70%),
+      radial-gradient(55vmax 42vmax at 100% 8%, var(--glow-2), transparent 70%),
+      radial-gradient(55vmax 45vmax at 6% 100%, var(--glow-4), transparent 70%),
+      radial-gradient(55vmax 45vmax at 100% 100%, var(--glow-3), transparent 70%);
+    will-change: transform;
   }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
   .hidden { display: none !important; }
@@ -750,10 +794,62 @@
   .qa p { padding: 0 0 var(--s5); color: var(--text-soft); max-width: 68ch; }
 
   /* ---- footer ------------------------------------------------------------ */
-  .colophon { margin-top: var(--s9); border-top: 1px solid var(--border); padding-block: var(--s6) var(--s7); color: var(--text-soft); font-size: 15px; line-height: 1.6; }
-  .colophon .wrap { display: grid; gap: var(--s3); }
-  .colophon p { margin: 0; max-width: 72ch; }
-  .colophon a { color: var(--accent-text); text-underline-offset: 3px; }
+  .colophon {
+    margin-top: var(--s9); padding-block: var(--s7) var(--s6);
+    background: var(--surface); border-top: 1px solid var(--border);
+    color: var(--text-soft); font-size: 15px; line-height: 1.6;
+  }
+  .foot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6) var(--s5); }
+  .foot__about { grid-column: 1 / -1; }
+  .foot__about .brand { margin-top: calc(-1 * var(--s3)); } /* its 44px target, centred on the column titles */
+  .foot__about p { margin: var(--s3) 0 0; max-width: 36ch; }
+  .foot__title { margin: 0 0 var(--s1); font-size: 14px; line-height: 1.4; font-weight: 700; letter-spacing: 0; color: var(--text); }
+  .foot ul { list-style: none; margin: 0; padding: 0; }
+  .foot li a {
+    display: inline-flex; align-items: center; min-height: 44px;
+    color: var(--text-soft); text-decoration: none;
+    transition: color .15s ease;
+  }
+  .foot li a:hover { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+  .foot__base {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2) var(--s5);
+    margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .foot__base p { margin: 0; max-width: 72ch; }
+  .foot__base a { color: var(--accent-text); text-underline-offset: 3px; }
+  @media (min-width: 720px) {
+    .foot { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
+    .foot__about { grid-column: auto; }
+  }
+
+  /* ---- glass ------------------------------------------------------------------
+     Every panel is frosted glass over the glowing ground. Later than the
+     rules it overrides, and no more specific, so state rules still win. */
+  .site-head, .stage, .file, .steps li, .feature, .faq-list, .table-wrap, .cta, .colophon, .offline {
+    background: var(--glass);
+    border-color: var(--glass-edge);
+    box-shadow: var(--glass-hi), var(--glass-shadow);
+  }
+  .site-head { border-bottom: 1px solid var(--glass-line); box-shadow: var(--glass-hi); }
+  .colophon { border-top-color: var(--glass-line); box-shadow: var(--glass-hi); }
+  .stage { border-color: var(--edge); }            /* the drop zone keeps its 3:1 dashed edge */
+  .stage.busy { border-color: var(--glass-edge); }
+  .cta { background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 85%, transparent), var(--glass)); }
+  .compare thead th { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+  .btn--quiet, .select select { background: var(--glass-strong); }
+  /* The dialog: an opaque panel with the glass edge, over a dimmed page. No backdrop-filter
+     anywhere: without a GPU, either blur halved the scanner to 30 fps and
+     both together to 15, and over soft glows plain translucency looks the
+     same. */
+  .pv { background: var(--surface); border-color: var(--glass-edge); box-shadow: var(--glass-hi), 0 24px 64px -12px rgba(2, 6, 23, .45); }
+  .pv::backdrop { background: rgba(2, 6, 23, .55); }
+  .pv__stage { background: var(--surface-2); }
+  .pv.done .pv__stage { background: var(--ok-soft); }
+  .pv__head, .pv__foot { border-color: var(--glass-line); }
+  @media (prefers-reduced-transparency: reduce) {
+    body { --glass: var(--surface); --glass-strong: var(--surface); }
+  }
 
   /* ---- wider ----------------------------------------------------------------- */
   @media (min-width: 720px) {
@@ -842,7 +938,7 @@
 </header>
 
 <main>
-  <section class="hero">
+  <section class="hero" id="converter">
     <div class="wrap narrow">
       <h1>Free PDF to Word converter</h1>
       <p class="lede">Upload a PDF and get an editable Word document back, laid out like the original.</p>
@@ -1101,7 +1197,49 @@
 
 <footer class="colophon">
   <div class="wrap">
-    <p>An open source converter built in Go. The PDF engine and the text recognition are inside the program, so it works without an internet connection. <a href="https://github.com/itswadesh/pdf2word">Source code on GitHub</a>.</p>
+    <div class="foot">
+      <div class="foot__about">
+        <a class="brand" href="#converter" aria-label="pdf2word, back to the converter">
+          <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <rect class="bm-bg" width="32" height="32" rx="8"/>
+            <path d="M10 7h8.5l5 5v12.5a1.5 1.5 0 0 1-1.5 1.5H10a1.5 1.5 0 0 1-1.5-1.5v-16A1.5 1.5 0 0 1 10 7z" class="bm-page"/>
+            <path d="M11.5 15.5l1.6 6 1.9-5 1.9 5 1.6-6" class="bm-w"/>
+          </svg>
+          <span>pdf2word</span>
+        </a>
+        <p>A free, open source PDF to Word converter. Scanned pages are read with text recognition, in English and Odia.</p>
+      </div>
+      <nav aria-labelledby="foot-convert">
+        <h2 class="foot__title" id="foot-convert">Convert</h2>
+        <ul>
+          <li><a href="#converter">Convert a PDF to Word</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#faq">Questions</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="foot-guides">
+        <h2 class="foot__title" id="foot-guides">Guides</h2>
+        <ul>
+          <li><a href="#layout">What the DOCX keeps</a></li>
+          <li><a href="#scans">Scanned PDFs and OCR</a></li>
+          <li><a href="#pdf-or-word">PDF or Word?</a></li>
+          <li><a href="#devices">On any device</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="foot-project">
+        <h2 class="foot__title" id="foot-project">Open source</h2>
+        <ul>
+          <li><a href="https://github.com/itswadesh/pdf2word">Source code</a></li>
+          <li><a href="https://github.com/itswadesh/pdf2word#readme">Run it yourself</a></li>
+          <li><a href="https://github.com/itswadesh/pdf2word/issues">Report a problem</a></li>
+          <li><a href="https://github.com/itswadesh/pdf2word/blob/main/LICENSE">MIT licence</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="foot__base">
+      <p>Built in Go. The PDF engine and the text recognition are inside the program, so it works without an internet connection.</p>
+      <p>Pages drawn by <a href="https://pdfium.googlesource.com/pdfium/">PDFium</a>, scans read by <a href="https://github.com/tesseract-ocr/tesseract">Tesseract</a>.</p>
+    </div>
   </div>
 </footer>
 
