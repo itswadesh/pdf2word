@@ -343,9 +343,23 @@
      glyph (shown until the first thumbnail arrives); a beam sweeps down it
      and the part it has passed is washed in blue. Beam and wash run on the
      same clock, so the wash always ends at the beam. */
-  .scan { grid-area: scan; position: relative; --scan-t: 2.2s; --scan-ease: cubic-bezier(.45, 0, .55, 1); }
+  .scan, .pv__frame { --scan-t: 2.2s; --scan-ease: cubic-bezier(.45, 0, .55, 1); }
+  .scan {
+    grid-area: scan; position: relative; display: block; width: 100%;
+    padding: 0; border: 0; border-radius: 6px; background: none;
+    color: inherit; font: inherit; text-align: inherit;
+    cursor: zoom-in;
+  }
+  .scan__zoom {
+    position: absolute; right: 6px; bottom: 6px;
+    display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(15, 23, 42, .72); color: #FFFFFF;
+    opacity: .85; transition: opacity .15s ease, transform .15s ease;
+  }
+  .scan__zoom .i { width: 14px; height: 14px; stroke-width: 2.2; }
+  .scan:hover .scan__zoom { opacity: 1; transform: scale(1.08); }
   .scan__page {
-    position: relative; overflow: hidden;
+    display: block; position: relative; overflow: hidden;
     aspect-ratio: 150 / 194;
     background: var(--page);
     border: 1px solid var(--border); border-radius: 6px;
@@ -388,13 +402,13 @@
     to       { clip-path: inset(0 0 0 0);    opacity: 0; }
   }
   /* Text recognition: a dashed beam, as on the old sheet. */
-  .stage.ocr .scan__beam { background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 10px); }
-  .stage.done .scan__track, .stage.done .scan__wash { display: none; }
-  .stage.stopped .scan__track, .stage.stopped .scan__wash,
-  .stage.cancelled .scan__track, .stage.cancelled .scan__wash { animation-play-state: paused; }
-  .stage.stopped .scan__beam { background: var(--danger); box-shadow: none; }
-  .stage.cancelled .scan__beam { background: var(--edge); box-shadow: none; }
-  .stage.stopped .scan__beam::before, .stage.cancelled .scan__beam::before { display: none; }
+  :is(.stage, .pv).ocr .scan__beam { background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 10px); }
+  :is(.stage, .pv).done .scan__track, :is(.stage, .pv).done .scan__wash { display: none; }
+  :is(.stage, .pv).stopped .scan__track, :is(.stage, .pv).stopped .scan__wash,
+  :is(.stage, .pv).cancelled .scan__track, :is(.stage, .pv).cancelled .scan__wash { animation-play-state: paused; }
+  :is(.stage, .pv).stopped .scan__beam { background: var(--danger); box-shadow: none; }
+  :is(.stage, .pv).cancelled .scan__beam { background: var(--edge); box-shadow: none; }
+  :is(.stage, .pv).stopped .scan__beam::before, :is(.stage, .pv).cancelled .scan__beam::before { display: none; }
   .scan__badge {
     position: absolute; left: -8px; bottom: 10%;
     padding: 2px 6px; border-radius: 5px;
@@ -402,8 +416,8 @@
   }
   .scan__badge--pdf { background: var(--pdf); color: var(--on-pdf); }
   .scan__badge--docx { display: none; background: var(--docx); color: var(--on-docx); }
-  .stage.done .scan__badge--pdf { display: none; }
-  .stage.done .scan__badge--docx { display: block; }
+  :is(.stage, .pv).done .scan__badge--pdf { display: none; }
+  :is(.stage, .pv).done .scan__badge--docx { display: block; }
 
   .doc { position: relative; width: 44px; height: 54px; color: var(--edge); }
   .doc svg { width: 100%; height: 100%; }
@@ -423,7 +437,7 @@
     transform: scale(0); transition: transform .25s var(--ease);
   }
   .doc__ok .i { width: 14px; height: 14px; stroke-width: 3; }
-  .stage.done .doc__ok { transform: scale(1); }
+  :is(.stage, .pv).done .doc__ok { transform: scale(1); }
 
   .stage__name { margin: 0; font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stage__pct {
@@ -431,9 +445,9 @@
     font-variant-numeric: tabular-nums;
     min-height: 1.1em;
   }
-  .stage.done .stage__pct { color: var(--ok); }
-  .stage.stopped .stage__pct { color: var(--danger); }
-  .stage.cancelled .stage__pct { color: var(--text-soft); }
+  :is(.stage, .pv).done .stage__pct { color: var(--ok); }
+  :is(.stage, .pv).stopped .stage__pct { color: var(--danger); }
+  :is(.stage, .pv).cancelled .stage__pct { color: var(--text-soft); }
 
   .meter { height: 8px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; }
   .meter > span {
@@ -442,17 +456,100 @@
     transform-origin: left; transform: scaleX(0);
     transition: transform .35s var(--ease);
   }
-  .stage.indeterminate .meter > span { width: 36%; animation: indet 1.3s var(--ease) infinite; }
+  :is(.stage, .pv).indeterminate .meter > span { width: 36%; animation: indet 1.3s var(--ease) infinite; }
   @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
-  .stage.done .meter > span { background: var(--ok); }
-  .stage.stopped .meter > span { background: var(--danger); }
-  .stage.cancelled .meter > span { background: var(--edge); }
+  :is(.stage, .pv).done .meter > span { background: var(--ok); }
+  :is(.stage, .pv).stopped .meter > span { background: var(--danger); }
+  :is(.stage, .pv).cancelled .meter > span { background: var(--edge); }
 
   .stage__status { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-soft); font-variant-numeric: tabular-nums; }
   .stage__status b { color: var(--text); font-weight: 600; }
-  .stage.done .stage__status b { color: var(--ok); }
-  .stage.stopped .stage__status b { color: var(--danger); }
+  :is(.stage, .pv).done .stage__status b { color: var(--ok); }
+  :is(.stage, .pv).stopped .stage__status b { color: var(--danger); }
   .stage__more { justify-self: center; }
+
+  /* ---- the big preview ---------------------------------------------------------- */
+  .pv {
+    width: min(760px, calc(100vw - 32px)); height: min(94vh, 1000px);
+    max-width: none; max-height: none;
+    padding: 0; border: 1px solid var(--border); border-radius: var(--r-lg);
+    background: var(--surface); color: var(--text);
+    box-shadow: 0 24px 64px -12px rgba(2, 6, 23, .45);
+    overflow: hidden;
+  }
+  .pv[open] { display: flex; flex-direction: column; animation: pv-in .2s var(--ease); }
+  .pv::backdrop { background: rgba(2, 6, 23, .62); }
+  @keyframes pv-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
+  html:has(.pv[open]) { overflow: hidden; }
+  .pv__head {
+    display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s2) var(--s2) var(--s2) var(--s5);
+    border-bottom: 1px solid var(--border);
+  }
+  .pv__name { flex: 1; margin: 0; font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv__close {
+    display: grid; place-items: center; width: 44px; height: 44px; flex: none;
+    border: 0; border-radius: var(--r-sm); background: none; color: var(--text-soft);
+    cursor: pointer; transition: background-color .15s ease, color .15s ease;
+  }
+  .pv__close:hover { background: var(--surface-2); color: var(--text); }
+  /* The page is fitted inside whatever room is left, at its own shape. */
+  .pv__stage {
+    flex: 1; min-height: 0;
+    display: grid; place-items: center;
+    padding: var(--s6) var(--s5);
+    background: var(--surface-2);
+    container-type: size;
+  }
+  .pv__frame { position: relative; --ar: .773; width: min(100cqw, 100cqh * var(--ar)); aspect-ratio: var(--ar); }
+  .pv__page { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 8px; }
+  .pv .scan__beam { height: 3px; top: -1.5px; }
+  .pv .scan__beam::before { min-height: 64px; }
+  .pv .scan__badge { left: -10px; bottom: 6%; padding: 3px 9px; border-radius: 6px; font-size: 13px; }
+  .pv .doc__ok { right: -12px; top: -12px; width: 34px; height: 34px; }
+  .pv .doc__ok .i { width: 20px; height: 20px; }
+  .pv__foot {
+    display: flex; flex-direction: column; gap: var(--s3);
+    padding: var(--s4) var(--s5) var(--s5);
+    border-top: 1px solid var(--border);
+  }
+  .pv__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s4); }
+  .pv .stage__pct { font-size: 28px; }
+  .pv__actions { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); margin-top: var(--s1); }
+  /* Two steps in one dialog: choose (ready), then watch (progress). */
+  .pv[data-mode="ready"] .pv-progress, .pv:not([data-mode="ready"]) .pv-ready { display: none !important; }
+  .pv__ready { display: grid; justify-items: center; gap: var(--s4); width: 100%; max-width: 460px; text-align: center; }
+  .pv__sheet {
+    position: relative; display: block; width: 112px; aspect-ratio: 170 / 220;
+    background: var(--page); color: var(--page-ink);
+    border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--lift);
+  }
+  .pv__sheet svg { width: 100%; height: 100%; }
+  .pv__sheet .scan__badge { bottom: 10%; }
+  .pv__list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s1); width: 100%; }
+  .pv__list li { display: flex; justify-content: center; align-items: baseline; gap: var(--s2); min-width: 0; }
+  .pv__list .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv__list .size { flex: none; font-size: 14px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+  .pv__skipped { margin: 0; font-size: 14px; color: var(--warn); }
+  .pv__lang { display: grid; gap: var(--s1); }
+  .pv .lang { justify-content: flex-start; margin: 0; }
+  .pv__hint { margin: 0; font-size: 14px; color: var(--text-soft); }
+  .btn--stop { color: var(--danger); border-color: var(--danger); }
+  .btn--stop:hover { background: var(--danger-soft); }
+  /* The ready step is short; on a wide screen it takes only the height it
+     needs. A modal dialog is pinned to the viewport's top and bottom, so
+     "auto" would stretch it: fit-content is what lets it centre. */
+  @media (min-width: 601px) {
+    .pv[data-mode="ready"] { height: fit-content; max-height: calc(100% - 32px); }
+    .pv[data-mode="ready"] .pv__stage { flex: none; container-type: normal; padding-block: var(--s7); }
+  }
+  @media (max-width: 600px) {
+    .pv { width: 100%; height: 100%; max-width: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0; }
+    .pv__head { padding-top: calc(var(--s2) + env(safe-area-inset-top, 0px)); }
+    .pv__stage { padding: var(--s5) var(--s4); }
+    .pv__foot { padding: var(--s4) var(--s4) calc(var(--s5) + env(safe-area-inset-bottom, 0px)); }
+    .pv__actions .btn { flex: 1 1 auto; }
+  }
 
   /* ---- language of scanned pages ------------------------------------------------ */
   .lang {
@@ -615,11 +712,11 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition-duration: 0s !important; }
-    .scan__img { animation: none; }
+    .scan__img, .pv[open] { animation: none; }
     /* No sweep: the beam rests at the foot of the page and the wash is off. */
     .scan__track { animation: none; transform: translateY(100%); opacity: .8; }
     .scan__wash { animation: none; opacity: 0; }
-    .stage.indeterminate .meter > span { animation: none; width: 100%; transform: none; opacity: .45; }
+    :is(.stage, .pv).indeterminate .meter > span { animation: none; width: 100%; transform: none; opacity: .45; }
   }
   @media (prefers-contrast: more) {
     body { --border: var(--edge); --text-soft: var(--text); }
@@ -638,6 +735,9 @@
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4.5"/><path d="M12 16h.01"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
   <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 9v12"/></symbol>
   <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10"/><path d="M7 12h10"/><path d="M7 15h6"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
@@ -682,17 +782,18 @@
           </div>
 
           <div class="stage__busy hidden" id="stage-busy">
-            <!-- The page being read, under the scanner. -->
-            <div class="scan" aria-hidden="true">
-              <div class="scan__page" id="scan-page">
-                <svg class="scan__glyph" viewBox="0 0 170 220"><use href="#page"/></svg>
+            <!-- The page being read, under the scanner. Opens the big preview. -->
+            <button class="scan" id="scan-open" type="button" aria-label="Show the page being scanned, larger">
+              <span class="scan__page" id="scan-page">
+                <svg class="scan__glyph" viewBox="0 0 170 220" aria-hidden="true"><use href="#page"/></svg>
                 <span class="scan__wash" id="scan-wash"></span>
                 <span class="scan__track"><span class="scan__beam"></span></span>
-              </div>
-              <b class="scan__badge scan__badge--pdf">PDF</b>
-              <b class="scan__badge scan__badge--docx">DOCX</b>
-              <span class="doc__ok"><svg class="i"><use href="#i-check"/></svg></span>
-            </div>
+              </span>
+              <b class="scan__badge scan__badge--pdf" aria-hidden="true">PDF</b>
+              <b class="scan__badge scan__badge--docx" aria-hidden="true">DOCX</b>
+              <span class="doc__ok" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></span>
+              <span class="scan__zoom" aria-hidden="true"><svg class="i"><use href="#i-expand"/></svg></span>
+            </button>
             <div class="stage__info">
               <div class="stage__head">
                 <p class="stage__name" id="stage-name"></p>
@@ -706,16 +807,6 @@
         </div>
         <p id="stage-hint" class="visually-hidden">Choose a PDF to convert, or drag PDF files anywhere on this page. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Progress for each file is listed under Your files.</p>
         <input type="file" id="file" accept=".pdf" multiple hidden>
-
-        <!-- Filled from /api/info with the languages installed; hidden when
-             there is only one to choose from. -->
-        <div class="lang" id="lang-row">
-          <label for="lang">Language of scanned pages</label>
-          <span class="select">
-            <select id="lang" disabled><option value="">English</option></select>
-            <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
-          </span>
-        </div>
 
         <ul class="promises">
           <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No sign-up</li>
@@ -746,7 +837,7 @@
       <h2>How to convert a PDF to Word</h2>
       <ol class="steps">
         <li><span class="step-n" aria-hidden="true">1</span><div><strong>Choose your PDF</strong><p>Pick it with the button above, or drop it anywhere on this page. Several at once is fine.</p></div></li>
-        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Wait for the pages</strong><p>The counter shows which page it is on and how long is left.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Convert it</strong><p>Press Convert to Word, after picking the language if the PDF is a scan. Each page shows as it is read, with the time left.</p></div></li>
         <li><span class="step-n" aria-hidden="true">3</span><div><strong>Open it in Word</strong><p>The Word file downloads by itself. Edit it in Word, Google Docs, LibreOffice or Pages.</p></div></li>
       </ol>
     </div>
@@ -810,6 +901,65 @@
     <p>An open source converter built in Go. The PDF engine and the text recognition are inside the program, so it works without an internet connection. <a href="https://github.com/itswadesh/pdf2word">Source code and releases on GitHub</a>.</p>
   </div>
 </footer>
+
+<!-- The big preview: the page being scanned, how far along it is, and a way
+     to stop. Opens by itself when files are added; the card's scanner
+     reopens it. -->
+<dialog class="pv" id="pv" aria-labelledby="pv-name">
+  <div class="pv__head">
+    <p class="pv__name" id="pv-name"></p>
+    <button class="pv__close" id="pv-close" type="button" aria-label="Close the preview" autofocus><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="pv__stage">
+    <!-- Before converting: what was chosen. -->
+    <div class="pv__ready pv-ready">
+      <span class="pv__sheet" aria-hidden="true"><svg viewBox="0 0 170 220"><use href="#page"/></svg><b class="scan__badge scan__badge--pdf">PDF</b></span>
+      <ul class="pv__list" id="pv-list"></ul>
+      <p class="pv__skipped hidden" id="pv-skipped"></p>
+    </div>
+    <!-- While converting: the page under the scanner. -->
+    <div class="pv__frame pv-progress" id="pv-frame" aria-hidden="true">
+      <span class="scan__page pv__page" id="pv-page">
+        <svg class="scan__glyph" viewBox="0 0 170 220"><use href="#page"/></svg>
+        <span class="scan__wash" id="pv-wash"></span>
+        <span class="scan__track"><span class="scan__beam"></span></span>
+      </span>
+      <b class="scan__badge scan__badge--pdf">PDF</b>
+      <b class="scan__badge scan__badge--docx">DOCX</b>
+      <span class="doc__ok"><svg class="i"><use href="#i-check"/></svg></span>
+    </div>
+  </div>
+  <div class="pv__foot pv-ready">
+    <!-- Filled from /api/info with the languages installed; hidden when
+         there is only one to choose from. -->
+    <div class="pv__lang" id="lang-row">
+      <div class="lang">
+        <label for="lang">Language of scanned pages</label>
+        <span class="select">
+          <select id="lang" disabled><option value="">English</option></select>
+          <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </span>
+      </div>
+      <p class="pv__hint">Only used for pages that are pictures of text. Text in the PDF is copied as it is.</p>
+    </div>
+    <div class="pv__actions">
+      <button class="btn btn--primary btn--lg" id="pv-convert" type="button">Convert to Word</button>
+      <button class="btn btn--quiet" id="pv-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+  <div class="pv__foot pv-progress">
+    <div class="pv__row">
+      <span class="stage__pct" id="pv-pct" aria-hidden="true"></span>
+      <p class="stage__status"><b id="pv-status"></b> <span id="pv-detail"></span><span class="hidden" id="pv-ocr"> · scanned pages take longer</span></p>
+    </div>
+    <div class="meter" aria-hidden="true"><span id="pv-fill"></span></div>
+    <div class="pv__actions">
+      <button class="btn btn--quiet btn--stop" id="pv-stop" type="button"><svg class="i" aria-hidden="true"><use href="#i-stop"/></svg>Stop converting</button>
+      <a class="btn btn--primary hidden" id="pv-download" download><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Download Word file</a>
+      <button class="btn btn--quiet hidden" id="pv-another" type="button">Convert another PDF</button>
+    </div>
+  </div>
+</dialog>
 
 <div class="visually-hidden" id="announcer" role="status" aria-live="polite"></div>
 
@@ -906,19 +1056,21 @@
   // rest are listed in a notice that stays until dismissed; the server
   // checks the name, the size and the file signature again.
   function isPDF(f) { return /\.pdf$/i.test(f.name); }
+  // Added files are not uploaded yet: the preview opens on them first, with
+  // the language for scanned pages and a button that starts the conversion.
   function queueFiles(list) {
-    const notPDF = [], tooBig = [];
-    let started = 0;
+    const ok = [], notPDF = [], tooBig = [];
     for (const f of Array.from(list)) {
       if (!isPDF(f)) notPDF.push(f.name);
       else if (f.size > maxUploadBytes) tooBig.push(f.name + ' (' + fmtSize(f.size) + ')');
-      else { upload(f); started++; }
+      else ok.push(f);
     }
     const notes = [];
     if (notPDF.length) notes.push('Only .pdf files can be converted. Skipped: ' + notPDF.join(', ') + '.');
     if (tooBig.length) notes.push('Files must be ' + fmtLimit(maxUploadBytes) + ' or smaller. Skipped: ' + tooBig.join(', ') + '.');
     showNotice(notes.join(' '));
-    if (started && !notes.length) hideNotice();
+    if (ok.length && !notes.length) hideNotice();
+    if (ok.length) prepare(ok, notes.join(' '));
   }
   function showNotice(text) {
     if (!text) return;
@@ -1181,142 +1333,91 @@
     return '';
   }
 
-  // --- the card --------------------------------------------------------------------
+  // --- the card and the big preview ---------------------------------------------------
+  // Both show the same thing: the file being converted, how far along it is,
+  // and the page under the scanner. describe() works that out once and
+  // paint() puts it on either surface.
   function activeView() {
     for (const r of rows.values()) if (r.view.state === 'running') return r.view;
     for (const r of rows.values()) if (r.view.state === 'uploading') return r.view;
     for (const r of rows.values()) if (r.view.state === 'queued') return r.view;
     return null;
   }
-  function setFill(pct) {
-    stageFill.style.transform = pct === null ? '' : 'scaleX(' + Math.max(0, Math.min(100, pct)) / 100 + ')';
-  }
   function joinDetail() {
     return Array.prototype.filter.call(arguments, Boolean).join(' · ');
   }
-  function setStatus(label, detail) {
-    stageStatus.textContent = label;
-    stageDetail.textContent = detail ? '· ' + detail : '';
+  // The card has the file list under it to explain a failure; the modal
+  // covers that list, so it gives the reason itself.
+  function describe(v, inModal) {
+    const d = { cls: [], fill: 0, pct: '', label: '', detail: '', ocr: false, title: '' };
+    switch (v.state) {
+      case 'done':
+        d.cls = ['done']; d.fill = 100; d.pct = 'Done'; d.label = 'Word file downloaded';
+        return d;
+      case 'cancelled':
+        d.cls = ['cancelled']; d.fill = 100 * overall(v); d.pct = 'Stopped'; d.label = 'Stopped by you';
+        return d;
+      case 'error':
+        d.cls = ['stopped']; d.fill = 100 * overall(v); d.pct = 'Stopped'; d.label = "Couldn't convert this file";
+        d.detail = inModal ? (v.message || '') : 'see the file below';
+        return d;
+    }
+    const pct = 100 * overall(v);
+    const left = remaining(v);
+    d.label = phaseText(v);
+    d.detail = joinDetail(detailText(v), left === null ? '' : 'about ' + fmtDuration(left) + ' left');
+    d.ocr = v.stage === 'ocr';
+    const determinate = v.state === 'uploading' ? v.total > 0 : (v.state === 'running' && v.total > 0);
+    if (determinate) {
+      d.cls = d.ocr ? ['ocr'] : [];
+      d.fill = pct;
+      d.pct = Math.round(pct) + '%';
+      d.title = Math.round(pct) + '% converting your PDF';
+    } else {
+      // An unknown percentage is never shown as a number.
+      d.cls = ['indeterminate'];
+      d.fill = null;
+    }
+    return d;
   }
-  function stageState() {
+  function paint(ui, d) {
+    ui.fill.style.transform = d.fill === null ? '' : 'scaleX(' + Math.max(0, Math.min(100, d.fill)) / 100 + ')';
+    ui.pct.textContent = d.pct;
+    ui.status.textContent = d.label;
+    ui.detail.textContent = d.detail ? '· ' + d.detail : '';
+    ui.ocr.classList.toggle('hidden', !d.ocr);
+  }
+  const cardUI = { fill: stageFill, pct: stagePct, status: stageStatus, detail: stageDetail, ocr: ocrNote };
+  function stageState(classes) {
     const keep = stage.classList.contains('dragover') ? ' dragover' : '';
-    stage.className = 'stage' + keep +
-      Array.prototype.filter.call(arguments, Boolean).map(function (c) { return ' ' + c; }).join('');
+    stage.className = 'stage' + keep + classes.filter(Boolean).map((c) => ' ' + c).join('');
   }
 
   function renderStage() {
     const active = activeView();
-    const now = Date.now();
+    const shown = active || (flash && flash.until > Date.now() ? flash.view : null);
+    if (active) updatePreview(active);
 
-    if (!active && flash && flash.until > now) {
-      const v = flash.view;
-      showBusy(v);
-      if (v.state === 'done') {
-        stageState('busy', 'done'); setFill(100);
-        stagePct.textContent = 'Done';
-        setStatus('Word file downloaded', '');
-      } else if (v.state === 'cancelled') {
-        stageState('busy', 'cancelled'); setFill(100 * overall(v));
-        stagePct.textContent = 'Stopped';
-        setStatus('Stopped by you', '');
-      } else {
-        stageState('busy', 'stopped'); setFill(100 * overall(v));
-        stagePct.textContent = 'Stopped';
-        setStatus("Couldn't convert this file", 'see the file below');
-      }
-      ocrNote.classList.add('hidden');
-      document.title = TITLE;
-      return;
-    }
-
-    if (!active) {
+    if (shown) {
+      const d = describe(shown, false);
+      showBusy(shown);
+      stageState(['busy'].concat(d.cls));
+      paint(cardUI, d);
+      document.title = d.title || TITLE;
+      pvView = shown;
+    } else {
       const wasBusy = stage.classList.contains('busy');
       const focusWasInside = stageBusy.contains(document.activeElement);
       stageBusy.classList.add('hidden');
       stageIdle.classList.remove('hidden');
-      stageState(); setFill(0);
+      stageState([]);
+      stageFill.style.transform = '';
       ocrNote.classList.add('hidden');
       document.title = TITLE;
       if (wasBusy && focusWasInside) pick.focus();
-      return;
     }
 
-    showBusy(active);
-    updatePreview(active);
-    const pct = 100 * overall(active);
-    const left = remaining(active);
-    const detail = joinDetail(detailText(active), left === null ? '' : 'about ' + fmtDuration(left) + ' left');
-    const ocr = active.stage === 'ocr';
-    ocrNote.classList.toggle('hidden', !ocr);
-
-    const determinate = active.state === 'uploading'
-      ? active.total > 0
-      : (active.state === 'running' && active.total > 0);
-
-    if (determinate) {
-      stageState('busy', ocr ? 'ocr' : '');
-      setFill(pct);
-      stagePct.textContent = Math.round(pct) + '%';
-      setStatus(phaseText(active), detail);
-      document.title = Math.round(pct) + '% converting your PDF';
-    } else {
-      // An unknown percentage is never shown as a number.
-      stageState('busy', 'indeterminate');
-      setFill(null);
-      stagePct.textContent = '';
-      setStatus(phaseText(active), detail);
-      document.title = TITLE;
-    }
-  }
-  // --- the page under the scanner -----------------------------------------------
-  // Shows the page the conversion is on: while reading, the next page to be
-  // read; after that, the page just finished (text recognition runs several
-  // pages at once, so there is no single "current" one). At most one image
-  // is in flight and a new one is fetched at most every 0.7 s, however fast
-  // the pages go by.
-  const scanPage = $('scan-page'), scanWash = $('scan-wash');
-  let scan = { job: '', want: '', shown: '', loading: false, last: 0, timer: 0 };
-  function previewPage(v) {
-    if (v.state !== 'running' || !v.total || !v.id) return 0;
-    return v.phase === 'reading' ? Math.min(v.done + 1, v.total) : (v.page || 1);
-  }
-  function updatePreview(v) {
-    if ((v.id || '') !== scan.job) {
-      clearTimeout(scan.timer);
-      scan = { job: v.id || '', want: '', shown: '', loading: false, last: 0, timer: 0 };
-      for (const img of Array.from(scanPage.querySelectorAll('img'))) img.remove();
-      scanPage.classList.remove('has-img');
-    }
-    const n = previewPage(v);
-    if (!n) return;
-    scan.want = '/api/jobs/' + v.id + '/pages/' + n;
-    loadPreview();
-  }
-  function loadPreview() {
-    const p = scan;
-    if (p.loading || !p.want || p.want === p.shown) return;
-    const wait = p.last + 700 - Date.now();
-    if (wait > 0) { clearTimeout(p.timer); p.timer = setTimeout(loadPreview, wait); return; }
-    const url = p.want;
-    p.loading = true;
-    const img = new Image();
-    img.alt = '';
-    img.className = 'scan__img';
-    img.decoding = 'async';
-    const settle = (ok) => {
-      if (p !== scan) return; // a newer file took the scanner over
-      p.loading = false; p.shown = url; p.last = Date.now();
-      if (ok) {
-        const old = Array.from(scanPage.querySelectorAll('img'));
-        scanPage.insertBefore(img, scanWash);
-        scanPage.classList.add('has-img');
-        setTimeout(() => old.forEach((o) => o.remove()), 300);
-      }
-      loadPreview();
-    };
-    img.onload = () => settle(true);
-    img.onerror = () => settle(false);
-    img.src = url;
+    renderModal();
   }
 
   function showBusy(v) {
@@ -1326,6 +1427,163 @@
     stageName.textContent = v.filename || '';
     stageName.title = v.filename || '';
     if (focusWasInside) pickMore.focus();
+  }
+
+  // --- the big preview -------------------------------------------------------------------
+  // Two steps. "ready": the files just chosen, the language for scanned
+  // pages and the button that starts converting; nothing is uploaded until
+  // it is pressed, and closing the dialog drops the choice. "progress": the
+  // file being converted under the scanner, with Stop; once nothing is
+  // converting it keeps showing how the last file ended until it is closed.
+  const pv = $('pv'), pvFrame = $('pv-frame'), pvPage = $('pv-page'), pvWash = $('pv-wash');
+  const pvStop = $('pv-stop'), pvDownload = $('pv-download'), pvAnother = $('pv-another');
+  const pvConvert = $('pv-convert');
+  const pvUI = { fill: $('pv-fill'), pct: $('pv-pct'), status: $('pv-status'), detail: $('pv-detail'), ocr: $('pv-ocr') };
+  let pvView = null, pvMode = 'progress', pending = [];
+
+  function prepare(files, skipped) {
+    // More files dropped while choosing join the ones already chosen.
+    pending = (pv.open && pvMode === 'ready' ? pending : []).concat(files);
+    pvMode = 'ready';
+    const list = $('pv-list');
+    list.textContent = '';
+    const MAX = 5;
+    for (const f of pending.slice(0, MAX)) {
+      const li = document.createElement('li');
+      const name = document.createElement('span'), size = document.createElement('span');
+      name.className = 'name'; name.textContent = f.name; name.title = f.name;
+      size.className = 'size'; size.textContent = fmtSize(f.size);
+      li.append(name, size);
+      list.appendChild(li);
+    }
+    if (pending.length > MAX) {
+      const li = document.createElement('li');
+      li.textContent = 'and ' + plural(pending.length - MAX, 'more file');
+      list.appendChild(li);
+    }
+    $('pv-skipped').textContent = skipped || '';
+    $('pv-skipped').classList.toggle('hidden', !skipped);
+    pvConvert.textContent = pending.length > 1 ? 'Convert ' + pending.length + ' files to Word' : 'Convert to Word';
+    renderModal();
+    if (!pv.open) pv.showModal();
+    pvConvert.focus();
+  }
+  pvConvert.addEventListener('click', () => {
+    const files = pending;
+    pending = [];
+    pvMode = 'progress';
+    for (const f of files) upload(f);
+    renderModal();
+    $('pv-close').focus();
+  });
+  $('pv-cancel').addEventListener('click', () => pv.close());
+  pv.addEventListener('close', () => {
+    if (pvMode === 'ready') { pending = []; pvMode = 'progress'; renderModal(); }
+  });
+
+  function openPreview() {
+    if (pv.open) return;
+    // Show the card's picture straight away while the sharper one loads.
+    const current = scanPage.querySelector('img');
+    if (current && !pvPage.querySelector('img')) addPageImage(pvPage, pvWash, current.cloneNode());
+    renderModal();
+    pv.showModal();
+    loadPreview();
+  }
+  function renderModal() {
+    pv.dataset.mode = pvMode;
+    if (pvMode === 'ready') {
+      pv.className = 'pv';
+      $('pv-name').textContent = 'Convert to Word';
+      return;
+    }
+    if (!pvView) return;
+    const v = pvView, d = describe(v, true);
+    pv.className = 'pv' + d.cls.map((c) => ' ' + c).join('');
+    $('pv-name').textContent = v.filename || '';
+    paint(pvUI, d);
+    const busy = !isTerminal(v.state);
+    pvStop.classList.toggle('hidden', !busy);
+    pvDownload.classList.toggle('hidden', !(v.state === 'done' && v.download));
+    if (v.download) pvDownload.href = v.download;
+    pvAnother.classList.toggle('hidden', busy);
+  }
+  // Stops the file the preview is showing: an upload is aborted, a queued
+  // or running conversion is cancelled on the server.
+  function stopView(v) {
+    for (const r of rows.values()) {
+      if (r.view !== v && !(v.id && r.view.id === v.id)) continue;
+      if (r.view.state === 'uploading' && r.xhr) r.xhr.abort();
+      else if (r.view.id) fetch('/api/jobs/' + r.view.id + '/cancel', { method: 'POST' }).then(() => schedulePoll(0));
+      return;
+    }
+  }
+  $('scan-open').addEventListener('click', openPreview);
+  $('pv-close').addEventListener('click', () => pv.close());
+  pv.addEventListener('click', (e) => { if (e.target === pv) pv.close(); }); // the backdrop
+  pvStop.addEventListener('click', () => { if (pvView) stopView(pvView); });
+  pvAnother.addEventListener('click', () => { pv.close(); fileInput.click(); });
+
+  // --- the page under the scanner -----------------------------------------------
+  // Shows the page the conversion is on: while reading, the next page to be
+  // read; after that, the page just finished (text recognition runs several
+  // pages at once, so there is no single "current" one). At most one image
+  // is in flight and a new one is fetched at most every 0.7 s, however fast
+  // the pages go by. The card gets a thumbnail; while the big preview is
+  // open both get the large picture.
+  const scanPage = $('scan-page'), scanWash = $('scan-wash');
+  let scan = { job: '', page: 0, shownPage: 0, shownLarge: false, loading: false, last: 0, timer: 0 };
+  function previewPage(v) {
+    if (v.state !== 'running' || !v.total || !v.id) return 0;
+    return v.phase === 'reading' ? Math.min(v.done + 1, v.total) : (v.page || 1);
+  }
+  function updatePreview(v) {
+    if ((v.id || '') !== scan.job) {
+      clearTimeout(scan.timer);
+      scan = { job: v.id || '', page: 0, shownPage: 0, shownLarge: false, loading: false, last: 0, timer: 0 };
+      for (const frame of [scanPage, pvPage]) {
+        for (const img of Array.from(frame.querySelectorAll('img'))) img.remove();
+        frame.classList.remove('has-img');
+      }
+      pvFrame.style.removeProperty('--ar');
+    }
+    const n = previewPage(v);
+    if (n) scan.page = n;
+    loadPreview();
+  }
+  function loadPreview() {
+    const p = scan, large = pv.open;
+    if (p.loading || !p.page || (p.page === p.shownPage && (p.shownLarge || !large))) return;
+    const wait = p.last + 700 - Date.now();
+    if (wait > 0) { clearTimeout(p.timer); p.timer = setTimeout(loadPreview, wait); return; }
+    const page = p.page;
+    p.loading = true;
+    const img = new Image();
+    img.alt = '';
+    img.className = 'scan__img';
+    img.decoding = 'async';
+    const settle = (ok) => {
+      if (p !== scan) return; // a newer file took the scanner over
+      p.loading = false; p.shownPage = page; p.shownLarge = large; p.last = Date.now();
+      if (ok) {
+        addPageImage(scanPage, scanWash, img);
+        addPageImage(pvPage, pvWash, img.cloneNode());
+      }
+      loadPreview();
+    };
+    img.onload = () => settle(true);
+    img.onerror = () => settle(false);
+    img.src = '/api/jobs/' + p.job + '/pages/' + page + (large ? '?size=large' : '');
+  }
+  function addPageImage(frame, before, img) {
+    const old = Array.from(frame.querySelectorAll('img'));
+    frame.insertBefore(img, before);
+    frame.classList.add('has-img');
+    setTimeout(() => old.forEach((o) => o.remove()), 300);
+    if (frame !== pvPage) return;
+    // The modal draws the page at its own shape.
+    const fit = () => { if (img.naturalWidth) pvFrame.style.setProperty('--ar', String(img.naturalWidth / img.naturalHeight)); };
+    if (img.complete) fit(); else img.addEventListener('load', fit, { once: true });
   }
 
   // --- the tray ------------------------------------------------------------------------

@@ -463,9 +463,10 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, j.output)
 }
 
-// handlePreview serves a thumbnail of one page of a conversion in
-// progress, for the scanner on the page. Only the uploading browser gets
-// it, and only until the conversion ends.
+// handlePreview serves a picture of one page of a conversion in progress,
+// for the scanner on the page: a thumbnail for the card, or ?size=large for
+// the modal. Only the uploading browser gets it, and only until the
+// conversion ends.
 func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 	j, ok := s.jobs.get(r.PathValue("id"))
 	if !ok || !s.owns(r, j) {
@@ -477,7 +478,16 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such page")
 		return
 	}
-	img, err := s.preview.thumbnail(j, n)
+	size := sizeCard
+	switch r.URL.Query().Get("size") {
+	case "":
+	case sizeLarge.name:
+		size = sizeLarge
+	default:
+		writeError(w, http.StatusBadRequest, "size must be large or left out")
+		return
+	}
+	img, err := s.preview.thumbnail(j, n, size)
 	switch {
 	case errors.Is(err, errNoSuchPage), errors.Is(err, errPreviewGone):
 		writeError(w, http.StatusNotFound, err.Error())

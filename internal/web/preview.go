@@ -14,11 +14,18 @@ import (
 	"pdf2word/internal/pdfiumx"
 )
 
-// Thumbnails fit this box: twice the size the page draws the preview at,
-// so it stays sharp on a high-density screen.
-const (
-	previewWidth  = 300
-	previewHeight = 388
+// previewSize is the box a page is fitted into.
+type previewSize struct {
+	name          string // as asked for in ?size=, and part of the cache file name
+	width, height int
+}
+
+var (
+	// The card's thumbnail: twice the 150x194 it is drawn at, so it stays
+	// sharp on a high-density screen.
+	sizeCard = previewSize{"", 300, 388}
+	// The modal's page, drawn up to about 560x720, at one and a half times.
+	sizeLarge = previewSize{"large", 840, 1088}
 )
 
 var (
@@ -36,11 +43,15 @@ type previewer struct {
 	doc   *pdfiumx.Doc
 }
 
-// thumbnail returns page n of the job's PDF as a JPEG. A page is rendered
-// once and kept in the job's directory, which the retention sweep deletes
-// with everything else.
-func (p *previewer) thumbnail(j *job, n int) ([]byte, error) {
-	cached := filepath.Join(j.dir, fmt.Sprintf("preview-%d.jpg", n))
+// thumbnail returns page n of the job's PDF as a JPEG fitted to size. A
+// page is rendered once per size and kept in the job's directory, which
+// the retention sweep deletes with everything else.
+func (p *previewer) thumbnail(j *job, n int, size previewSize) ([]byte, error) {
+	name := fmt.Sprintf("preview-%d.jpg", n)
+	if size.name != "" {
+		name = fmt.Sprintf("preview-%d-%s.jpg", n, size.name)
+	}
+	cached := filepath.Join(j.dir, name)
 	if b, err := os.ReadFile(cached); err == nil {
 		return b, nil
 	}
@@ -63,7 +74,7 @@ func (p *previewer) thumbnail(j *job, n int) ([]byte, error) {
 	if n < 1 || n > p.doc.Pages {
 		return nil, errNoSuchPage
 	}
-	b, err := renderThumbnail(p.doc, n)
+	b, err := renderThumbnail(p.doc, n, size)
 	if err != nil {
 		return nil, err
 	}
@@ -71,13 +82,13 @@ func (p *previewer) thumbnail(j *job, n int) ([]byte, error) {
 	return b, nil
 }
 
-func renderThumbnail(doc *pdfiumx.Doc, n int) ([]byte, error) {
+func renderThumbnail(doc *pdfiumx.Doc, n int, size previewSize) ([]byte, error) {
 	doc.Mu.Lock()
 	defer doc.Mu.Unlock()
 	res, err := doc.Instance.RenderPageInPixels(&requests.RenderPageInPixels{
 		Page:   doc.Page(n),
-		Width:  previewWidth,
-		Height: previewHeight,
+		Width:  size.width,
+		Height: size.height,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("page %d: render: %w", n, err)

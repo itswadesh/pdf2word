@@ -10,6 +10,18 @@ import (
 	"testing"
 )
 
+// fits checks that img is a JPEG that fills the size's box on one side.
+func fits(t *testing.T, img []byte, size previewSize) {
+	t.Helper()
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(img))
+	if err != nil {
+		t.Fatalf("not a JPEG: %v", err)
+	}
+	if cfg.Width > size.width || cfg.Height > size.height || (cfg.Width != size.width && cfg.Height != size.height) {
+		t.Errorf("picture is %dx%d; want it to fill a %dx%d box", cfg.Width, cfg.Height, size.width, size.height)
+	}
+}
+
 // The scanner on the page shows the page being converted. The thumbnail
 // is the uploader's alone, is only drawn while the conversion is going,
 // and must not keep the document open once it is over.
@@ -57,12 +69,20 @@ func TestPagePreview(t *testing.T) {
 	if cc := r.Header.Get("Cache-Control"); cc != "private, max-age=600" {
 		t.Errorf("Cache-Control = %q; a shared cache must not keep someone's page", cc)
 	}
-	cfg, err := jpeg.DecodeConfig(bytes.NewReader(img))
-	if err != nil {
-		t.Fatalf("not a JPEG: %v", err)
+	fits(t, img, sizeCard)
+
+	// The modal asks for a larger picture of the same page.
+	r = get(base+"1?size=large", mine)
+	large, _ := io.ReadAll(r.Body)
+	r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("large: status %d", r.StatusCode)
 	}
-	if cfg.Width > previewWidth || cfg.Height > previewHeight || (cfg.Width != previewWidth && cfg.Height != previewHeight) {
-		t.Errorf("thumbnail is %dx%d; want it to fill a %dx%d box", cfg.Width, cfg.Height, previewWidth, previewHeight)
+	fits(t, large, sizeLarge)
+	r = get(base+"1?size=huge", mine)
+	r.Body.Close()
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("unknown size: status %d, want 400", r.StatusCode)
 	}
 
 	for _, tc := range []struct {
