@@ -1,0 +1,88 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>PDF to Word on your phone</h1>
+      <p class="lede">Convert a PDF to an editable Word file on an iPhone or an Android phone, right in the browser, with nothing to install.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="phones">
+    <div class="wrap">
+      <h2>On iPhone and Android</h2>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>iPhone and iPad</h3>
+          <ol class="tips">
+            <li>Open this page in Safari and tap Choose a PDF.</li>
+            <li>Pick the PDF from Files, or from iCloud Drive.</li>
+            <li>Press Convert to Word. The DOCX is saved to Downloads in the Files app.</li>
+            <li>Open it with Microsoft Word or Pages to edit it.</li>
+          </ol>
+        </section>
+        <section class="feature">
+          <h3>Android</h3>
+          <ol class="tips">
+            <li>Open this page in Chrome and tap Choose a PDF.</li>
+            <li>Pick the PDF from Files, Drive or Downloads.</li>
+            <li>Press Convert to Word. The DOCX is saved to the Downloads folder.</li>
+            <li>Open it with Microsoft Word or Google Docs to edit it.</li>
+          </ol>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="tips">
+    <div class="wrap narrow">
+      <h2>Good to know</h2>
+      <div class="prose">
+        <p>The file goes over your connection, so a large PDF on mobile data takes a while to upload before the first page shows. On Wi-Fi it is quicker.</p>
+        <p>You can watch each page being read, as on a computer, and the Word file is the same: the fonts, tables, pictures and pages of the original.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>Can I convert PDF to Word on my phone?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Yes. Open this page in your phone’s browser, choose the PDF from your files, and the Word document is saved to your downloads.</p>
+          </details>
+        <details class="qa">
+            <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+          </details>
+        <details class="qa">
+            <summary>Is there a limit on file size or number of files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>100 MB per file by default, and as many files as you like, one after another. Whoever runs the converter can raise or lower the size limit.</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/pdf-to-google-docs">PDF to Google Docs<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/resume-pdf-to-word">Resume or CV<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

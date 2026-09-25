@@ -1,0 +1,88 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>PDF table to Word converter</h1>
+      <p class="lede">Turn the tables in a PDF into real Word tables you can type in, with the rest of the page laid out as it was.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="tables">
+    <div class="wrap">
+      <h2>Real tables, not tabs and spaces</h2>
+      <p class="lead">Many converters turn a table into lines of text pushed apart with spaces, which fall apart as soon as you edit a cell. Here a table drawn with lines becomes a Word table: rows, columns and cells, with each piece of text in the cell it sat in.</p>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Comes across</h3>
+          <ul class="checklist">
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Rows, columns and the text in each cell</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Cells merged across columns</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>The colours of the ruling lines</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Tables on scanned pages, where the PDF still has their lines</li>
+          </ul>
+        </section>
+        <section class="feature">
+          <h3>Not yet</h3>
+          <ul class="checklist checklist--not">
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Tables drawn without lines, which come across as plain text</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Cells merged down a column</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Tables on a plain scan, which has no ruling lines to read</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="tips">
+    <div class="wrap narrow">
+      <h2>Working with the table in Word</h2>
+      <div class="prose">
+        <p>Click in any cell and type: the table grows as a Word table does. To add a row, press Tab in the last cell. To change the borders, use the Table Design tab.</p>
+        <p>If a table came across as text because it had no lines, select those lines in Word and use Insert, Table, Convert Text to Table, with tabs as the separator.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions about tables</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>Does it keep tables?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Tables drawn with lines become real Word tables you can type in, with the text in the right cells. Tables with no lines come across as plain text.</p>
+          </details>
+        <details class="qa">
+            <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+          </details>
+        <details class="qa">
+            <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/pdf-to-docx">PDF to DOCX<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/convert-multiple-pdf-to-word">Several PDFs at once<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

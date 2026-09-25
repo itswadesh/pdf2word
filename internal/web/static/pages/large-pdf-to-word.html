@@ -1,0 +1,81 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>Convert large PDFs to Word</h1>
+      <p class="lede">Long reports, whole books and big scans: up to 100 MB a file by default, with every page coming across.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="pages">
+    <div class="wrap narrow">
+      <h2>Every page, in the same place</h2>
+      <div class="prose">
+        <p>Each line breaks where the PDF broke it and each page break falls where it fell, so a long document keeps its page count. A 384-page novel and a 136-page illustrated book converted to Word files with exactly 384 and 136 pages, each page starting with the same words.</p>
+        <p>Covers and full-page pictures get a section of their own with their own margins, so they fill the page in Word as they did in the PDF.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="time">
+    <div class="wrap narrow">
+      <h2>How long a big file takes</h2>
+      <div class="prose">
+        <p>A PDF with text you can select converts in seconds, even at hundreds of pages. A scanned page takes a second or two to read, and several are read at once, so a 250-page scan takes a couple of minutes on a computer with several cores.</p>
+        <p>The converter shows the page it is on and the time left, and you can close the preview and keep reading this page while it works.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="limit">
+    <div class="wrap narrow">
+      <h2>Over the limit?</h2>
+      <div class="prose">
+        <p>Files are accepted up to 100 MB by default. Whoever runs the converter can change that, and if you run the program yourself you choose the limit with <code>-max-upload</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>Is there a limit on file size or number of files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>100 MB per file by default, and as many files as you like, one after another. Whoever runs the converter can raise or lower the size limit.</p>
+          </details>
+        <details class="qa">
+            <summary>How long does a conversion take?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A PDF with selectable text takes seconds. A scanned page takes a second or two to read, and several pages are read at once, so a long scan takes a few minutes.</p>
+          </details>
+        <details class="qa">
+            <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/convert-multiple-pdf-to-word">Several PDFs at once<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/how-it-works">How it works<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

@@ -1,0 +1,73 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>Convert several PDFs to Word at once</h1>
+      <p class="lede">Choose or drop a whole folder of PDFs and convert them in one go. Each one gets its own progress bar and its own Word file.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap">
+      <h2>How converting several PDFs works</h2>
+      <ol class="steps">
+        <li><span class="step-n" aria-hidden="true">1</span><div><strong>Choose them all</strong><p>Select several PDFs in the file picker, or drop them on the page together. Files that are not PDFs are skipped with a note.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Convert them in one go</strong><p>Pick the language of any scanned pages and press the button, which says how many files it will convert.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">3</span><div><strong>Collect the Word files</strong><p>They are converted one after another and each DOCX downloads as soon as it is ready, named after its PDF. Your browser may ask once whether to allow several downloads.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="limits">
+    <div class="wrap narrow">
+      <h2>Limits</h2>
+      <div class="prose">
+        <p>There is no limit on the number of files and no daily limit. Each file can be up to 100 MB by default, and whoever runs the converter can raise or lower that.</p>
+        <p>The list under the converter shows every file with its progress, any notes about it, and a button to download it again. Stop cancels a single file without touching the others.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>Is there a limit on file size or number of files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>100 MB per file by default, and as many files as you like, one after another. Whoever runs the converter can raise or lower the size limit.</p>
+          </details>
+        <details class="qa">
+            <summary>How long does a conversion take?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A PDF with selectable text takes seconds. A scanned page takes a second or two to read, and several pages are read at once, so a long scan takes a few minutes.</p>
+          </details>
+        <details class="qa">
+            <summary>What happens to my files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>%FILES_ANSWER%</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/large-pdf-to-word">Large PDFs<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-table-to-word">PDF tables to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

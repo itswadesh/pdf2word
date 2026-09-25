@@ -839,7 +839,10 @@
   .foot__base p { margin: 0; max-width: 72ch; }
   .foot__base a { color: var(--accent-text); text-underline-offset: 3px; }
   @media (min-width: 720px) {
-    .foot { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
+    .foot { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1024px) {
+    .foot { grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); }
     .foot__about { grid-column: auto; }
   }
 
@@ -858,6 +861,9 @@
   .prose strong { color: var(--text); }
   .prose a, .steps a { color: var(--accent-text); text-underline-offset: 3px; }
   .faq-group + .faq-group { margin-top: var(--s7); }
+  .links { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 var(--s6); }
+  .links .go { margin-top: 0; }
+  .prose code { font-size: .92em; padding: 1px 5px; border-radius: 4px; background: var(--surface-2); color: var(--text); }
   .faq-group h2 { font-size: clamp(20px, 2.6vw, 24px) !important; }
 
   /* ---- glass ------------------------------------------------------------------
@@ -1000,6 +1006,17 @@
           <li><a href="/pdf-to-docx"{{if eq .Path "/pdf-to-docx"}} aria-current="page"{{end}}>PDF to DOCX</a></li>
           <li><a href="/scanned-pdf-to-word"{{if eq .Path "/scanned-pdf-to-word"}} aria-current="page"{{end}}>Scanned PDF to Word</a></li>
           <li><a href="/odia-pdf-to-word"{{if eq .Path "/odia-pdf-to-word"}} aria-current="page"{{end}}>Odia PDF to Word</a></li>
+          <li><a href="/pdf-table-to-word"{{if eq .Path "/pdf-table-to-word"}} aria-current="page"{{end}}>PDF tables to Word</a></li>
+          <li><a href="/convert-multiple-pdf-to-word"{{if eq .Path "/convert-multiple-pdf-to-word"}} aria-current="page"{{end}}>Several PDFs at once</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="foot-uses">
+        <h2 class="foot__title" id="foot-uses">Guides</h2>
+        <ul>
+          <li><a href="/resume-pdf-to-word"{{if eq .Path "/resume-pdf-to-word"}} aria-current="page"{{end}}>Resume or CV to Word</a></li>
+          <li><a href="/pdf-to-google-docs"{{if eq .Path "/pdf-to-google-docs"}} aria-current="page"{{end}}>PDF to Google Docs</a></li>
+          <li><a href="/large-pdf-to-word"{{if eq .Path "/large-pdf-to-word"}} aria-current="page"{{end}}>Large PDFs</a></li>
+          <li><a href="/pdf-to-word-on-phone"{{if eq .Path "/pdf-to-word-on-phone"}} aria-current="page"{{end}}>On your phone</a></li>
         </ul>
       </nav>
       <nav aria-labelledby="foot-guides">

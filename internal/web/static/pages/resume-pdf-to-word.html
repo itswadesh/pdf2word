@@ -1,0 +1,89 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>Resume and CV PDF to Word</h1>
+      <p class="lede">Lost the Word file of your resume? Turn the PDF back into a document you can update, with the same fonts, headings and page breaks.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="cv">
+    <div class="wrap">
+      <h2>What your CV keeps</h2>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Stays as it was</h3>
+          <ul class="checklist">
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Fonts, sizes, bold and italic</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Headings and section titles</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Dates and places on the right, kept as tab stops so they stay aligned when you edit</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Your photo, at its size and in its place</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>The page breaks, so a two-page CV stays two pages</li>
+          </ul>
+        </section>
+        <section class="feature">
+          <h3>Check after converting</h3>
+          <ul class="checklist checklist--not">
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>A sidebar next to the main column is read across the page, line by line, so its text can mix with the main column</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Coloured text comes out in black</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>A header or footer with your name stays in the body of the page</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="tips">
+    <div class="wrap narrow">
+      <h2>Tips for a resume</h2>
+      <div class="prose">
+        <p>A CV made from a Word file or Google Docs converts best, because its text can be copied out exactly. A scanned or photographed CV is read with OCR, which brings back the words but not bold and italic.</p>
+        <p>A typeface your computer does not have is replaced by Times New Roman, Arial or Courier New, with the spacing adjusted so each line still fits. If you have the original font, select all and set it again in Word.</p>
+        <p>Nothing is added to the file: no watermark and no link back, so the Word document is ready to send.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions about resumes</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+          </details>
+        <details class="qa">
+            <summary>Is this PDF to DOCX converter really free?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Yes. It is open source, there is no paid tier, and nothing is added to the file you get back.</p>
+          </details>
+        <details class="qa">
+            <summary>What happens to my files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>%FILES_ANSWER%</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/pdf-to-docx">PDF to DOCX<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-to-google-docs">PDF to Google Docs<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-to-word-on-phone">On your phone<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

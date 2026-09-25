@@ -1,0 +1,73 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>PDF to Google Docs</h1>
+      <p class="lede">Get a PDF into Google Docs with its layout intact: convert it to a Word file here, then open that in Google Docs.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="steps">
+    <div class="wrap">
+      <h2>From PDF to an editable Google Doc</h2>
+      <ol class="steps">
+        <li><span class="step-n" aria-hidden="true">1</span><div><strong>Convert the PDF</strong><p>Choose it above and press Convert to Word. The DOCX downloads when it is done.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Upload it to Google Drive</strong><p>In Drive, choose New, File upload, and pick the DOCX. Or open Google Docs and use File, Open, Upload.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">3</span><div><strong>Open it with Google Docs</strong><p>Double-click it in Drive and it opens in Docs. To keep a Google Docs copy, choose File, Save as Google Docs.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="why">
+    <div class="wrap narrow">
+      <h2>Why not open the PDF in Google Docs directly?</h2>
+      <div class="prose">
+        <p>Google Drive can open a PDF with Google Docs, but it keeps mostly the text: tables, columns and the page layout are often lost, and pictures can be dropped. Converting to DOCX first keeps the fonts, tables, pictures and page breaks, and Google Docs imports those.</p>
+        <p>Google Docs may swap a typeface it does not have for one of its own, so a line can wrap differently than in Word. The words, tables and pictures stay the same.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+          </details>
+        <details class="qa">
+            <summary>Can it convert a scanned PDF to Word?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Yes. Pages without selectable text are recognised automatically, including files where a print driver turned the text into outlines.</p>
+          </details>
+        <details class="qa">
+            <summary>Can I convert PDF to Word on my phone?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Yes. Open this page in your phone’s browser, choose the PDF from your files, and the Word document is saved to your downloads.</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/resume-pdf-to-word">Resume or CV<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-to-docx">PDF to DOCX<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-table-to-word">PDF tables to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}
