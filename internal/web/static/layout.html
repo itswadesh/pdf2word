@@ -409,7 +409,7 @@
     border: 1px solid transparent; border-radius: var(--r-sm);
     font: 600 16px/1 var(--ui); text-decoration: none; white-space: nowrap;
     cursor: pointer;
-    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .15s var(--ease), box-shadow .2s ease;
   }
   .btn .i { width: 18px; height: 18px; stroke-width: 2; }
   .btn--primary { background: var(--accent); color: var(--on-accent); }
@@ -417,7 +417,10 @@
   .btn--lg { min-height: 52px; min-width: min(240px, 100%); padding: 0 var(--s6); font-size: 17px; border-radius: var(--r-md); }
   .btn--quiet { background: var(--surface); color: var(--text); border-color: var(--edge); }
   .btn--quiet:hover { background: var(--surface-2); }
-  .btn:active { transform: translateY(1px); }
+  .btn--primary:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--accent) 70%, transparent); }
+  .btn--quiet:hover { transform: translateY(-1px); }
+  .btn:active, .btn--primary:active, .btn--quiet:active { transform: scale(.97); box-shadow: none; transition-duration: .06s; }
+  .btn:disabled:hover { transform: none; box-shadow: none; }
 
   .link {
     display: inline-flex; align-items: center;
@@ -583,9 +586,16 @@
     box-shadow: 0 24px 64px -12px rgba(2, 6, 23, .45);
     overflow: hidden;
   }
-  .pv[open] { display: flex; flex-direction: column; animation: pv-in .2s var(--ease); }
+  .pv {
+    opacity: 0; transform: translateY(10px) scale(.985);
+    transition: opacity .2s ease, transform .22s var(--ease), overlay .22s allow-discrete, display .22s allow-discrete;
+  }
+  .pv[open] { display: flex; flex-direction: column; opacity: 1; transform: none; }
+  @starting-style { .pv[open] { opacity: 0; transform: translateY(10px) scale(.985); } }
+  .pv::backdrop { transition: opacity .22s ease, overlay .22s allow-discrete, display .22s allow-discrete; opacity: 0; }
+  .pv[open]::backdrop { opacity: 1; }
+  @starting-style { .pv[open]::backdrop { opacity: 0; } }
   .pv::backdrop { background: rgba(2, 6, 23, .62); }
-  @keyframes pv-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
   html:has(.pv[open]) { overflow: hidden; }
   .pv__head {
     display: flex; align-items: center; gap: var(--s3);
@@ -950,6 +960,73 @@
   .prose code { font-size: .92em; padding: 1px 5px; border-radius: 4px; background: var(--surface-2); color: var(--text); }
   .faq-group h2 { font-size: clamp(20px, 2.6vw, 24px) !important; }
 
+  /* ---- motion -----------------------------------------------------------------
+     Page transitions between the site's pages, and short feedback on
+     everything you can touch. transform and opacity only; the whole block
+     gives way to prefers-reduced-motion below. */
+  @view-transition { navigation: auto; }
+  .site-head { view-transition-name: site-head; }
+  main { view-transition-name: page; }
+  ::view-transition-group(site-head) { animation-duration: 0s; }
+  ::view-transition-old(page) { animation: page-out .16s ease-in both; }
+  ::view-transition-new(page) { animation: page-in .3s var(--ease) both; }
+  @keyframes page-out { to { opacity: 0; transform: translateY(-6px); } }
+  @keyframes page-in { from { opacity: 0; transform: translateY(12px); } }
+
+  /* links: the arrow leads, the nav underline grows */
+  .go .i { transition: transform .2s var(--ease); }
+  .go:hover .i { transform: translateX(4px); }
+  .nav a { position: relative; }
+  .nav a.nav__page::after {
+    content: ""; position: absolute; left: var(--s3); right: var(--s3); bottom: 9px; height: 2px; border-radius: 2px;
+    background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .22s var(--ease);
+  }
+  .nav a.nav__page:hover::after, .nav a.nav__page[aria-current="page"]::after { transform: scaleX(1); }
+  .foot li a .i { transition: color .15s ease, transform .2s var(--ease); }
+  .foot li a:hover .i { transform: scale(1.15); }
+
+  /* cards that lead somewhere lift towards the pointer */
+  .feature:has(.go) { transition: transform .22s var(--ease), box-shadow .22s ease, border-color .22s ease; }
+  .feature:has(.go):hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--glass-edge));
+    box-shadow: var(--glass-hi), 0 20px 36px -20px rgba(15, 23, 42, .35);
+  }
+  .feature:has(.go):hover .feature__icon { transform: scale(1.06) rotate(-3deg); }
+  .feature__icon, .step-n, .challenge__n { transition: transform .25s var(--ease); }
+  .steps li:hover .step-n, .challenge:hover .challenge__n { transform: scale(1.1); }
+
+  /* questions open and close smoothly where the browser can size to auto */
+  :root { interpolate-size: allow-keywords; }
+  .qa::details-content { block-size: 0; overflow: hidden; transition: block-size .28s var(--ease), content-visibility .28s allow-discrete; }
+  .qa[open]::details-content { block-size: auto; }
+
+  /* sections rise into view as you scroll, where scroll timelines exist;
+     elsewhere they are simply there */
+  @supports (animation-timeline: view()) {
+    .section > .wrap > *, .challenge, .faq-group {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 28%;
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+  }
+
+  /* the drop zone breathes while a file is held over it */
+  .stage.dragover { animation: drop-pulse 1.1s ease-in-out infinite; }
+  @keyframes drop-pulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent); } }
+
+  /* the upload fills the Convert button; a download confirms itself */
+  @property --fill { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+  .btn--xl[data-uploading] {
+    opacity: 1; cursor: progress; transition: --fill .3s var(--ease);
+    background: linear-gradient(90deg, var(--accent-hover) var(--fill), var(--accent) var(--fill));
+  }
+  .btn.is-done { background: var(--ok); color: var(--on-accent); animation: pop .3s var(--ease); }
+  @keyframes pop { 0% { transform: scale(.94); } 60% { transform: scale(1.03); } }
+  .promises .i, .foot__badges .i { transition: transform .25s var(--ease); }
+  .promises li:hover .i { transform: scale(1.2) rotate(-6deg); }
+
   /* ---- glass ------------------------------------------------------------------
      Every panel is frosted glass over the glowing ground. Later than the
      rules it overrides, and no more specific, so state rules still win. */
@@ -1005,7 +1082,12 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition-duration: 0s !important; }
-    .scan__img, .pv[open], .pv.done .pv__frame { animation: none; }
+    .scan__img, .pv[open], .pv.done .pv__frame, .stage.dragover, .btn.is-done { animation: none; }
+    @view-transition { navigation: none; }
+    .qa::details-content { transition: none; } /* the catch-all above does not reach this part */
+    .section > .wrap > *, .challenge, .faq-group { animation: none !important; }
+    .btn--primary:hover, .btn--quiet:hover, .feature:has(.go):hover, .feature:has(.go):hover .feature__icon,
+    .go:hover .i, .foot li a:hover .i, .steps li:hover .step-n, .challenge:hover .challenge__n, .promises li:hover .i { transform: none; }
     /* No sweep: the beam rests at the foot of the page and the wash is off. */
     .scan__track { animation: none; transform: translateY(100%); opacity: .8; }
     .scan__wash { animation: none; opacity: 0; }

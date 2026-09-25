@@ -447,6 +447,7 @@
       a.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-download"/></svg>';
       a.appendChild(document.createTextNode('Download Word file'));
       a.setAttribute('download', '');
+      a.addEventListener('click', () => flashDone(a));
       actions.appendChild(a);
       if (!row.downloaded) { row.downloaded = true; a.click(); }
     }
@@ -555,9 +556,33 @@
     }
     return d;
   }
+  // Percentages count up between polls instead of jumping.
+  const reduceMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const tweens = new WeakMap();
+  function setPct(el, text) {
+    const to = /^(\d+)%$/.exec(text), from = /^(\d+)%$/.exec(el.textContent);
+    cancelAnimationFrame(tweens.get(el) || 0);
+    if (!to || !from || reduceMotion() || +from[1] >= +to[1]) { el.textContent = text; return; }
+    const a = +from[1], b = +to[1], t0 = performance.now(), dur = 400;
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / dur);
+      el.textContent = Math.round(a + (b - a) * (1 - Math.pow(1 - k, 3))) + '%';
+      if (k < 1) tweens.set(el, requestAnimationFrame(step));
+    };
+    tweens.set(el, requestAnimationFrame(step));
+  }
+  // A download link says it worked, briefly.
+  function flashDone(el) {
+    if (el.classList.contains('is-done')) return;
+    const html = el.innerHTML;
+    el.classList.add('is-done');
+    el.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Downloaded';
+    setTimeout(() => { el.innerHTML = html; el.classList.remove('is-done'); }, 2000);
+  }
+
   function paint(ui, d) {
     ui.fill.style.transform = d.fill === null ? '' : 'scaleX(' + Math.max(0, Math.min(100, d.fill)) / 100 + ')';
-    ui.pct.textContent = d.pct;
+    setPct(ui.pct, d.pct);
     ui.status.textContent = d.label;
     ui.detail.textContent = d.detail ? '· ' + d.detail : '';
     ui.ocr.classList.toggle('hidden', !d.ocr);
@@ -734,6 +759,9 @@
     const ready = !uploading.length && staged.length > 0;
     langRow.classList.toggle('hidden', !(ready && langAvailable));
     pvConvert.disabled = !ready;
+    // While files go up, the button fills with their progress.
+    if (uploading.length) { pvConvert.setAttribute('data-uploading', ''); pvConvert.style.setProperty('--fill', pct + '%'); }
+    else { pvConvert.removeAttribute('data-uploading'); pvConvert.style.removeProperty('--fill'); }
     pvConvert.textContent = uploading.length ? 'Uploading ' + pct + '%'
       : staged.length > 1 ? 'Convert ' + staged.length + ' files to Word' : 'Convert to Word';
     if (ready && [pvClose, $('pv-name'), document.body].indexOf(document.activeElement) >= 0) pvConvert.focus();
@@ -852,6 +880,7 @@
   $('pv-close').addEventListener('click', () => pv.close());
   pv.addEventListener('click', (e) => { if (e.target === pv) pv.close(); }); // the backdrop
   pvStop.addEventListener('click', () => { if (pvView) stopView(pvView); });
+  pvDownload.addEventListener('click', () => flashDone(pvDownload));
   pvAnother.addEventListener('click', () => { pv.close(); fileInput.click(); });
 
   // --- the page under the scanner -----------------------------------------------
