@@ -1,0 +1,87 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>Contract PDF to Word</h1>
+      <p class="lede">Turn a contract or agreement back into a Word document you can mark up, with its wording copied exactly as the PDF has it.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="exact">
+    <div class="wrap">
+      <h2>Why the wording stays exactly as it was</h2>
+      <p class="lead">When a PDF has text you can select, that text is copied as it is. No AI rewrites or "improves" it, so a clause, an amount or a date cannot quietly change on the way. A scanned contract is read with OCR, which can misread a word, so check a scanned one against the original.</p>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Comes across</h3>
+          <ul class="checklist">
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Every clause, with its numbering as text</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Headings, indents and alignment</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Signature images and logos, as pictures</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>The page breaks, so page references still hold</li>
+          </ul>
+        </section>
+        <section class="feature">
+          <h3>Worth knowing</h3>
+          <ul class="checklist checklist--not">
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Clause numbers are text, not Word numbering, so they do not renumber themselves</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>A digital signature belongs to the PDF and cannot come across into Word</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Running headers and footers stay in the body of each page</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="redline">
+    <div class="wrap narrow">
+      <h2>Marking it up</h2>
+      <div class="prose">
+        <p>Open the DOCX in Word and turn on Track Changes on the Review tab before you edit, so every change shows. Send it back as DOCX, or as a PDF with File, Save As.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>What happens to my files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>%FILES_ANSWER%</p>
+          </details>
+        <details class="qa">
+            <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+          </details>
+        <details class="qa">
+            <summary>Can I convert a password-protected PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Not yet. Open it in a PDF reader that knows the password, save a copy without it, and convert that copy.</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/ai-in-pdf-to-word">Why no AI rewrites your text<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/edit-pdf-in-word">Edit a PDF in Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/privacy">Privacy<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

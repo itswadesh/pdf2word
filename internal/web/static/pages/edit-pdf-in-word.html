@@ -1,0 +1,89 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>How to edit a PDF in Word</h1>
+      <p class="lede">Word cannot edit a PDF as it is, but it can edit a Word document made from one. Convert the PDF to DOCX here, then edit it like any other document.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="ways">
+    <div class="wrap">
+      <h2>Two ways to get a PDF into Word</h2>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Open the PDF in Word</h3>
+          <p>Word 2013 and later can open a PDF directly with File, Open, and turn it into an editable document. Word warns that the result may look different from the PDF, and it often does: tables, columns and page breaks can move, and scanned pages may not give text at all.</p>
+        </section>
+        <section class="feature">
+          <h3>Convert it to DOCX first</h3>
+          <p>Converting here keeps the fonts, tables, pictures, line breaks and page breaks, so the document has the same pages as the PDF, and scanned pages are read with OCR. Open the DOCX in Word and everything is already editable.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="steps">
+    <div class="wrap">
+      <h2>Edit a PDF in Word, step by step</h2>
+      <ol class="steps">
+        <li><span class="step-n" aria-hidden="true">1</span><div><strong>Convert the PDF</strong><p>Choose it above and press Convert to Word. The DOCX downloads when it is done.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Open it in Word</strong><p>Double-click the DOCX, or use File, Open in Word. If Word opens it in Protected View, choose Enable Editing.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">3</span><div><strong>Edit, then save as PDF again</strong><p>Change what you need. To send it on as a PDF, use File, Save As and pick PDF.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="tips">
+    <div class="wrap narrow">
+      <h2>Editing tips</h2>
+      <div class="prose">
+        <p>Every line of the PDF is a line in Word, so a sentence you lengthen can push the rest of its line past the margin. Join the lines of that paragraph and it flows again.</p>
+        <p>A typeface your computer does not have was replaced by Times New Roman, Arial or Courier New. If you have the original font, select the text and set it back.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+            <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+          </details>
+        <details class="qa">
+            <summary>Can it turn a Word file back into a PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>No, it only goes from PDF to Word. Word, Google Docs and LibreOffice can all save a document as a PDF themselves.</p>
+          </details>
+        <details class="qa">
+            <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+          </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/pdf-to-docx">PDF to DOCX<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-to-word-on-mac">On a Mac<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/pdf-to-word-challenges">Why PDF to Word is hard<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

@@ -1,0 +1,79 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>What is OCR?</h1>
+      <p class="lede">OCR, optical character recognition, turns a picture of text into text you can edit, search and copy. Here is how it works, what affects how well it works, and where it stops.</p>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap narrow">
+      <h2>How OCR works</h2>
+      <div class="prose">
+        <ol>
+          <li><strong>Clean up the picture.</strong> The page is turned into black and white, straightened and cleaned of specks, so the letters stand out from the paper.</li>
+          <li><strong>Find the text.</strong> The page is split into blocks, lines and words, and pictures and tables are set aside.</li>
+          <li><strong>Recognise each line.</strong> Modern OCR reads a whole line at once with a neural network trained on millions of lines of text, and uses the language's dictionary to settle doubtful letters.</li>
+          <li><strong>Hand back text and positions.</strong> Every word comes back with where it sits on the page, which is what lets a converter rebuild the layout around it.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="accuracy">
+    <div class="wrap">
+      <h2>What makes OCR accurate</h2>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Helps</h3>
+          <ul class="checklist">
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>300 dpi or more, and sharp focus</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Dark text on a plain, light background</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>A straight, flat page, evenly lit</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>The right language chosen</li>
+          </ul>
+        </section>
+        <section class="feature">
+          <h3>Hurts</h3>
+          <ul class="checklist checklist--not">
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Low resolution, blur and shadows</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Handwriting, which print-trained OCR is not built for</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Decorative fonts, and text over pictures</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>The wrong language: its letters get read as something else</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="tesseract">
+    <div class="wrap narrow">
+      <h2>Tesseract, the OCR engine here</h2>
+      <div class="prose">
+        <p>This converter reads scanned pages with Tesseract, an open source OCR engine first built at Hewlett-Packard, released as open source in 2005 and developed with Google's support after that. Since version 4 it recognises lines with a neural network, and it has language data for more than 100 languages; English and Odia are built in here.</p>
+        <p>OCR runs inside the converter, so a scanned page is not sent anywhere else to be read.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/handwriting-pdf-to-word">Handwriting in a PDF<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/ai-in-pdf-to-word">The role of AI<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}

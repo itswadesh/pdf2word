@@ -1,0 +1,62 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>DOC vs DOCX: what is the difference?</h1>
+      <p class="lede">Both are Word documents. DOC is the older format Word used until 2007; DOCX is the one it has used since. Here is how they differ, and which to use.</p>
+    </div>
+  </section>
+
+  <section class="section" id="compare">
+    <div class="wrap">
+      <h2>DOC and DOCX side by side</h2>
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="docdocx-caption">
+        <table class="compare">
+          <caption id="docdocx-caption" class="visually-hidden">DOC and DOCX compared</caption>
+          <thead>
+            <tr><th scope="col"><span class="visually-hidden">Question</span></th><th scope="col">DOC</th><th scope="col">DOCX</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Used by Word</th><td>Word 97 to Word 2003</td><td>Word 2007 and later</td></tr>
+            <tr><th scope="row">Inside the file</th><td>A binary format</td><td>A zip of XML files</td></tr>
+            <tr><th scope="row">Standard</th><td>Published by Microsoft, not an open standard</td><td>Office Open XML, ISO/IEC 29500</td></tr>
+            <tr><th scope="row">Size</th><td>Larger</td><td>Usually smaller, because it is compressed</td></tr>
+            <tr><th scope="row">Macros</th><td>Can carry them</td><td>Cannot; a Word file with macros is DOCM</td></tr>
+            <tr><th scope="row">Opens in</th><td>Word, and most other word processors</td><td>Word, Google Docs, LibreOffice Writer and Apple Pages</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="which">
+    <div class="wrap narrow">
+      <h2>Which should you use?</h2>
+      <div class="prose">
+        <p>DOCX, unless someone needs to open the file in Word 2003 or older. It is smaller, it is an open standard, and a DOCX cannot carry macros, which makes it safer to open from someone else.</p>
+        <p>To make a DOC from a DOCX, open it in Word and choose File, Save As, Word 97-2003 Document. Some newer formatting may be simplified.</p>
+        <p>This converter makes DOCX files, the format every current word processor opens.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/pdf-to-docx">PDF to DOCX<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/edit-pdf-in-word">Edit a PDF in Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/faq">Questions<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}

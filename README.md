@@ -118,13 +118,15 @@ on, default 9090, as Cloud Run, Fly and Render set it), `PDF2WORD_LANG`
 (the OCR language the page starts on, default `eng`) and `PUBLIC_URL` (the address the page is
 reachable at from outside). They are set in the compose file.
 
-The site has sixteen pages, all served by the same program: the converter
+The site has twenty-two pages, all served by the same program: the converter
 at `/` and on nine pages written for particular searches (`/pdf-to-docx`,
 `/scanned-pdf-to-word`, `/odia-pdf-to-word`, whose converter starts on
 Odia, `/pdf-table-to-word`, `/resume-pdf-to-word`, `/pdf-to-google-docs`,
-`/convert-multiple-pdf-to-word`, `/large-pdf-to-word` and
-`/pdf-to-word-on-phone`), and `/how-it-works`, three articles (`/pdf-to-word-challenges`,
-`/ai-in-pdf-to-word` and `/handwriting-pdf-to-word`), `/faq` and
+`/convert-multiple-pdf-to-word`, `/large-pdf-to-word`,
+`/pdf-to-word-on-phone`, `/edit-pdf-in-word`, `/pdf-to-word-on-mac`,
+`/contract-pdf-to-word` and `/print-to-pdf-to-word`), and `/how-it-works`, five articles (`/pdf-to-word-challenges`,
+`/ai-in-pdf-to-word`, `/handwriting-pdf-to-word`, `/what-is-ocr` and
+`/doc-vs-docx`), `/faq` and
 `/privacy`. They share one
 layout (`internal/web/static/layout.html`) and the converter
 (`static/tool.html`); each page's words are in `static/pages/`, and its

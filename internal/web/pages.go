@@ -107,6 +107,26 @@ var sitePages = []pageDef{
 		Description: "Convert a PDF to an editable Word file on your phone, in the browser. Choose it from Files, watch each page being read, and open the DOCX in Word.",
 	},
 	{
+		Path: "/edit-pdf-in-word", File: "edit-pdf-in-word.html", Name: "Edit a PDF in Word", Tool: true,
+		Title:       "How to Edit a PDF in Word - Free and Keeps Layout",
+		Description: "Two ways to edit a PDF in Microsoft Word: open it in Word, or convert it to DOCX first so the fonts, tables and pages stay put. Step by step, free.",
+	},
+	{
+		Path: "/pdf-to-word-on-mac", File: "pdf-to-word-on-mac.html", Name: "On a Mac", Tool: true,
+		Title:       "Convert PDF to Word on Mac - Free, in the Browser",
+		Description: "Convert a PDF to an editable Word file on a Mac with nothing to install. Open it in Word for Mac or Pages, with the fonts, tables and pages kept.",
+	},
+	{
+		Path: "/contract-pdf-to-word", File: "contract-pdf-to-word.html", Name: "Contracts", Tool: true,
+		Title:       "Contract PDF to Word - Edit Agreements Free",
+		Description: "Turn a contract or agreement PDF into a Word document you can redline. The text is copied exactly, clause numbers stay in place, and no AI rewrites it.",
+	},
+	{
+		Path: "/print-to-pdf-to-word", File: "print-to-pdf-to-word.html", Name: "Unselectable PDF text", Tool: true,
+		Title:       "Unselectable PDF Text to Word - Print to PDF Fix",
+		Description: "Made a PDF with Microsoft Print to PDF and now the text will not select or copy? The converter reads those pages with OCR and gives you editable text.",
+	},
+	{
 		Path: "/how-it-works", File: "how-it-works.html", Name: "How it works", Article: true,
 		Title:       "How the PDF to Word Converter Works",
 		Description: "What happens to a PDF on its way to Word: how text, tables and pictures are read, when OCR is used, and how the DOCX keeps the pages of the original.",
@@ -125,6 +145,16 @@ var sitePages = []pageDef{
 		Path: "/handwriting-pdf-to-word", File: "handwriting-pdf-to-word.html", Name: "Handwriting", Article: true,
 		Title:       "Handwriting in a PDF to Word: How AI Reads It",
 		Description: "How AI reads handwriting in a scanned PDF and turns it into Word text, what makes it harder than print, which tools do it, and what this converter can do.",
+	},
+	{
+		Path: "/what-is-ocr", File: "what-is-ocr.html", Name: "What is OCR?", Article: true,
+		Title:       "What Is OCR? How Text Recognition Works",
+		Description: "OCR turns pictures of text into text you can edit and search. How it works step by step, what affects accuracy, its limits, and how it reads scanned PDFs.",
+	},
+	{
+		Path: "/doc-vs-docx", File: "doc-vs-docx.html", Name: "DOC vs DOCX", Article: true,
+		Title:       "DOC vs DOCX: What Is the Difference?",
+		Description: "DOC is the old binary Word format and DOCX the open XML one Word has used since 2007. How they differ in size, safety and compatibility, and which to use.",
 	},
 	{
 		Path: "/faq", File: "faq.html", Name: "Questions",
