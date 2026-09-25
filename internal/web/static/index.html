@@ -96,6 +96,11 @@
     --focus:         #1D4ED8;
     --lift:          0 1px 2px rgba(15, 23, 42, .05), 0 12px 32px -16px rgba(15, 23, 42, .18);
 
+    --page:          #FFFFFF;
+    --page-ink:      #CBD5E1;
+    --scan-wash:     rgba(37, 99, 235, .10);
+    --scan-glow:     rgba(37, 99, 235, .35);
+
     --ui: "Inter var", InterVariable, Inter, ui-sans-serif, system-ui, -apple-system,
           "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
@@ -142,6 +147,11 @@
 
       --focus:         #93C5FD;
       --lift:          0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px -16px rgba(0, 0, 0, .6);
+
+      --page:          #18233A;
+      --page-ink:      #33415C;
+      --scan-wash:     rgba(96, 165, 250, .16);
+      --scan-glow:     rgba(96, 165, 250, .45);
     }
   }
   /* Repeated in full, deliberately. */
@@ -176,6 +186,11 @@
 
     --focus:         #93C5FD;
     --lift:          0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px -16px rgba(0, 0, 0, .6);
+
+    --page:          #18233A;
+    --page-ink:      #33415C;
+    --scan-wash:     rgba(96, 165, 250, .16);
+    --scan-glow:     rgba(96, 165, 250, .45);
   }
 
   * { box-sizing: border-box; min-width: 0; }
@@ -253,7 +268,7 @@
   .stage {
     position: relative;
     display: grid; place-items: center;
-    min-height: 320px;
+    min-height: 336px;
     padding: var(--s6) var(--s5);
     background: var(--surface);
     border: 2px dashed var(--edge);
@@ -309,9 +324,87 @@
   }
   .link:hover { color: var(--accent-text); text-decoration-color: currentColor; }
 
-  /* busy: the file going across */
-  .stage__busy { width: 100%; max-width: 560px; display: grid; gap: var(--s4); }
-  .flow { display: flex; align-items: center; justify-content: center; gap: var(--s3); margin-bottom: var(--s2); }
+  /* busy: the page being scanned beside the numbers. On a phone the page
+     sits beside the name and percentage and the rest runs full width; from
+     720px it stands beside everything. */
+  .stage__busy {
+    width: 100%; max-width: 640px;
+    display: grid; grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-areas: "scan head" "meter meter" "status status" "more more";
+    gap: var(--s4) var(--s5); align-items: center;
+  }
+  .stage__info { display: contents; }
+  .stage__head { grid-area: head; display: grid; gap: var(--s1); }
+  .meter { grid-area: meter; }
+  .stage__status { grid-area: status; }
+  .stage__more { grid-area: more; }
+
+  /* The scanner. The thumbnail of the page being read sits on a plain page
+     glyph (shown until the first thumbnail arrives); a beam sweeps down it
+     and the part it has passed is washed in blue. Beam and wash run on the
+     same clock, so the wash always ends at the beam. */
+  .scan { grid-area: scan; position: relative; --scan-t: 2.2s; --scan-ease: cubic-bezier(.45, 0, .55, 1); }
+  .scan__page {
+    position: relative; overflow: hidden;
+    aspect-ratio: 150 / 194;
+    background: var(--page);
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: var(--lift);
+  }
+  .scan__page.has-img { background: #FFFFFF; }
+  .scan__glyph { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--page-ink); }
+  .scan__page.has-img .scan__glyph { display: none; }
+  .scan__img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; display: block;
+    animation: page-in .25s var(--ease) both;
+  }
+  @keyframes page-in { from { opacity: 0; transform: translateY(4%); } to { opacity: 1; transform: none; } }
+  .scan__wash {
+    position: absolute; inset: 0; background: var(--scan-wash);
+    animation: wash var(--scan-t) var(--scan-ease) infinite;
+  }
+  .scan__track { position: absolute; inset: 0; animation: beam var(--scan-t) var(--scan-ease) infinite; }
+  .scan__beam {
+    position: absolute; left: 0; right: 0; top: -1px; height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 10px 2px var(--scan-glow);
+  }
+  .scan__beam::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 28%;
+    min-height: 16px;
+    background: linear-gradient(to top, var(--scan-glow), transparent);
+    opacity: .5;
+  }
+  @keyframes beam {
+    0%       { transform: translateY(0);    opacity: 0; }
+    6%       { opacity: 1; }
+    86%      { transform: translateY(100%); opacity: 1; }
+    94%, to  { transform: translateY(100%); opacity: 0; }
+  }
+  @keyframes wash {
+    0%       { clip-path: inset(0 0 100% 0); opacity: 1; }
+    86%      { clip-path: inset(0 0 0 0);    opacity: 1; }
+    to       { clip-path: inset(0 0 0 0);    opacity: 0; }
+  }
+  /* Text recognition: a dashed beam, as on the old sheet. */
+  .stage.ocr .scan__beam { background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 10px); }
+  .stage.done .scan__track, .stage.done .scan__wash { display: none; }
+  .stage.stopped .scan__track, .stage.stopped .scan__wash,
+  .stage.cancelled .scan__track, .stage.cancelled .scan__wash { animation-play-state: paused; }
+  .stage.stopped .scan__beam { background: var(--danger); box-shadow: none; }
+  .stage.cancelled .scan__beam { background: var(--edge); box-shadow: none; }
+  .stage.stopped .scan__beam::before, .stage.cancelled .scan__beam::before { display: none; }
+  .scan__badge {
+    position: absolute; left: -8px; bottom: 10%;
+    padding: 2px 6px; border-radius: 5px;
+    font-size: 11px; line-height: 1.3; font-weight: 700; letter-spacing: .02em;
+  }
+  .scan__badge--pdf { background: var(--pdf); color: var(--on-pdf); }
+  .scan__badge--docx { display: none; background: var(--docx); color: var(--on-docx); }
+  .stage.done .scan__badge--pdf { display: none; }
+  .stage.done .scan__badge--docx { display: block; }
+
   .doc { position: relative; width: 44px; height: 54px; color: var(--edge); }
   .doc svg { width: 100%; height: 100%; }
   .doc__page { fill: var(--surface); stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
@@ -331,23 +424,12 @@
   }
   .doc__ok .i { width: 14px; height: 14px; stroke-width: 3; }
   .stage.done .doc__ok { transform: scale(1); }
-  .flow__track {
-    width: clamp(64px, 22vw, 140px); height: 4px;
-    background-image: radial-gradient(circle, var(--accent) 1.6px, transparent 2px);
-    background-size: 10px 4px;
-    animation: flow .7s linear infinite;
-  }
-  @keyframes flow { to { background-position: 10px 0; } }
-  .stage.done .flow__track { animation: none; background: var(--ok); border-radius: var(--r-pill); }
-  .stage.stopped .flow__track { animation: none; background-image: radial-gradient(circle, var(--danger) 1.6px, transparent 2px); }
-  .stage.cancelled .flow__track { animation: none; background-image: radial-gradient(circle, var(--edge) 1.6px, transparent 2px); }
 
-  .stage__row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); }
   .stage__name { margin: 0; font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stage__pct {
-    flex: none;
-    font-size: 30px; line-height: 1; font-weight: 700; letter-spacing: -.02em;
+    font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em;
     font-variant-numeric: tabular-nums;
+    min-height: 1.1em;
   }
   .stage.done .stage__pct { color: var(--ok); }
   .stage.stopped .stage__pct { color: var(--danger); }
@@ -370,7 +452,27 @@
   .stage__status b { color: var(--text); font-weight: 600; }
   .stage.done .stage__status b { color: var(--ok); }
   .stage.stopped .stage__status b { color: var(--danger); }
-  .stage__more { justify-self: center; margin-top: var(--s2); }
+  .stage__more { justify-self: center; }
+
+  /* ---- language of scanned pages ------------------------------------------------ */
+  .lang {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: var(--s2) var(--s3); margin-top: var(--s4);
+    font-size: 15px; color: var(--text-soft);
+  }
+  .select { position: relative; display: inline-flex; }
+  .select select {
+    appearance: none; -webkit-appearance: none;
+    min-height: 44px; padding: 0 40px 0 var(--s4);
+    border: 1px solid var(--edge); border-radius: var(--r-sm);
+    background: var(--surface); color: var(--text);
+    font: 500 15px/1 var(--ui);
+    cursor: pointer;
+    transition: border-color .15s ease;
+  }
+  .select select:hover { border-color: var(--accent); }
+  .select select:disabled { cursor: default; opacity: .7; }
+  .select .i { position: absolute; right: 12px; top: 50%; width: 18px; height: 18px; margin-top: -9px; pointer-events: none; color: var(--text-soft); }
 
   /* ---- promises under the card ----------------------------------------------- */
   .promises {
@@ -493,6 +595,10 @@
     .wrap { padding-inline: var(--s5); }
     .hero { padding-block: var(--s8) var(--s6); }
     .stage { min-height: 340px; padding: var(--s7) var(--s7); }
+    .stage__busy { grid-template-columns: 150px minmax(0, 1fr); grid-template-areas: "scan info"; column-gap: var(--s7); }
+    .stage__info { display: grid; grid-area: info; gap: var(--s4); align-content: center; }
+    .stage__info > * { grid-area: auto; }
+    .stage__more { justify-self: start; }
     .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .steps li { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
     .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -509,7 +615,10 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition-duration: 0s !important; }
-    .flow__track { animation: none; }
+    .scan__img { animation: none; }
+    /* No sweep: the beam rests at the foot of the page and the wash is off. */
+    .scan__track { animation: none; transform: translateY(100%); opacity: .8; }
+    .scan__wash { animation: none; opacity: 0; }
     .stage.indeterminate .meter > span { animation: none; width: 100%; transform: none; opacity: .45; }
   }
   @media (prefers-contrast: more) {
@@ -532,6 +641,7 @@
   <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 9v12"/></symbol>
   <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10"/><path d="M7 12h10"/><path d="M7 15h6"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="page" viewBox="0 0 170 220"><g fill="currentColor"><rect x="26" y="24" width="74" height="8" rx="2"/><rect x="26" y="48" width="118" height="5" rx="2"/><rect x="26" y="59" width="118" height="5" rx="2"/><rect x="26" y="70" width="104" height="5" rx="2"/><rect x="26" y="81" width="118" height="5" rx="2"/><rect x="26" y="92" width="61" height="5" rx="2"/></g><g fill="none" stroke="currentColor" stroke-width="2"><rect x="26" y="112" width="118" height="42" rx="2"/><path d="M26 126h118M26 140h118M66 112v42M105 112v42"/><rect x="26" y="168" width="52" height="34" rx="2"/><path d="M26 194l14-13 10 9 9-11 19 18"/></g><g fill="currentColor"><circle cx="62" cy="180" r="4"/><rect x="88" y="170" width="56" height="5" rx="2"/><rect x="88" y="181" width="56" height="5" rx="2"/><rect x="88" y="192" width="38" height="5" rx="2"/></g></symbol>
   <symbol id="doc" viewBox="0 0 44 54"><path class="doc__page" d="M6 1.5h22l14.5 14.5V50a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 50V4A2.5 2.5 0 0 1 6 1.5z"/><path class="doc__page" d="M28 1.5V16h14.5"/><path class="doc__lines" d="M11 24h22M11 30h22M11 36h14"/></symbol>
 </svg>
 
@@ -572,22 +682,40 @@
           </div>
 
           <div class="stage__busy hidden" id="stage-busy">
-            <div class="flow" aria-hidden="true">
-              <span class="doc doc--pdf"><svg><use href="#doc"/></svg><b>PDF</b></span>
-              <span class="flow__track"></span>
-              <span class="doc doc--docx"><svg><use href="#doc"/></svg><b>DOCX</b><span class="doc__ok"><svg class="i"><use href="#i-check"/></svg></span></span>
+            <!-- The page being read, under the scanner. -->
+            <div class="scan" aria-hidden="true">
+              <div class="scan__page" id="scan-page">
+                <svg class="scan__glyph" viewBox="0 0 170 220"><use href="#page"/></svg>
+                <span class="scan__wash" id="scan-wash"></span>
+                <span class="scan__track"><span class="scan__beam"></span></span>
+              </div>
+              <b class="scan__badge scan__badge--pdf">PDF</b>
+              <b class="scan__badge scan__badge--docx">DOCX</b>
+              <span class="doc__ok"><svg class="i"><use href="#i-check"/></svg></span>
             </div>
-            <div class="stage__row">
-              <p class="stage__name" id="stage-name"></p>
-              <span class="stage__pct" id="stage-pct" aria-hidden="true"></span>
+            <div class="stage__info">
+              <div class="stage__head">
+                <p class="stage__name" id="stage-name"></p>
+                <span class="stage__pct" id="stage-pct" aria-hidden="true"></span>
+              </div>
+              <div class="meter" aria-hidden="true"><span id="stage-fill"></span></div>
+              <p class="stage__status"><b id="stage-status">Ready</b> <span id="stage-detail"></span><span class="hidden" id="ocr-note"> · scanned pages take longer</span></p>
+              <button class="btn btn--quiet stage__more" id="pick-more" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add another PDF</button>
             </div>
-            <div class="meter" aria-hidden="true"><span id="stage-fill"></span></div>
-            <p class="stage__status"><b id="stage-status">Ready</b> <span id="stage-detail"></span><span class="hidden" id="ocr-note"> · scanned pages take longer</span></p>
-            <button class="btn btn--quiet stage__more" id="pick-more" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add another PDF</button>
           </div>
         </div>
         <p id="stage-hint" class="visually-hidden">Choose a PDF to convert, or drag PDF files anywhere on this page. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Progress for each file is listed under Your files.</p>
         <input type="file" id="file" accept=".pdf" multiple hidden>
+
+        <!-- Filled from /api/info with the languages installed; hidden when
+             there is only one to choose from. -->
+        <div class="lang" id="lang-row">
+          <label for="lang">Language of scanned pages</label>
+          <span class="select">
+            <select id="lang" disabled><option value="">English</option></select>
+            <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </span>
+        </div>
 
         <ul class="promises">
           <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No sign-up</li>
@@ -713,7 +841,46 @@
       $('limit').textContent = fmtLimit(maxUploadBytes);
       $('limit-hint').textContent = fmtLimit(maxUploadBytes);
     }
-  }).catch(() => {});
+    setupLanguages(info && info.ocr);
+  }).catch(() => setupLanguages(null));
+
+  // --- language of scanned pages -------------------------------------------
+  // Offered only from what is installed, so a choice can never be one the
+  // server lacks. The server's default comes first for a new visitor; a
+  // visitor's own choice is remembered on this device.
+  const langSelect = $('lang'), langRow = $('lang-row');
+  const LANG_NAMES = {
+    eng: 'English', ori: 'Odia (ଓଡ଼ିଆ)', hin: 'Hindi', ben: 'Bengali', tam: 'Tamil', tel: 'Telugu',
+    mar: 'Marathi', guj: 'Gujarati', kan: 'Kannada', mal: 'Malayalam', pan: 'Punjabi', urd: 'Urdu',
+    san: 'Sanskrit', nep: 'Nepali', ara: 'Arabic', deu: 'German', fra: 'French', spa: 'Spanish',
+    ita: 'Italian', por: 'Portuguese', nld: 'Dutch', rus: 'Russian', pol: 'Polish', tur: 'Turkish',
+    chi_sim: 'Chinese (simplified)', chi_tra: 'Chinese (traditional)', jpn: 'Japanese', kor: 'Korean'
+  };
+  function langName(code) {
+    return code.split('+').map((c) => LANG_NAMES[c] || c).join(' + ');
+  }
+  const LANG_KEY = 'pdf2word.lang';
+  function setupLanguages(ocr) {
+    const installed = ((ocr && ocr.languages) || []).filter((c) => c !== 'osd' && c !== 'equ');
+    const codes = installed.slice().sort((a, b) => (a === 'eng' ? -1 : b === 'eng' ? 1 : langName(a).localeCompare(langName(b))));
+    if (installed.indexOf('eng') >= 0) for (const c of codes.slice()) if (c !== 'eng') codes.push('eng+' + c);
+    const def = (ocr && ocr.defaultLang) || 'eng';
+    if (codes.length && codes.indexOf(def) < 0) codes.unshift(def);
+    if (codes.length < 2) { langRow.classList.add('hidden'); langSelect.value = ''; return; }
+    let saved = null;
+    try { saved = localStorage.getItem(LANG_KEY); } catch (_) {}
+    langSelect.textContent = '';
+    for (const c of codes) {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = langName(c);
+      langSelect.appendChild(o);
+    }
+    langSelect.value = saved && codes.indexOf(saved) >= 0 ? saved : def;
+    langSelect.disabled = false;
+  }
+  langSelect.addEventListener('change', () => {
+    try { localStorage.setItem(LANG_KEY, langSelect.value); } catch (_) {}
+  });
 
   // --- picking files -------------------------------------------------------
   pick.addEventListener('click', () => fileInput.click());
@@ -791,6 +958,9 @@
     xhr.addEventListener('abort', () => { row.xhr = null; setView(row, Object.assign({}, row.view, { state: 'cancelled', done: 0, total: 0 })); });
 
     const data = new FormData();
+    // Fields must come before the file: the server reads them in order.
+    row.lang = langSelect.disabled ? '' : langSelect.value;
+    if (row.lang) data.append('lang', row.lang);
     data.append('file', file, file.name);
     xhr.send(data);
   }
@@ -921,7 +1091,7 @@
     el.className = 'file ' + v.state;
     el.querySelector('.name').textContent = v.filename || '';
     el.querySelector('.size').textContent = fmtSize(v.size);
-    el.querySelector('.file-status').textContent = statusText(v);
+    el.querySelector('.file-status').textContent = statusText(v, row.lang);
     // The badge says what the row holds: the PDF going in, the DOCX coming out.
     const badge = el.querySelector('.doc');
     const isDocx = v.state === 'done';
@@ -984,7 +1154,7 @@
     return b;
   }
 
-  function statusText(v) {
+  function statusText(v, lang) {
     switch (v.state) {
       case 'uploading': return 'Uploading' + (detailText(v) ? ': ' + detailText(v) : '');
       case 'queued': return 'Waiting its turn';
@@ -1000,7 +1170,7 @@
         let s = 'Converted ' + plural(r.pages, 'page');
         if (v.elapsedMs > 1500) s += ' in ' + fmtDuration(v.elapsedMs);
         const parts = [];
-        if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with text recognition');
+        if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with text recognition' + (lang ? ' in ' + langName(lang) : ''));
         if (r.emptyPages) parts.push(plural(r.emptyPages, 'page') + ' came out empty');
         if (parts.length) s += ' (' + parts.join('; ') + ')';
         return s + '. The Word file downloaded.';
@@ -1072,6 +1242,7 @@
     }
 
     showBusy(active);
+    updatePreview(active);
     const pct = 100 * overall(active);
     const left = remaining(active);
     const detail = joinDetail(detailText(active), left === null ? '' : 'about ' + fmtDuration(left) + ' left');
@@ -1083,7 +1254,7 @@
       : (active.state === 'running' && active.total > 0);
 
     if (determinate) {
-      stageState('busy');
+      stageState('busy', ocr ? 'ocr' : '');
       setFill(pct);
       stagePct.textContent = Math.round(pct) + '%';
       setStatus(phaseText(active), detail);
@@ -1097,6 +1268,57 @@
       document.title = TITLE;
     }
   }
+  // --- the page under the scanner -----------------------------------------------
+  // Shows the page the conversion is on: while reading, the next page to be
+  // read; after that, the page just finished (text recognition runs several
+  // pages at once, so there is no single "current" one). At most one image
+  // is in flight and a new one is fetched at most every 0.7 s, however fast
+  // the pages go by.
+  const scanPage = $('scan-page'), scanWash = $('scan-wash');
+  let scan = { job: '', want: '', shown: '', loading: false, last: 0, timer: 0 };
+  function previewPage(v) {
+    if (v.state !== 'running' || !v.total || !v.id) return 0;
+    return v.phase === 'reading' ? Math.min(v.done + 1, v.total) : (v.page || 1);
+  }
+  function updatePreview(v) {
+    if ((v.id || '') !== scan.job) {
+      clearTimeout(scan.timer);
+      scan = { job: v.id || '', want: '', shown: '', loading: false, last: 0, timer: 0 };
+      for (const img of Array.from(scanPage.querySelectorAll('img'))) img.remove();
+      scanPage.classList.remove('has-img');
+    }
+    const n = previewPage(v);
+    if (!n) return;
+    scan.want = '/api/jobs/' + v.id + '/pages/' + n;
+    loadPreview();
+  }
+  function loadPreview() {
+    const p = scan;
+    if (p.loading || !p.want || p.want === p.shown) return;
+    const wait = p.last + 700 - Date.now();
+    if (wait > 0) { clearTimeout(p.timer); p.timer = setTimeout(loadPreview, wait); return; }
+    const url = p.want;
+    p.loading = true;
+    const img = new Image();
+    img.alt = '';
+    img.className = 'scan__img';
+    img.decoding = 'async';
+    const settle = (ok) => {
+      if (p !== scan) return; // a newer file took the scanner over
+      p.loading = false; p.shown = url; p.last = Date.now();
+      if (ok) {
+        const old = Array.from(scanPage.querySelectorAll('img'));
+        scanPage.insertBefore(img, scanWash);
+        scanPage.classList.add('has-img');
+        setTimeout(() => old.forEach((o) => o.remove()), 300);
+      }
+      loadPreview();
+    };
+    img.onload = () => settle(true);
+    img.onerror = () => settle(false);
+    img.src = url;
+  }
+
   function showBusy(v) {
     const focusWasInside = stageIdle.contains(document.activeElement);
     stageIdle.classList.add('hidden');

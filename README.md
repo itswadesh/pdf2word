@@ -41,19 +41,21 @@ PDFs on the page that opens, and save the Word files it gives back.
    and your browser opens `http://127.0.0.1:9090/`. Other computers on the
    network can open the address printed in the console, e.g.
    `http://192.168.1.23:9090/` (see "Sharing it on your network").
-2. Drop one or more PDFs onto the page (or click the sheet to choose files).
+2. Drop one or more PDFs onto the page (or press "Choose a PDF").
    Only files named `.pdf` and no larger than 100 MB are accepted; others
    are skipped with a notice. The limit can be changed with `-max-upload`.
-3. Watch the counter. When a file is done its Word document downloads by
-   itself; the "Download Word file" button downloads it again.
+3. Watch the page being scanned: the card shows the page it is working on,
+   the percentage and the time left. When a file is done its Word document
+   downloads by itself; the "Download Word file" button downloads it again.
 4. Close the console window (or press Ctrl+C in it) to stop the program.
 
-The page has no settings: pages with fewer than 20 characters of real text
-are read with OCR, in English. To change that for the app, start it with the
-corresponding flags, e.g. `pdf2word.exe -lang ori` for Odia scans,
-`pdf2word.exe -lang eng+ori` for mixed pages, or `pdf2word.exe -min-text 50`.
-The environment variable `PDF2WORD_LANG` sets the same default without a
-flag. English and Odia are built in; other languages need their Tesseract
+Pages with fewer than 20 characters of real text are read with OCR. The one
+setting on the page is the language of those scanned pages: English unless
+you pick another, from a list of the languages installed (English, Odia, and
+both together for mixed pages). To start the page on another language, or to
+change the threshold, start the app with the corresponding flags, e.g.
+`pdf2word.exe -lang ori` or `pdf2word.exe -min-text 50`. The environment
+variable `PDF2WORD_LANG` sets the same default without a flag. English and Odia are built in; other languages need their Tesseract
 `traineddata` files installed. A requested language that is not installed is
 skipped with a warning rather than failing the conversion.
 
@@ -106,7 +108,7 @@ docker compose up -d --build     # then open http://localhost:9090/
 
 The container reads three environment variables: `PORT` (the port to listen
 on, default 9090, as Cloud Run, Fly and Render set it), `PDF2WORD_LANG`
-(OCR languages, default `eng+ori`) and `PUBLIC_URL` (the address the page is
+(the OCR language the page starts on, default `eng`) and `PUBLIC_URL` (the address the page is
 reachable at from outside). They are set in the compose file.
 
 Set `PUBLIC_URL` once a domain points at the service, for example
@@ -121,8 +123,8 @@ to the `pdf2word` service on port 9090. Everything runs on one host; uploads
 live in the container's temp space and are removed an hour after conversion.
 There is no login, so put the domain behind Dokploy's access controls or a
 VPN if the server is reachable from the internet. More OCR languages: add
-`tesseract-ocr-<lang>` to the `apt-get install` line in the Dockerfile and
-set `PDF2WORD_LANG=eng+<lang>` in the compose `environment`.
+`tesseract-ocr-<lang>` to the `apt-get install` line in the Dockerfile; the
+page lists it next to English and Odia.
 
 ## Requirements
 

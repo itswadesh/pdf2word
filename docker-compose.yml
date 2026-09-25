@@ -15,8 +15,9 @@ services:
       # processes instead (see -jobs).
       OMP_THREAD_LIMIT: "1"
       PORT: "9090"
-      # OCR languages (English and Odia are in the image).
-      PDF2WORD_LANG: "eng+ori"
+      # The language scanned pages are read in unless the visitor picks
+      # another; the page lists every language in the image (English, Odia).
+      PDF2WORD_LANG: "eng"
       # Public address, once a domain points here. It fills in the canonical
       # link, the sharing tags and /sitemap.xml, which search engines need.
       # PUBLIC_URL: "https://pdf2word.example.com"

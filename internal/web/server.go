@@ -19,6 +19,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +65,7 @@ type Server struct {
 	jobs    *jobStore
 	sem     chan struct{} // one conversion at a time
 	ownsDir bool
+	preview previewer // thumbnails of the page being converted
 
 	page     []byte        // index.html with the public URL and privacy copy filled in
 	etag     string        // strong validator for that page
@@ -173,6 +176,7 @@ func New(cfg Config) (*Server, error) {
 	s.mux.HandleFunc("GET /api/jobs/{id}", s.handleJob)
 	s.mux.HandleFunc("POST /api/jobs/{id}/cancel", s.handleCancel)
 	s.mux.HandleFunc("GET /api/jobs/{id}/download", s.handleDownload)
+	s.mux.HandleFunc("GET /api/jobs/{id}/pages/{n}", s.handlePreview)
 	return s, nil
 }
 
@@ -225,6 +229,7 @@ func (s *Server) Close() error {
 	for _, j := range s.jobs.list() {
 		j.cancel()
 	}
+	s.preview.close()
 	if s.ownsDir {
 		return os.RemoveAll(s.cfg.WorkDir)
 	}
@@ -348,6 +353,10 @@ type OCRState struct {
 	Path      string `json:"path,omitempty"`
 	Version   string `json:"version,omitempty"`
 	Problem   string `json:"problem,omitempty"`
+	// Languages are the installed language codes the page offers for
+	// scanned pages; DefaultLang is the one it starts on.
+	Languages   []string `json:"languages,omitempty"`
+	DefaultLang string   `json:"defaultLang"`
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -364,8 +373,12 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 			info.OCR = OCRState{Path: p, Problem: err.Error()}
 		} else {
 			info.OCR = OCRState{Available: true, Path: p, Version: v}
+			if langs, err := t.Languages(ctx); err == nil {
+				info.OCR.Languages = langs
+			}
 		}
 	}
+	info.OCR.DefaultLang = s.defaultLang()
 	writeJSON(w, http.StatusOK, info)
 }
 
@@ -450,6 +463,51 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, j.output)
 }
 
+// handlePreview serves a thumbnail of one page of a conversion in
+// progress, for the scanner on the page. Only the uploading browser gets
+// it, and only until the conversion ends.
+func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
+	j, ok := s.jobs.get(r.PathValue("id"))
+	if !ok || !s.owns(r, j) {
+		writeError(w, http.StatusNotFound, "no such job")
+		return
+	}
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "no such page")
+		return
+	}
+	img, err := s.preview.thumbnail(j, n)
+	switch {
+	case errors.Is(err, errNoSuchPage), errors.Is(err, errPreviewGone):
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	case err != nil:
+		s.cfg.Logf("[%s] preview of page %d: %v", j.id[:6], n, err)
+		writeError(w, http.StatusInternalServerError, "could not draw the page")
+		return
+	}
+	// The same page of the same upload never changes, and only its owner
+	// may see it, so the browser may keep it but a shared cache may not.
+	w.Header().Set("Cache-Control", "private, max-age=600")
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Write(img)
+}
+
+// langPattern accepts Tesseract language codes joined with "+", such as
+// "eng", "chi_sim" or "eng+ori". Codes that are well formed but not
+// installed are dropped with a warning when the conversion runs.
+var langPattern = regexp.MustCompile(`^[A-Za-z_]{1,32}(\+[A-Za-z_]{1,32}){0,7}$`)
+
+// defaultLang is the language scanned pages are read in unless the page
+// asks for another.
+func (s *Server) defaultLang() string {
+	if s.cfg.Base.Lang != "" {
+		return s.cfg.Base.Lang
+	}
+	return ocr.DefaultLang
+}
+
 // handleConvert accepts a multipart upload (fields: ocr, lang, file) and
 // queues a conversion. Fields must precede the file part.
 func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
@@ -505,6 +563,10 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 		case "lang":
 			v, _ := io.ReadAll(io.LimitReader(part, 128))
 			if l := strings.TrimSpace(string(v)); l != "" {
+				if !langPattern.MatchString(l) {
+					writeError(w, http.StatusBadRequest, "unknown language code "+strconv.Quote(l))
+					return
+				}
 				lang = l
 			}
 		case "file":
@@ -603,6 +665,9 @@ func saveUpload(dst string, part io.Reader, max int64) (int64, error) {
 
 // run executes a queued job; conversions run one at a time.
 func (s *Server) run(j *job) {
+	// Deferred first, so it runs after the job is marked finished: the
+	// previewer then refuses to reopen the document for it.
+	defer s.preview.forget(j.id)
 	select {
 	case s.sem <- struct{}{}:
 	case <-j.ctx.Done():

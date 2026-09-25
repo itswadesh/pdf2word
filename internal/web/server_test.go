@@ -431,6 +431,47 @@ func TestInfo(t *testing.T) {
 	if info.Version != "test" || !info.OCR.Available {
 		t.Fatalf("info = %+v", info)
 	}
+	// The page starts its language picker on the server's default.
+	if info.OCR.DefaultLang != "eng" {
+		t.Errorf("defaultLang = %q, want eng when none is configured", info.OCR.DefaultLang)
+	}
+
+	s, err := New(Config{Base: convert.Options{Engine: &fakeEngine{}, Lang: "ori"}, WorkDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	odia := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { odia.Close(); s.Close() })
+	resp, err = odia.Client().Get(odia.URL + "/api/info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode(t, resp, &info)
+	if info.OCR.DefaultLang != "ori" {
+		t.Errorf("defaultLang = %q, want the configured ori", info.OCR.DefaultLang)
+	}
+}
+
+// The language reaches Tesseract's command line, so only well-formed
+// codes are accepted.
+func TestLanguageField(t *testing.T) {
+	_, ts := newTestServer(t)
+	data, _ := os.ReadFile(fixture("text.pdf"))
+	for lang, want := range map[string]int{
+		"eng":           http.StatusAccepted,
+		"eng+ori":       http.StatusAccepted,
+		"chi_sim":       http.StatusAccepted,
+		"eng; rm -rf /": http.StatusBadRequest,
+		"--psm 0":       http.StatusBadRequest,
+		"eng+":          http.StatusBadRequest,
+		"../../etc/eng": http.StatusBadRequest,
+	} {
+		resp := upload(t, ts, "a.pdf", data, map[string]string{"lang": lang})
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("lang %q: status %d, want %d", lang, resp.StatusCode, want)
+		}
+	}
 }
 
 func TestConvertTextPDFEndToEnd(t *testing.T) {
