@@ -42,7 +42,8 @@
   "featureList": [
     "Convert PDF to Word DOCX",
     "Keeps fonts, headings, tables, pictures and page breaks",
-    "OCR for scanned PDFs",
+    "OCR for scanned PDFs, in English and Odia",
+    "Works in any web browser",
     "No sign-up and no watermark",
     "Several files at once"
   ],
@@ -667,6 +668,38 @@
   .features .feature h2 { margin: 0 0 var(--s2); font-size: 19px; line-height: 1.3; font-weight: 700; letter-spacing: -.01em; }
   .feature p { color: var(--text-soft); max-width: 68ch; }
 
+  .section .lead { margin: calc(-1 * var(--s2)) 0 var(--s5); max-width: 68ch; font-size: 17px; color: var(--text-soft); }
+  .section .lead a, .feature a { color: var(--accent-text); text-underline-offset: 3px; }
+  .grid-2, .grid-3 { display: grid; gap: var(--s4); }
+  .feature h3 { margin: 0 0 var(--s3); font-size: 18px; line-height: 1.3; font-weight: 700; letter-spacing: -.01em; }
+  .feature__icon--script { font-size: 24px; font-weight: 600; line-height: 1; }
+  .checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+  .checklist li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--s3); color: var(--text-soft); }
+  .checklist .i { width: 20px; height: 20px; margin-top: 2px; color: var(--ok); stroke-width: 2.2; }
+  .checklist--not .i { color: var(--text-soft); }
+  .tips { margin: 0; padding-left: 1.2em; display: grid; gap: var(--s3); color: var(--text-soft); }
+  .tips li::marker { color: var(--accent-text); font-weight: 700; }
+  .card-links { margin-top: var(--s3) !important; }
+
+  /* A comparison table scrolls sideways on a narrow screen rather than
+     squeezing its columns; the scroller takes focus so a keyboard can too. */
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+  .compare { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 15px; line-height: 1.5; }
+  .compare th, .compare td { padding: var(--s3) var(--s5); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+  .compare thead th { background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 700; }
+  .compare tbody th { width: 26%; color: var(--text); font-weight: 600; }
+  .compare td { color: var(--text-soft); }
+  .compare tr:last-child > * { border-bottom: 0; }
+  @media (max-width: 600px) {
+    /* Three short columns fit a phone once the padding is tighter. */
+    .compare { min-width: 0; font-size: 14px; }
+    .compare th, .compare td { padding: var(--s3); }
+  }
+
+  .cta { padding: var(--s7) var(--s5); text-align: center; background: var(--accent-soft); border-radius: var(--r-lg); }
+  .cta h2 { margin-bottom: var(--s2) !important; }
+  .cta p { margin: 0 auto var(--s5) !important; max-width: 50ch; color: var(--text-soft); }
+
   .faq-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 0 var(--s5); }
   .qa + .qa { border-top: 1px solid var(--border); }
   .qa summary {
@@ -698,9 +731,12 @@
     .stage__more { justify-self: start; }
     .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .steps li { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
-    .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .features, .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .feature--wide { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s5); }
     .feature--wide .feature__icon { grid-row: span 2; margin-bottom: 0; }
+  }
+  @media (min-width: 900px) {
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 420px) {
     .stage { padding: var(--s5) var(--s4); }
@@ -735,6 +771,10 @@
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4.5"/><path d="M12 16h.01"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01"/><path d="M7 16.5h.01"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
@@ -843,18 +883,85 @@
     </div>
   </section>
 
+  <section class="section" id="layout">
+    <div class="wrap">
+      <h2>PDF to DOCX without losing the layout</h2>
+      <p class="lead">The DOCX is laid out like the PDF, not poured into one long column. Every line breaks where the PDF broke it and every page break falls where it fell, so the Word document has the same pages as the PDF. A typeface your computer does not have is replaced by Times New Roman, Arial or Courier New, with the spacing adjusted so each line still fits.</p>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Stays as it was</h3>
+          <ul class="checklist">
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Fonts, sizes, bold and italic</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Headings, indents, alignment and tab stops</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Tables drawn with lines, as real Word tables you can type in</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Pictures, at their size and in their place</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Page size, margins, line breaks and page breaks</li>
+          </ul>
+        </section>
+        <section class="feature">
+          <h3>Not carried over yet</h3>
+          <ul class="checklist checklist--not">
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Text colours</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Tables drawn without lines, which come across as plain text</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Pages set in two or three columns, which are read across rather than down each column</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Running headers and footers, which stay in the body of the page</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Bold and italic on scanned pages</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="scans">
+    <div class="wrap">
+      <h2>Convert a scanned PDF to Word</h2>
+      <p class="lead">A scanned PDF is only pictures of pages, so there is no text to copy out. The converter spots pages like that and reads them with text recognition (OCR), so you get words you can edit instead of a picture of words. It also catches PDFs where a print driver turned the text into outlines. The reading is done by <a href="https://github.com/tesseract-ocr/tesseract">Tesseract</a>, the open source OCR engine, and the result goes through the same layout step as any other page, so headings, alignment, indents and spacing are kept.</p>
+      <div class="grid-2">
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-scan"/></svg></span>
+          <h3>For the cleanest text</h3>
+          <ol class="tips">
+            <li>Scan at 300 dpi or more. A photo of a page works too, if the page is flat, sharp and evenly lit.</li>
+            <li>Pick the language the page is written in. For pages that mix English and Odia, pick English + Odia.</li>
+            <li>Pages that already have text you can select are copied, not read, so they come out exactly as written.</li>
+            <li>A table of contents with dotted leaders can leave stray characters behind. Delete them in Word.</li>
+            <li>Password-protected PDFs cannot be converted yet. Save a copy without the password first.</li>
+          </ol>
+        </section>
+        <section class="feature">
+          <span class="feature__icon feature__icon--script" aria-hidden="true">ଓ</span>
+          <h3>Odia (ଓଡ଼ିଆ) PDF to Word, and other Indian scripts</h3>
+          <p>This converter was first written for Odia scans, and Odia text recognition is built in next to English. Choose Odia, or English + Odia for mixed pages, before you convert.</p>
+          <p class="card-links">PDFs with Odia, Hindi, Bengali or Tamil text you can select keep it as text, and the Word file asks for Nirmala UI, the Windows font that covers those scripts, so the letters do not turn into boxes. Whoever runs the converter can add more languages for scans.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pdf-or-word">
+    <div class="wrap">
+      <h2>PDF or Word: which do you need?</h2>
+      <p class="lead">Keep the PDF for sending, printing and signing, when the page has to look the same everywhere. Convert it to Word when you need to change the words: update a CV, correct a contract, reuse the tables in a report or quote a scanned letter.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="compare-caption">
+        <table class="compare">
+          <caption id="compare-caption" class="visually-hidden">PDF and Word (DOCX) compared</caption>
+          <thead>
+            <tr><th scope="col"><span class="visually-hidden">Question</span></th><th scope="col">PDF</th><th scope="col">Word (DOCX)</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Made for</th><td>Reading and printing a page that looks the same on every screen</td><td>Writing and editing</td></tr>
+            <tr><th scope="row">Changing the text</th><td>Needs a PDF editor, and even then it is fiddly</td><td>Click and type</td></tr>
+            <tr><th scope="row">When you add a sentence</th><td>Nothing makes room for it</td><td>The text after it moves along</td></tr>
+            <tr><th scope="row">Opens in</th><td>Any web browser or PDF reader</td><td>Word, Google Docs, LibreOffice Writer and Apple Pages</td></tr>
+            <tr><th scope="row">Standard</th><td>ISO 32000</td><td>Office Open XML, ISO/IEC 29500</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <div class="section">
     <div class="wrap features">
-      <section class="feature">
-        <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-layout"/></svg></span>
-        <h2>What comes across</h2>
-        <p>Fonts, sizes, bold and italic, headings, indents and alignment all survive the trip. Ruled tables become real Word tables you can type in. Pictures land where they were. Every line breaks where the PDF broke it and every page break falls where it fell, so the DOCX has the same pages as the PDF.</p>
-      </section>
-      <section class="feature">
-        <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-scan"/></svg></span>
-        <h2>Scanned PDFs and photos of paper</h2>
-        <p>A PDF that is only pictures has no text to copy out. Those pages go through text recognition, so you get words you can edit instead of a picture of words. English and Odia are built in, and the person running the converter can add more languages.</p>
-      </section>
       <section class="feature feature--wide">
         <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span>
         <h2>Free, with nothing to sign up for</h2>
@@ -863,9 +970,32 @@
     </div>
   </div>
 
+  <section class="section" id="devices">
+    <div class="wrap">
+      <h2>Convert PDF to Word on any device</h2>
+      <div class="grid-3">
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-globe"/></svg></span>
+          <h3>In your browser</h3>
+          <p>The converter is a web page, so it works the same on Windows, macOS, Linux, Android and iPhone. On a phone, choose the PDF from your files and the Word document is saved to your downloads.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-monitor"/></svg></span>
+          <h3>On your own computer</h3>
+          <p>The whole converter is one open source program. On Windows it carries the PDF engine and the text recognition inside it, so it converts without an internet connection and the files never leave the computer.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-server"/></svg></span>
+          <h3>On your own server</h3>
+          <p>The source comes with a Docker setup, so an office or a school can run its own copy for everyone on its network. <a href="https://github.com/itswadesh/pdf2word">The source code is on GitHub</a>.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="faq">
     <div class="wrap narrow">
-      <h2>Questions</h2>
+      <h2>Questions about converting PDF to Word</h2>
       <div class="faq-list">
         <details class="qa">
           <summary>Is this PDF to DOCX converter really free?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
@@ -880,8 +1010,36 @@
           <p>Yes. Pages without selectable text are recognised automatically, including files where a print driver turned the text into outlines.</p>
         </details>
         <details class="qa">
+          <summary>Which languages can it read in scanned PDFs?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>English and Odia are built in, and English + Odia handles pages that mix the two. Whoever runs the converter can add any of the more than 100 languages Tesseract has data for.</p>
+        </details>
+        <details class="qa">
+          <summary>Does it keep tables?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Tables drawn with lines become real Word tables you can type in, with the text in the right cells. Tables with no lines come across as plain text.</p>
+        </details>
+        <details class="qa">
+          <summary>Can I convert a password-protected PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Not yet. Open it in a PDF reader that knows the password, save a copy without it, and convert that copy.</p>
+        </details>
+        <details class="qa">
+          <summary>Why are there strange characters in my Word file?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Usually a scanned page was read in the wrong language, or the dotted leaders of a table of contents were read as letters. Pick the language the page is written in and convert it again, and delete any leftover dots in Word.</p>
+        </details>
+        <details class="qa">
+          <summary>Can I convert PDF to Word on my phone?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Yes. Open this page in your phone’s browser, choose the PDF from your files, and the Word document is saved to your downloads.</p>
+        </details>
+        <details class="qa">
+          <summary>How long does a conversion take?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>A PDF with selectable text takes seconds. A scanned page takes a second or two to read, and several pages are read at once, so a long scan takes a few minutes.</p>
+        </details>
+        <details class="qa">
           <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
           <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+        </details>
+        <details class="qa">
+          <summary>Can it turn a Word file back into a PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>No, it only goes from PDF to Word. Word, Google Docs and LibreOffice can all save a document as a PDF themselves.</p>
         </details>
         <details class="qa">
           <summary>Is there a limit on file size or number of files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
@@ -894,11 +1052,21 @@
       </div>
     </div>
   </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer class="colophon">
   <div class="wrap">
-    <p>An open source converter built in Go. The PDF engine and the text recognition are inside the program, so it works without an internet connection. <a href="https://github.com/itswadesh/pdf2word">Source code and releases on GitHub</a>.</p>
+    <p>An open source converter built in Go. The PDF engine and the text recognition are inside the program, so it works without an internet connection. <a href="https://github.com/itswadesh/pdf2word">Source code on GitHub</a>.</p>
   </div>
 </footer>
 
@@ -1035,6 +1203,7 @@
   // --- picking files -------------------------------------------------------
   pick.addEventListener('click', () => fileInput.click());
   pickMore.addEventListener('click', () => fileInput.click());
+  $('pick-cta').addEventListener('click', () => fileInput.click());
   // Idle, the whole card is the target, so a tap anywhere on it opens the
   // picker too. Busy, it is a readout, and only its button adds files.
   stage.addEventListener('click', (e) => {
