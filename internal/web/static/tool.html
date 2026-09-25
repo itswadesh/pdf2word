@@ -1,0 +1,983 @@
+{{/* The converter: the drop card, the file list, the dialog and the script
+     that drives them. Only the tool pages carry it. */}}
+{{define "tool"}}<div class="tool" data-lang="{{.Lang}}">
+        <div class="stage" id="stage">
+          <div class="stage__idle" id="stage-idle">
+            <span class="stage__icon" aria-hidden="true"><svg class="i"><use href="#i-upload"/></svg></span>
+            <button class="btn btn--primary btn--lg" id="pick" type="button" aria-describedby="stage-hint">Choose a PDF</button>
+            <p class="stage__hint stage__drophint">or drop it anywhere on this page</p>
+            <p class="stage__hint">.pdf files up to <span id="limit">100 MB</span>, several at once</p>
+          </div>
+
+          <div class="stage__busy hidden" id="stage-busy">
+            <!-- The page being read, under the scanner. Opens the big preview. -->
+            <button class="scan" id="scan-open" type="button" aria-label="Show the page being scanned, larger">
+              <span class="scan__page" id="scan-page">
+                <svg class="scan__glyph" viewBox="0 0 170 220" aria-hidden="true"><use href="#page"/></svg>
+                <span class="scan__wash" id="scan-wash"></span>
+                <span class="scan__track"><span class="scan__beam"></span></span>
+              </span>
+              <b class="scan__badge scan__badge--pdf" aria-hidden="true">PDF</b>
+              <b class="scan__badge scan__badge--docx" aria-hidden="true">DOCX</b>
+              <span class="doc__ok" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></span>
+              <span class="scan__zoom" aria-hidden="true"><svg class="i"><use href="#i-expand"/></svg></span>
+            </button>
+            <div class="stage__info">
+              <div class="stage__head">
+                <p class="stage__name" id="stage-name"></p>
+                <span class="stage__pct" id="stage-pct" aria-hidden="true"></span>
+              </div>
+              <div class="meter" aria-hidden="true"><span id="stage-fill"></span></div>
+              <p class="stage__status"><b id="stage-status">Ready</b> <span id="stage-detail"></span><span class="hidden" id="ocr-note"> · scanned pages take longer</span></p>
+              <button class="btn btn--quiet stage__more" id="pick-more" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add another PDF</button>
+            </div>
+          </div>
+        </div>
+        <p id="stage-hint" class="visually-hidden">Choose a PDF to convert, or drag PDF files anywhere on this page. Only .pdf files up to <span id="limit-hint">100 MB</span> are accepted. Progress for each file is listed under Your files.</p>
+        <input type="file" id="file" accept=".pdf" multiple hidden>
+
+        <ul class="promises">
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No sign-up</li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Nothing added to your file</li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Scanned pages read with OCR</li>
+        </ul>
+      </div>
+
+      <section class="tray" aria-labelledby="tray-title">
+        <noscript><p>This page needs JavaScript to upload files and show progress.</p></noscript>
+        <div class="notice hidden" id="notice" role="alert">
+          <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+          <p id="notice-text"></p>
+          <button class="link" id="notice-close" type="button">Dismiss</button>
+        </div>
+        <div class="offline hidden" id="offline" role="status">Can't reach the converter. Retrying.</div>
+        <div class="tray-head hidden" id="tray-head">
+          <h2 id="tray-title">Your files <span id="tray-summary"></span></h2>
+          <button class="link hidden" id="clear-done" type="button">Clear finished</button>
+        </div>
+        <ol class="files" id="files"></ol>
+      </section>{{end}}
+
+{{define "dialog"}}<!-- The big preview: the page being scanned, how far along it is, and a way
+     to stop. Opens by itself when files are added; the card's scanner
+     reopens it. -->
+<dialog class="pv" id="pv" aria-labelledby="pv-name">
+  <div class="pv__head">
+    <p class="pv__name" id="pv-name" tabindex="-1" autofocus></p>
+    <button class="pv__close" id="pv-close" type="button" aria-label="Close the preview"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="pv__stage">
+    <!-- Before converting: the first page of the chosen file, once it is up. -->
+    <div class="pv__frame pv-ready" id="pv-first" aria-hidden="true">
+      <span class="scan__page pv__page" id="pv-first-page">
+        <svg class="scan__glyph" viewBox="0 0 170 220"><use href="#page"/></svg>
+        <span class="pv__upload hidden" id="pv-upload">
+          <b id="pv-upload-pct"></b>
+          <span class="upbar"><span id="pv-upload-fill"></span></span>
+        </span>
+      </span>
+      <b class="scan__badge scan__badge--pdf">PDF</b>
+    </div>
+    <!-- Confetti when a file is done; decorative. -->
+    <div class="pv__party" id="pv-party" aria-hidden="true"></div>
+    <!-- While converting: the page under the scanner. -->
+    <div class="pv__frame pv-progress" id="pv-frame" aria-hidden="true">
+      <span class="scan__page pv__page" id="pv-page">
+        <svg class="scan__glyph" viewBox="0 0 170 220"><use href="#page"/></svg>
+        <span class="scan__wash" id="pv-wash"></span>
+        <span class="scan__track"><span class="scan__beam"></span></span>
+      </span>
+      <b class="scan__badge scan__badge--pdf">PDF</b>
+      <b class="scan__badge scan__badge--docx">DOCX</b>
+      <span class="doc__ok"><svg class="i"><use href="#i-check"/></svg></span>
+    </div>
+  </div>
+  <div class="pv__foot pv-ready">
+    <p class="pv__file" id="pv-file"></p>
+    <ul class="pv__list hidden" id="pv-list"></ul>
+    <p class="pv__skipped hidden" id="pv-skipped" role="alert"></p>
+    <!-- Filled from /api/info with the languages installed. Shown once the
+         file is up, and only when there is more than one to choose from. -->
+    <div class="pv__lang hidden" id="lang-row">
+      <div class="lang">
+        <label for="lang">Language of scanned pages</label>
+        <span class="select">
+          <select id="lang" disabled><option value="">English</option></select>
+          <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </span>
+      </div>
+      <p class="pv__hint">Only used for pages that are pictures of text. Text in the PDF is copied as it is.</p>
+    </div>
+    <button class="btn btn--primary btn--xl" id="pv-convert" type="button" disabled>Convert to Word</button>
+  </div>
+  <div class="pv__foot pv-progress">
+    <div class="pv__happy">
+      <p class="pv__cheer"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Your Word file is ready</p>
+      <p class="pv__sub" id="pv-happy-sub"></p>
+    </div>
+    <div class="pv__row">
+      <span class="stage__pct" id="pv-pct" aria-hidden="true"></span>
+      <p class="stage__status"><b id="pv-status"></b> <span id="pv-detail"></span><span class="hidden" id="pv-ocr"> · scanned pages take longer</span></p>
+    </div>
+    <div class="meter" aria-hidden="true"><span id="pv-fill"></span></div>
+    <div class="pv__actions">
+      <button class="btn btn--quiet btn--stop" id="pv-stop" type="button"><svg class="i" aria-hidden="true"><use href="#i-stop"/></svg>Stop converting</button>
+      <a class="btn btn--primary hidden" id="pv-download" download><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Download Word file</a>
+      <button class="btn btn--quiet hidden" id="pv-another" type="button">Convert another PDF</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="visually-hidden" id="announcer" role="status" aria-live="polite"></div>{{end}}
+
+{{define "toolscript"}}<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), stageIdle = $('stage-idle'), stageBusy = $('stage-busy');
+  const pick = $('pick'), pickMore = $('pick-more');
+  const stageName = $('stage-name'), stagePct = $('stage-pct'), stageFill = $('stage-fill');
+  const stageStatus = $('stage-status'), stageDetail = $('stage-detail'), ocrNote = $('ocr-note');
+  const fileInput = $('file'), filesList = $('files');
+  const trayHead = $('tray-head'), traySummary = $('tray-summary'), clearDone = $('clear-done');
+  const announcer = $('announcer');
+  const TITLE = document.title; // restored when nothing is converting
+
+  // Rows for files dropped on this page (and conversions of ours that were
+  // still running when the page was reloaded). key -> row.
+  const rows = new Map();
+  let seq = 0;
+  let pollTimer = null, pollFailures = 0;
+  let flash = null; // { view, until }: a just-finished file shown on the card for a moment
+
+  // --- limits ------------------------------------------------------------------
+  let maxUploadBytes = 100 * 1024 * 1024;
+  function fmtLimit(n) { return n >= 1024 * 1024 ? Math.round(n / (1024 * 1024)) + ' MB' : Math.round(n / 1024) + ' KB'; }
+  fetch('/api/info').then((r) => r.json()).then((info) => {
+    if (info && info.maxUploadBytes > 0) {
+      maxUploadBytes = info.maxUploadBytes;
+      $('limit').textContent = fmtLimit(maxUploadBytes);
+      $('limit-hint').textContent = fmtLimit(maxUploadBytes);
+    }
+    setupLanguages(info && info.ocr);
+  }).catch(() => setupLanguages(null));
+
+  // --- language of scanned pages -------------------------------------------
+  // Offered only from what is installed, so a choice can never be one the
+  // server lacks. The server's default comes first for a new visitor; a
+  // visitor's own choice is remembered on this device.
+  const langSelect = $('lang'), langRow = $('lang-row');
+  let langAvailable = false; // more than one language to choose from
+  const LANG_NAMES = {
+    eng: 'English', ori: 'Odia (ଓଡ଼ିଆ)', hin: 'Hindi', ben: 'Bengali', tam: 'Tamil', tel: 'Telugu',
+    mar: 'Marathi', guj: 'Gujarati', kan: 'Kannada', mal: 'Malayalam', pan: 'Punjabi', urd: 'Urdu',
+    san: 'Sanskrit', nep: 'Nepali', ara: 'Arabic', deu: 'German', fra: 'French', spa: 'Spanish',
+    ita: 'Italian', por: 'Portuguese', nld: 'Dutch', rus: 'Russian', pol: 'Polish', tur: 'Turkish',
+    chi_sim: 'Chinese (simplified)', chi_tra: 'Chinese (traditional)', jpn: 'Japanese', kor: 'Korean'
+  };
+  function langName(code) {
+    return code.split('+').map((c) => LANG_NAMES[c] || c).join(' + ');
+  }
+  const LANG_KEY = 'pdf2word.lang';
+  function setupLanguages(ocr) {
+    const installed = ((ocr && ocr.languages) || []).filter((c) => c !== 'osd' && c !== 'equ');
+    const codes = installed.slice().sort((a, b) => (a === 'eng' ? -1 : b === 'eng' ? 1 : langName(a).localeCompare(langName(b))));
+    if (installed.indexOf('eng') >= 0) for (const c of codes.slice()) if (c !== 'eng') codes.push('eng+' + c);
+    const def = (ocr && ocr.defaultLang) || 'eng';
+    if (codes.length && codes.indexOf(def) < 0) codes.unshift(def);
+    if (codes.length < 2) { langAvailable = false; langSelect.value = ''; return; }
+    let saved = null;
+    try { saved = localStorage.getItem(LANG_KEY); } catch (_) {}
+    langSelect.textContent = '';
+    for (const c of codes) {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = langName(c);
+      langSelect.appendChild(o);
+    }
+    // A page about one language starts on it; elsewhere a visitor's own
+    // choice wins, then the server's default.
+    const pageLang = document.querySelector('.tool').dataset.lang;
+    langSelect.value = pageLang && codes.indexOf(pageLang) >= 0 ? pageLang
+      : saved && codes.indexOf(saved) >= 0 ? saved : def;
+    langSelect.disabled = false;
+    langAvailable = true;
+    if (pvMode === 'ready') renderReady();
+  }
+  langSelect.addEventListener('change', () => {
+    try { localStorage.setItem(LANG_KEY, langSelect.value); } catch (_) {}
+  });
+
+  // --- picking files -------------------------------------------------------
+  pick.addEventListener('click', () => fileInput.click());
+  pickMore.addEventListener('click', () => fileInput.click());
+  $('pick-cta').addEventListener('click', () => fileInput.click());
+  // Idle, the whole card is the target, so a tap anywhere on it opens the
+  // picker too. Busy, it is a readout, and only its button adds files.
+  stage.addEventListener('click', (e) => {
+    if (e.target.closest('button, a') || stage.classList.contains('busy')) return;
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', () => { queueFiles(fileInput.files); fileInput.value = ''; });
+  // Whichever picker is on screen gets focus back after a dialog or a row closes.
+  function focusPicker() { (stage.classList.contains('busy') ? pickMore : pick).focus(); }
+
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); stage.classList.add('dragover'); });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  document.addEventListener('dragleave', () => { if (--dragDepth <= 0) endDrag(); });
+  document.addEventListener('drop', (e) => { e.preventDefault(); endDrag(); queueFiles(e.dataTransfer.files); });
+  function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); stage.classList.remove('dragover'); }
+
+  // Only files named *.pdf and no larger than the limit are uploaded. The
+  // rest are listed in a notice that stays until dismissed; the server
+  // checks the name, the size and the file signature again.
+  function isPDF(f) { return /\.pdf$/i.test(f.name); }
+  // Added files are not uploaded yet: the preview opens on them first, with
+  // the language for scanned pages and a button that starts the conversion.
+  function queueFiles(list) {
+    const ok = [], notPDF = [], tooBig = [];
+    for (const f of Array.from(list)) {
+      if (!isPDF(f)) notPDF.push(f.name);
+      else if (f.size > maxUploadBytes) tooBig.push(f.name + ' (' + fmtSize(f.size) + ')');
+      else ok.push(f);
+    }
+    const notes = [];
+    if (notPDF.length) notes.push('Only .pdf files can be converted. Skipped: ' + notPDF.join(', ') + '.');
+    if (tooBig.length) notes.push('Files must be ' + fmtLimit(maxUploadBytes) + ' or smaller. Skipped: ' + tooBig.join(', ') + '.');
+    showNotice(notes.join(' '));
+    if (ok.length && !notes.length) hideNotice();
+    if (ok.length) prepare(ok, notes.join(' '));
+  }
+  function showNotice(text) {
+    if (!text) return;
+    $('notice-text').textContent = text;
+    $('notice').classList.remove('hidden');
+  }
+  function hideNotice() { $('notice').classList.add('hidden'); }
+  $('notice-close').addEventListener('click', () => { hideNotice(); focusPicker(); });
+
+  // --- uploading -------------------------------------------------------------
+  // XMLHttpRequest rather than fetch: it reports upload progress, so the
+  // card moves from the first byte instead of after the whole file is up.
+  function upload(file, existing) {
+    const row = existing || addRow('upload-' + (++seq));
+    row.file = file;
+    setView(row, { filename: file.name, size: file.size, state: 'uploading', done: 0, total: file.size });
+
+    const xhr = new XMLHttpRequest();
+    row.xhr = xhr;
+    xhr.open('POST', '/api/convert');
+    xhr.responseType = 'json';
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && row.view.state === 'uploading') setView(row, Object.assign({}, row.view, { done: e.loaded, total: e.total }));
+    });
+    xhr.addEventListener('load', () => {
+      row.xhr = null;
+      const body = xhr.response || {};
+      if (xhr.status === 202 && body.id) {
+        rekey(row, body.id);
+        setView(row, body);
+        schedulePoll(0);
+      } else {
+        fail(row, body.error || ('The converter answered with an error (status ' + xhr.status + ').'));
+      }
+    });
+    xhr.addEventListener('error', () => { row.xhr = null; fail(row, 'The upload did not reach the converter. Check the connection and try again.'); });
+    xhr.addEventListener('abort', () => { row.xhr = null; setView(row, Object.assign({}, row.view, { state: 'cancelled', done: 0, total: 0 })); });
+
+    const data = new FormData();
+    // Fields must come before the file: the server reads them in order.
+    row.lang = langSelect.disabled ? '' : langSelect.value;
+    if (row.lang) data.append('lang', row.lang);
+    data.append('file', file, file.name);
+    xhr.send(data);
+  }
+  function fail(row, message) {
+    setView(row, Object.assign({}, row.view, { state: 'error', message: message, done: 0, total: 0 }));
+  }
+  function rekey(row, id) {
+    rows.delete(row.key);
+    row.key = id;
+    row.el.dataset.id = id;
+    rows.set(id, row);
+  }
+
+  // --- polling -----------------------------------------------------------------
+  function isTerminal(s) { return s === 'done' || s === 'error' || s === 'cancelled'; }
+  function anyActive() {
+    for (const r of rows.values()) if (!isTerminal(r.view.state)) return true;
+    return false;
+  }
+  function schedulePoll(delay) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, delay);
+  }
+  let firstPoll = true;
+  async function poll() {
+    try {
+      const res = await fetch('/api/jobs');
+      if (!res.ok) throw new Error(res.status);
+      const views = await res.json();
+      for (const v of views) {
+        let row = rows.get(v.id);
+        // A conversion of ours that is still going after a reload comes
+        // back; finished ones from earlier stay out of the way.
+        if (!row && firstPoll && !isTerminal(v.state)) row = addRow(v.id);
+        if (row) setView(row, v);
+      }
+      pollFailures = 0;
+      $('offline').classList.add('hidden');
+    } catch (_) {
+      if (++pollFailures >= 2 && anyActive()) $('offline').classList.remove('hidden');
+    }
+    firstPoll = false;
+    renderStage();
+    schedulePoll(anyActive() ? 400 : 4000);
+  }
+
+  // --- rows ------------------------------------------------------------------------
+  function addRow(key) {
+    const el = document.createElement('li');
+    el.className = 'file';
+    el.innerHTML =
+      '<span class="doc doc--pdf" aria-hidden="true"><svg><use href="#doc"/></svg><b>PDF</b></span>' +
+      '<div>' +
+        '<div class="file-head"><h3 class="name"></h3><span class="size"></span></div>' +
+        '<p class="file-status"></p>' +
+        '<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>' +
+        '<div class="file-actions"></div>' +
+        '<ul class="notes hidden"></ul>' +
+      '</div>';
+    filesList.prepend(el);
+    const row = { key, el, view: { state: 'uploading', done: 0, total: 0 }, file: null, xhr: null, downloaded: false, notesOpen: false, announced: -1 };
+    rows.set(key, row);
+    return row;
+  }
+  function removeRow(row) {
+    rows.delete(row.key);
+    row.el.remove();
+    renderTray();
+    renderStage();
+    focusPicker();
+  }
+  clearDone.addEventListener('click', () => {
+    for (const r of Array.from(rows.values())) if (isTerminal(r.view.state)) { rows.delete(r.key); r.el.remove(); }
+    renderTray();
+    focusPicker();
+  });
+
+  function setView(row, v) {
+    const prev = row.view;
+    row.view = v;
+    applyView(row);
+    announceChange(row, prev);
+    if (isTerminal(v.state) && !isTerminal(prev.state)) {
+      flash = { view: v, until: Date.now() + 4000 };
+      setTimeout(renderStage, 4100);
+    }
+    renderTray();
+    renderStage();
+  }
+
+  // Overall completion in [0,1]: the upload is the first tenth, reading
+  // the PDF the next quarter, turning pages into Word content the rest.
+  function overall(v) {
+    switch (v.state) {
+      case 'done': return 1;
+      case 'uploading': return v.total ? 0.10 * Math.min(1, v.done / v.total) : 0;
+      case 'queued': return 0.10;
+      case 'running': {
+        if (!v.total) return 0.10;
+        const f = Math.min(1, v.done / v.total);
+        return v.phase === 'reading' ? 0.10 + 0.27 * f : 0.37 + 0.63 * f;
+      }
+    }
+    return 0;
+  }
+  // Time left for the conversion itself, from elapsed time and completion.
+  function remaining(v) {
+    if (v.state !== 'running' || !v.elapsedMs) return null;
+    const f = (overall(v) - 0.10) / 0.90;
+    if (f < 0.05) return null;
+    return v.elapsedMs * (1 - f) / f;
+  }
+  function phaseText(v) {
+    if (v.state === 'uploading') return 'Uploading';
+    if (v.state === 'queued') return 'Waiting its turn';
+    if (!v.total) return 'Opening the PDF';
+    if (v.phase === 'reading') return 'Reading pages';
+    return v.stage === 'ocr' ? 'Recognising text' : 'Converting pages';
+  }
+  function detailText(v) {
+    if (v.state === 'uploading') return v.total ? fmtSize(v.done) + ' of ' + fmtSize(v.total) : '';
+    if (v.state === 'running' && v.total) return 'Page ' + v.done + ' of ' + v.total;
+    return '';
+  }
+
+  function applyView(row) {
+    const v = row.view, el = row.el;
+    el.className = 'file ' + v.state;
+    el.querySelector('.name').textContent = v.filename || '';
+    el.querySelector('.size').textContent = fmtSize(v.size);
+    el.querySelector('.file-status').textContent = statusText(v, row.lang);
+    // The badge says what the row holds: the PDF going in, the DOCX coming out.
+    const badge = el.querySelector('.doc');
+    const isDocx = v.state === 'done';
+    badge.className = 'doc ' + (isDocx ? 'doc--docx' : 'doc--pdf');
+    badge.querySelector('b').textContent = isDocx ? 'DOCX' : 'PDF';
+
+    const bar = el.querySelector('.bar');
+    const pct = Math.round(100 * overall(v));
+    bar.setAttribute('aria-valuenow', pct);
+    bar.setAttribute('aria-valuetext', pct + '%, ' + phaseText(v).toLowerCase());
+    bar.setAttribute('aria-label', 'Progress for ' + (v.filename || 'file'));
+    bar.firstElementChild.style.transform = 'scaleX(' + (pct / 100) + ')';
+
+    const actions = el.querySelector('.file-actions');
+    actions.textContent = '';
+    if (v.state === 'uploading' && row.xhr) {
+      actions.appendChild(button('Stop', 'link', () => row.xhr && row.xhr.abort()));
+    }
+    if (v.state === 'queued' || v.state === 'running') {
+      actions.appendChild(button('Stop', 'link', () => fetch('/api/jobs/' + v.id + '/cancel', { method: 'POST' }).then(() => schedulePoll(0))));
+    }
+    if (v.state === 'done' && v.download) {
+      const a = document.createElement('a');
+      a.className = 'btn btn--primary';
+      a.href = v.download;
+      a.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-download"/></svg>';
+      a.appendChild(document.createTextNode('Download Word file'));
+      a.setAttribute('download', '');
+      actions.appendChild(a);
+      if (!row.downloaded) { row.downloaded = true; a.click(); }
+    }
+    if ((v.state === 'error' || v.state === 'cancelled') && row.file) {
+      actions.appendChild(button('Try again', 'btn btn--quiet', () => { row.downloaded = false; upload(row.file, row); }));
+    }
+    const notes = (v.report && v.report.warnings) || [];
+    const notesEl = el.querySelector('.notes');
+    if (notes.length) {
+      const toggle = button((row.notesOpen ? 'Hide ' : 'Show ') + plural(notes.length, 'note'), 'link', () => {
+        row.notesOpen = !row.notesOpen; applyView(row);
+      });
+      toggle.setAttribute('aria-expanded', String(row.notesOpen));
+      actions.appendChild(toggle);
+      notesEl.textContent = '';
+      for (const n of notes) { const li = document.createElement('li'); li.textContent = n; notesEl.appendChild(li); }
+      notesEl.classList.toggle('hidden', !row.notesOpen);
+    } else {
+      notesEl.classList.add('hidden');
+    }
+    if (isTerminal(v.state)) {
+      const rm = button('Remove', 'link', () => removeRow(row));
+      rm.setAttribute('aria-label', 'Remove ' + (v.filename || 'file') + ' from the list');
+      actions.appendChild(rm);
+    }
+  }
+
+  function button(label, cls, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function statusText(v, lang) {
+    switch (v.state) {
+      case 'uploading': return 'Uploading' + (detailText(v) ? ': ' + detailText(v) : '');
+      case 'queued': return 'Waiting its turn';
+      case 'running': {
+        if (!v.total) return 'Opening the PDF';
+        let s = phaseText(v) + ': ' + detailText(v) + ' (' + Math.round(100 * overall(v)) + '%)';
+        const left = remaining(v);
+        if (left !== null) s += ', about ' + fmtDuration(left) + ' left';
+        return s;
+      }
+      case 'done': {
+        const r = v.report || {};
+        let s = 'Converted ' + plural(r.pages, 'page');
+        if (v.elapsedMs > 1500) s += ' in ' + fmtDuration(v.elapsedMs);
+        const parts = [];
+        if (r.ocrPages) parts.push(plural(r.ocrPages, 'page') + ' read with text recognition' + (lang ? ' in ' + langName(lang) : ''));
+        if (r.emptyPages) parts.push(plural(r.emptyPages, 'page') + ' came out empty');
+        if (parts.length) s += ' (' + parts.join('; ') + ')';
+        return s + '. The Word file downloaded.';
+      }
+      case 'cancelled': return 'Stopped';
+      case 'error': return "Couldn't convert this file: " + (v.message || 'unknown error');
+    }
+    return '';
+  }
+
+  // --- the card and the big preview ---------------------------------------------------
+  // Both show the same thing: the file being converted, how far along it is,
+  // and the page under the scanner. describe() works that out once and
+  // paint() puts it on either surface.
+  function activeView() {
+    for (const r of rows.values()) if (r.view.state === 'running') return r.view;
+    for (const r of rows.values()) if (r.view.state === 'uploading') return r.view;
+    for (const r of rows.values()) if (r.view.state === 'queued') return r.view;
+    return null;
+  }
+  function joinDetail() {
+    return Array.prototype.filter.call(arguments, Boolean).join(' · ');
+  }
+  // The card has the file list under it to explain a failure; the modal
+  // covers that list, so it gives the reason itself.
+  function describe(v, inModal) {
+    const d = { cls: [], fill: 0, pct: '', label: '', detail: '', ocr: false, title: '' };
+    switch (v.state) {
+      case 'done':
+        d.cls = ['done']; d.fill = 100; d.pct = 'Done'; d.label = 'Your Word file is ready';
+        return d;
+      case 'cancelled':
+        d.cls = ['cancelled']; d.fill = 100 * overall(v); d.pct = 'Stopped'; d.label = 'Stopped by you';
+        return d;
+      case 'error':
+        d.cls = ['stopped']; d.fill = 100 * overall(v); d.pct = 'Stopped'; d.label = "Couldn't convert this file";
+        d.detail = inModal ? (v.message || '') : 'see the file below';
+        return d;
+    }
+    const pct = 100 * overall(v);
+    const left = remaining(v);
+    d.label = phaseText(v);
+    d.detail = joinDetail(detailText(v), left === null ? '' : 'about ' + fmtDuration(left) + ' left');
+    d.ocr = v.stage === 'ocr';
+    const determinate = v.state === 'uploading' ? v.total > 0 : (v.state === 'running' && v.total > 0);
+    if (determinate) {
+      d.cls = d.ocr ? ['ocr'] : [];
+      d.fill = pct;
+      d.pct = Math.round(pct) + '%';
+      d.title = Math.round(pct) + '% converting your PDF';
+    } else {
+      // An unknown percentage is never shown as a number.
+      d.cls = ['indeterminate'];
+      d.fill = null;
+    }
+    return d;
+  }
+  function paint(ui, d) {
+    ui.fill.style.transform = d.fill === null ? '' : 'scaleX(' + Math.max(0, Math.min(100, d.fill)) / 100 + ')';
+    ui.pct.textContent = d.pct;
+    ui.status.textContent = d.label;
+    ui.detail.textContent = d.detail ? '· ' + d.detail : '';
+    ui.ocr.classList.toggle('hidden', !d.ocr);
+  }
+  const cardUI = { fill: stageFill, pct: stagePct, status: stageStatus, detail: stageDetail, ocr: ocrNote };
+  function stageState(classes) {
+    const keep = stage.classList.contains('dragover') ? ' dragover' : '';
+    stage.className = 'stage' + keep + classes.filter(Boolean).map((c) => ' ' + c).join('');
+  }
+
+  function renderStage() {
+    const active = activeView();
+    const shown = active || (flash && flash.until > Date.now() ? flash.view : null);
+    if (active) updatePreview(active);
+
+    if (shown) {
+      const d = describe(shown, false);
+      showBusy(shown);
+      stageState(['busy'].concat(d.cls));
+      paint(cardUI, d);
+      document.title = d.title || TITLE;
+      pvView = shown;
+    } else {
+      const wasBusy = stage.classList.contains('busy');
+      const focusWasInside = stageBusy.contains(document.activeElement);
+      stageBusy.classList.add('hidden');
+      stageIdle.classList.remove('hidden');
+      stageState([]);
+      stageFill.style.transform = '';
+      ocrNote.classList.add('hidden');
+      document.title = TITLE;
+      if (wasBusy && focusWasInside) pick.focus();
+    }
+
+    renderModal();
+  }
+
+  function showBusy(v) {
+    const focusWasInside = stageIdle.contains(document.activeElement);
+    stageIdle.classList.add('hidden');
+    stageBusy.classList.remove('hidden');
+    stageName.textContent = v.filename || '';
+    stageName.title = v.filename || '';
+    if (focusWasInside) pickMore.focus();
+  }
+
+  // --- the big preview -------------------------------------------------------------------
+  // Two steps. "ready": each chosen file is uploaded straight away with
+  // hold=1, so the server keeps it without converting; the dialog shows the
+  // first page, then the language for scanned pages, then one button that
+  // starts them all. Closing the dialog aborts the uploads and deletes what
+  // was kept. "progress": the file being converted under the scanner, with
+  // Stop; once nothing is converting it keeps showing how the last one ended.
+  const pv = $('pv'), pvFrame = $('pv-frame'), pvPage = $('pv-page'), pvWash = $('pv-wash');
+  const pvStop = $('pv-stop'), pvDownload = $('pv-download'), pvAnother = $('pv-another');
+  const pvConvert = $('pv-convert'), pvClose = $('pv-close');
+  const pvFirst = $('pv-first'), pvFirstPage = $('pv-first-page');
+  const pvUI = { fill: $('pv-fill'), pct: $('pv-pct'), status: $('pv-status'), detail: $('pv-detail'), ocr: $('pv-ocr') };
+  let pvView = null, pvMode = 'progress';
+  let pending = [];       // { file, xhr, id, state: 'uploading' | 'staged' | 'failed', loaded, total, pages, error }
+  let skippedNote = '';
+  let firstShown = null;  // the pending entry whose first page is on show
+  let seed = null;        // { id, img }: that page, handed on to the scanner
+
+  function prepare(files, skipped) {
+    if (!(pv.open && pvMode === 'ready')) discardPending();
+    pvMode = 'ready';
+    skippedNote = skipped || '';
+    for (const f of files) {
+      const p = { file: f, xhr: null, id: '', state: 'uploading', loaded: 0, total: f.size, pages: 0, error: '' };
+      pending.push(p);
+      stageFile(p);
+    }
+    renderReady();
+    renderModal();
+    if (!pv.open) pv.showModal();
+  }
+
+  function stageFile(p) {
+    const xhr = new XMLHttpRequest();
+    p.xhr = xhr;
+    xhr.open('POST', '/api/convert');
+    xhr.responseType = 'json';
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) { p.loaded = e.loaded; p.total = e.total; renderReady(); }
+    });
+    xhr.addEventListener('load', () => {
+      p.xhr = null;
+      const body = xhr.response || {};
+      if (xhr.status === 202 && body.id) {
+        p.id = body.id; p.pages = body.pages || 0; p.state = 'staged';
+        if (pending.indexOf(p) < 0) cancelStaged(p.id); // the dialog was closed meanwhile
+      } else {
+        p.state = 'failed';
+        p.error = body.error || ('The converter answered with an error (status ' + xhr.status + ').');
+      }
+      renderReady();
+    });
+    xhr.addEventListener('error', () => {
+      p.xhr = null; p.state = 'failed';
+      p.error = p.file.name + ' did not reach the converter. Check the connection and try again.';
+      renderReady();
+    });
+    const data = new FormData();
+    data.append('hold', '1'); // fields go before the file: the server reads them in order
+    data.append('file', p.file, p.file.name);
+    xhr.send(data);
+  }
+  function cancelStaged(id) {
+    fetch('/api/jobs/' + id + '/cancel', { method: 'POST' }).catch(() => {});
+  }
+  function discardPending() {
+    for (const p of pending) {
+      if (p.xhr) p.xhr.abort();
+      else if (p.state === 'staged') cancelStaged(p.id);
+    }
+    pending = [];
+    firstShown = null;
+    for (const img of Array.from(pvFirstPage.querySelectorAll('img'))) img.remove();
+    pvFirstPage.classList.remove('has-img');
+    pvFirst.style.removeProperty('--ar');
+  }
+
+  function fileMeta(p) {
+    const bits = [fmtSize(p.file.size)];
+    if (p.pages) bits.push(plural(p.pages, 'page'));
+    return bits.join(' · ');
+  }
+  function renderReady() {
+    if (pvMode !== 'ready') return;
+    const uploading = pending.filter((p) => p.state === 'uploading');
+    const staged = pending.filter((p) => p.state === 'staged');
+    const failed = pending.filter((p) => p.state === 'failed');
+
+    // What was chosen: one line for one file, a list for several.
+    const fileLine = $('pv-file'), list = $('pv-list');
+    fileLine.textContent = '';
+    list.textContent = '';
+    if (pending.length === 1) {
+      const p = pending[0];
+      const name = document.createElement('span'), meta = document.createElement('span');
+      name.className = 'name'; name.textContent = p.file.name; name.title = p.file.name;
+      meta.className = 'meta'; meta.textContent = fileMeta(p);
+      fileLine.append(name, meta);
+    } else {
+      fileLine.textContent = plural(pending.length, 'file');
+      for (const p of pending) {
+        const li = document.createElement('li');
+        const name = document.createElement('span'), meta = document.createElement('span');
+        name.className = 'name' + (p.state === 'failed' ? ' failed' : ''); name.textContent = p.file.name; name.title = p.file.name;
+        meta.className = 'meta'; meta.textContent = p.state === 'failed' ? 'not accepted' : fileMeta(p);
+        li.append(name, meta);
+        list.appendChild(li);
+      }
+    }
+    list.classList.toggle('hidden', pending.length < 2);
+    const problems = [skippedNote].concat(failed.map((p) => p.error)).filter(Boolean).join(' ');
+    $('pv-skipped').textContent = problems;
+    $('pv-skipped').classList.toggle('hidden', !problems);
+
+    // Upload progress over all files, on the page placeholder and the button.
+    let sent = 0, size = 0;
+    for (const p of uploading.concat(staged)) { size += p.total; sent += p.state === 'staged' ? p.total : p.loaded; }
+    const pct = size ? Math.floor(100 * sent / size) : 0;
+    $('pv-upload').classList.toggle('hidden', !uploading.length);
+    $('pv-upload-pct').textContent = pct + '%';
+    $('pv-upload-fill').style.transform = 'scaleX(' + pct / 100 + ')';
+
+    // The first page, as soon as a file is up.
+    const first = staged[0] || null;
+    if (first && firstShown !== first) showFirstPage(first);
+
+    // The language only once everything is up; then the button.
+    const ready = !uploading.length && staged.length > 0;
+    langRow.classList.toggle('hidden', !(ready && langAvailable));
+    pvConvert.disabled = !ready;
+    pvConvert.textContent = uploading.length ? 'Uploading ' + pct + '%'
+      : staged.length > 1 ? 'Convert ' + staged.length + ' files to Word' : 'Convert to Word';
+    if (ready && [pvClose, $('pv-name'), document.body].indexOf(document.activeElement) >= 0) pvConvert.focus();
+  }
+
+  function showFirstPage(p) {
+    firstShown = p;
+    const img = new Image();
+    img.alt = '';
+    img.className = 'scan__img';
+    img.decoding = 'async';
+    img.onload = () => { if (firstShown === p) addPageImage(pvFirstPage, $('pv-upload'), img, pvFirst); };
+    img.src = '/api/jobs/' + p.id + '/pages/1?size=large';
+  }
+
+  pvConvert.addEventListener('click', () => {
+    const lang = langAvailable && !langSelect.disabled ? langSelect.value : '';
+    const files = pending.filter((p) => p.state === 'staged');
+    const shown = pvFirstPage.querySelector('img');
+    seed = firstShown && shown ? { id: firstShown.id, img: shown } : null;
+    pending = [];
+    firstShown = null;
+    pvMode = 'progress';
+    for (const p of files) startStaged(p, lang);
+    renderModal();
+    $('pv-name').focus();
+  });
+  function startStaged(p, lang) {
+    const row = addRow(p.id);
+    row.file = p.file;
+    row.lang = lang;
+    row.el.dataset.id = p.id;
+    setView(row, { id: p.id, filename: p.file.name, size: p.file.size, state: 'queued', done: 0, total: 0 });
+    const body = new URLSearchParams();
+    if (lang) body.set('lang', lang);
+    fetch('/api/jobs/' + p.id + '/start', { method: 'POST', body: body })
+      .then((r) => r.json().then((v) => ({ ok: r.ok, v: v })))
+      .then((res) => {
+        if (res.ok) { setView(row, res.v); schedulePoll(0); }
+        else fail(row, res.v.error || 'The conversion could not be started.');
+      })
+      .catch(() => fail(row, 'The converter could not be reached. Check the connection and try again.'));
+  }
+  pv.addEventListener('close', () => {
+    if (pvMode === 'ready') { discardPending(); pvMode = 'progress'; renderModal(); }
+  });
+
+  function openPreview() {
+    if (pv.open) return;
+    // Show the card's picture straight away while the sharper one loads.
+    const current = scanPage.querySelector('img');
+    if (current && !pvPage.querySelector('img')) addPageImage(pvPage, pvWash, current.cloneNode(), pvFrame);
+    renderModal();
+    pv.showModal();
+    loadPreview();
+  }
+  function renderModal() {
+    pv.dataset.mode = pvMode;
+    if (pvMode === 'ready') {
+      pv.className = 'pv';
+      $('pv-name').textContent = 'Convert to Word';
+      return;
+    }
+    if (!pvView) return;
+    const v = pvView, d = describe(v, true);
+    pv.className = 'pv' + d.cls.map((c) => ' ' + c).join('');
+    $('pv-name').textContent = v.filename || '';
+    paint(pvUI, d);
+    const busy = !isTerminal(v.state);
+    pvStop.classList.toggle('hidden', !busy);
+    pvDownload.classList.toggle('hidden', !(v.state === 'done' && v.download));
+    if (v.download) pvDownload.href = v.download;
+    pvAnother.classList.toggle('hidden', busy);
+    if (v.state === 'done') {
+      const r = v.report || {};
+      let pages = plural(r.pages, 'page');
+      if (r.ocrPages) pages += r.ocrPages === r.pages ? ', read with text recognition' : ' (' + r.ocrPages + ' read with text recognition)';
+      const facts = [(v.filename || 'document.pdf').replace(/\.pdf$/i, '') + '.docx', pages];
+      if (v.elapsedMs > 1500) facts.push('done in ' + fmtDuration(v.elapsedMs));
+      $('pv-happy-sub').textContent = facts.join(' · ');
+      // Once per file, and only when someone is looking.
+      if (pv.open && v.id && !celebrated.has(v.id)) { celebrated.add(v.id); celebrate(); }
+    }
+  }
+  const celebrated = new Set();
+  function celebrate() {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const box = $('pv-party');
+    box.textContent = '';
+    const colours = ['var(--accent)', 'var(--ok)', 'var(--docx)', '#F5B400'];
+    const n = 36;
+    for (let i = 0; i < n; i++) {
+      const bit = document.createElement('i');
+      const angle = (2 * Math.PI * i) / n + Math.random() * 0.4;
+      const reach = 140 + Math.random() * 200;
+      bit.style.setProperty('--x', Math.round(Math.cos(angle) * reach) + 'px');
+      bit.style.setProperty('--y', Math.round(Math.sin(angle) * reach * 0.6 + 120 + Math.random() * 80) + 'px');
+      bit.style.setProperty('--r', Math.round(Math.random() * 900 - 450) + 'deg');
+      bit.style.setProperty('--c', colours[i % colours.length]);
+      bit.style.setProperty('--d', Math.round(Math.random() * 150) + 'ms');
+      box.appendChild(bit);
+    }
+    setTimeout(() => { box.textContent = ''; }, 2200);
+  }
+  // Stops the file the preview is showing: an upload is aborted, a queued
+  // or running conversion is cancelled on the server.
+  function stopView(v) {
+    for (const r of rows.values()) {
+      if (r.view !== v && !(v.id && r.view.id === v.id)) continue;
+      if (r.view.state === 'uploading' && r.xhr) r.xhr.abort();
+      else if (r.view.id) fetch('/api/jobs/' + r.view.id + '/cancel', { method: 'POST' }).then(() => schedulePoll(0));
+      return;
+    }
+  }
+  $('scan-open').addEventListener('click', openPreview);
+  $('pv-close').addEventListener('click', () => pv.close());
+  pv.addEventListener('click', (e) => { if (e.target === pv) pv.close(); }); // the backdrop
+  pvStop.addEventListener('click', () => { if (pvView) stopView(pvView); });
+  pvAnother.addEventListener('click', () => { pv.close(); fileInput.click(); });
+
+  // --- the page under the scanner -----------------------------------------------
+  // Shows the page the conversion is on: while reading, the next page to be
+  // read; after that, the page just finished (text recognition runs several
+  // pages at once, so there is no single "current" one). At most one image
+  // is in flight and a new one is fetched at most every 0.7 s, however fast
+  // the pages go by. The card gets a thumbnail; while the big preview is
+  // open both get the large picture.
+  const scanPage = $('scan-page'), scanWash = $('scan-wash');
+  let scan = { job: '', page: 0, shownPage: 0, shownLarge: false, loading: false, last: 0, timer: 0 };
+  function previewPage(v) {
+    if (v.state !== 'running' || !v.total || !v.id) return 0;
+    return v.phase === 'reading' ? Math.min(v.done + 1, v.total) : (v.page || 1);
+  }
+  function updatePreview(v) {
+    if ((v.id || '') !== scan.job) {
+      clearTimeout(scan.timer);
+      scan = { job: v.id || '', page: 0, shownPage: 0, shownLarge: false, loading: false, last: 0, timer: 0 };
+      for (const frame of [scanPage, pvPage]) {
+        for (const img of Array.from(frame.querySelectorAll('img'))) img.remove();
+        frame.classList.remove('has-img');
+      }
+      pvFrame.style.removeProperty('--ar');
+      if (seed && seed.id === scan.job) {
+        addPageImage(scanPage, scanWash, seed.img.cloneNode());
+        addPageImage(pvPage, pvWash, seed.img.cloneNode(), pvFrame);
+      }
+    }
+    const n = previewPage(v);
+    if (n) scan.page = n;
+    loadPreview();
+  }
+  function loadPreview() {
+    const p = scan, large = pv.open;
+    if (p.loading || !p.page || (p.page === p.shownPage && (p.shownLarge || !large))) return;
+    const wait = p.last + 700 - Date.now();
+    if (wait > 0) { clearTimeout(p.timer); p.timer = setTimeout(loadPreview, wait); return; }
+    const page = p.page;
+    p.loading = true;
+    const img = new Image();
+    img.alt = '';
+    img.className = 'scan__img';
+    img.decoding = 'async';
+    const settle = (ok) => {
+      if (p !== scan) return; // a newer file took the scanner over
+      p.loading = false; p.shownPage = page; p.shownLarge = large; p.last = Date.now();
+      if (ok) {
+        addPageImage(scanPage, scanWash, img);
+        addPageImage(pvPage, pvWash, img.cloneNode(), pvFrame);
+      }
+      loadPreview();
+    };
+    img.onload = () => settle(true);
+    img.onerror = () => settle(false);
+    img.src = '/api/jobs/' + p.job + '/pages/' + page + (large ? '?size=large' : '');
+  }
+  function addPageImage(frame, before, img, sizer) {
+    const old = Array.from(frame.querySelectorAll('img'));
+    frame.insertBefore(img, before);
+    frame.classList.add('has-img');
+    setTimeout(() => old.forEach((o) => o.remove()), 300);
+    if (!sizer) return;
+    // The modal draws the page at its own shape.
+    const fit = () => { if (img.naturalWidth) sizer.style.setProperty('--ar', String(img.naturalWidth / img.naturalHeight)); };
+    if (img.complete) fit(); else img.addEventListener('load', fit, { once: true });
+  }
+
+  // --- the tray ------------------------------------------------------------------------
+  function renderTray() {
+    const all = Array.from(rows.values());
+    trayHead.classList.toggle('hidden', all.length === 0);
+    if (!all.length) return;
+    const done = all.filter((r) => r.view.state === 'done').length;
+    const failed = all.filter((r) => r.view.state === 'error').length;
+    const finished = all.filter((r) => isTerminal(r.view.state)).length;
+    let s = plural(all.length, 'file');
+    if (done) s += ', ' + done + ' converted';
+    if (failed) s += ', ' + failed + ' failed';
+    traySummary.textContent = s;
+    clearDone.classList.toggle('hidden', finished === 0);
+  }
+
+  // --- screen reader announcements ------------------------------------------------
+  // State changes and every quarter of progress; not every poll.
+  function announce(text) {
+    announcer.textContent = '';
+    setTimeout(() => { announcer.textContent = text; }, 50);
+  }
+  function announceChange(row, prev) {
+    const v = row.view, name = v.filename || 'file';
+    if (v.state !== prev.state) {
+      row.announced = -1;
+      switch (v.state) {
+        case 'uploading': if (prev.state !== 'uploading') announce('Uploading ' + name); break;
+        case 'running': announce('Converting ' + name); break;
+        case 'done': announce(name + ' is ready. The Word file is downloading.'); break;
+        case 'error': announce(name + " couldn't be converted. " + (v.message || '')); break;
+        case 'cancelled': announce(name + ' stopped.'); break;
+      }
+      return;
+    }
+    if (v.state === 'running') {
+      const quarter = Math.floor(overall(v) * 4);
+      if (quarter > 0 && quarter > row.announced) {
+        row.announced = quarter;
+        announce(name + ': ' + Math.round(100 * overall(v)) + ' percent, ' + phaseText(v).toLowerCase());
+      }
+    }
+  }
+
+  // --- formatting ---------------------------------------------------------------------
+  function plural(n, word) { n = n || 0; return n + ' ' + word + (n === 1 ? '' : 's'); }
+  function fmtSize(b) {
+    if (!b && b !== 0) return '';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+  function fmtDuration(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return s + ' s';
+    return Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
+  }
+
+  renderTray();
+  poll();
+})();
+</script>{{end}}

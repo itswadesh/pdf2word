@@ -1,0 +1,49 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>What happens to your files</h1>
+      <p class="lede">No account, nothing added to your file, and everything deleted on a timer. The details depend on where this converter runs, and are below.</p>
+    </div>
+  </section>
+
+  <section class="section" id="files">
+    <div class="wrap narrow">
+      <h2>Your PDFs and Word files</h2>
+      <div class="prose">
+        <p>%FILES_ANSWER%</p>
+        <p>%PRIVACY%</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="not">
+    <div class="wrap narrow">
+      <h2>What this converter does not do</h2>
+      <ul class="checklist">
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No account, no email address and no sign-up.</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No advertising, analytics or tracking scripts, and nothing loaded from other websites.</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>One cookie, which only lets this browser find the files it uploaded. If you pick a language for scanned pages, your browser remembers that choice too.</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Nothing is added to the Word file: no watermark and no link back.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="source">
+    <div class="wrap narrow">
+      <h2>Check it yourself</h2>
+      <div class="prose">
+        <p>The converter is open source, so the code that handles your files is there for anyone to read. <a href="https://github.com/itswadesh/pdf2word">The source code is on GitHub</a>, and you can run the same program on your own computer, where your files never leave it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}

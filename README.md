@@ -118,6 +118,14 @@ on, default 9090, as Cloud Run, Fly and Render set it), `PDF2WORD_LANG`
 (the OCR language the page starts on, default `eng`) and `PUBLIC_URL` (the address the page is
 reachable at from outside). They are set in the compose file.
 
+The site has seven pages, all served by the same program: the converter at
+`/` and on three pages written for particular searches (`/pdf-to-docx`,
+`/scanned-pdf-to-word`, and `/odia-pdf-to-word`, whose converter starts
+on Odia), and `/how-it-works`, `/faq` and `/privacy`. They share one
+layout (`internal/web/static/layout.html`) and the converter
+(`static/tool.html`); each page's words are in `static/pages/`, and its
+path, title and description in `internal/web/pages.go`.
+
 Set `PUBLIC_URL` once a domain points at the service, for example
 `PUBLIC_URL=https://pdf2word.example.com`. It fills in the canonical link
 and the sharing tags in the page and turns on `/sitemap.xml`; `/robots.txt`

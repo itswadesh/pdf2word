@@ -4,7 +4,6 @@ package web
 
 import (
 	"context"
-	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -29,7 +28,10 @@ import (
 	"pdf2word/internal/ocr"
 )
 
-//go:embed static/index.html
+// The site: a shared layout, the converter, and one content file per page
+// (see pages.go).
+//
+//go:embed static
 var static embed.FS
 
 // Config configures a Server.
@@ -67,9 +69,8 @@ type Server struct {
 	ownsDir bool
 	preview previewer // thumbnails of the page being converted
 
-	page     []byte        // index.html with the public URL and privacy copy filled in
-	etag     string        // strong validator for that page
-	stop     chan struct{} // closed by Close to end the retention sweeper
+	pages    map[string]*builtPage // by path, rendered with this deployment's copy
+	stop     chan struct{}         // closed by Close to end the retention sweeper
 	stopOnce sync.Once
 
 	mu         sync.Mutex
@@ -126,11 +127,7 @@ func New(cfg Config) (*Server, error) {
 		cfg.Logf = func(string, ...any) {}
 	}
 	cfg.PublicURL = strings.TrimRight(strings.TrimSpace(cfg.PublicURL), "/")
-	page, err := static.ReadFile("static/index.html")
-	if err != nil {
-		return nil, fmt.Errorf("page missing from build: %w", err)
-	}
-	// The page must tell the truth about where the file goes, and that
+	// The pages must tell the truth about where the file goes, and that
 	// depends on who can reach this server. A copy bound to loopback only
 	// converts the operator's own files on their own machine; one reachable
 	// from the network is taking documents from other people.
@@ -138,12 +135,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.AllowRemote {
 		privacy, filesAnswer = hostedPrivacyCopy, hostedFilesAnswer
 	}
-	for from, to := range map[string]string{
-		"%PUBLIC_URL%":   cfg.PublicURL,
-		"%PRIVACY%":      privacy,
-		"%FILES_ANSWER%": filesAnswer,
-	} {
-		page = []byte(strings.ReplaceAll(string(page), from, to))
+	pages, err := buildPages(cfg.PublicURL, privacy, filesAnswer)
+	if err != nil {
+		return nil, fmt.Errorf("pages: %w", err)
 	}
 	ownsDir := false
 	if cfg.WorkDir == "" {
@@ -163,13 +157,18 @@ func New(cfg Config) (*Server, error) {
 		jobs:     newJobStore(cfg.WorkDir),
 		sem:      make(chan struct{}, 1),
 		ownsDir:  ownsDir,
-		page:     page,
-		etag:     fmt.Sprintf(`"%x"`, sha256.Sum256(page)),
+		pages:    pages,
 		stop:     make(chan struct{}),
 		lastSeen: time.Now(),
 	}
 	go s.sweep()
-	s.mux.HandleFunc("GET /{$}", s.handleIndex)
+	for path, p := range s.pages {
+		pattern := "GET " + path
+		if path == "/" {
+			pattern = "GET /{$}"
+		}
+		s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) { s.servePage(w, r, p) })
+	}
 	s.mux.HandleFunc("GET /robots.txt", s.handleRobots)
 	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
@@ -201,9 +200,9 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 		s.touch()
-		// The page itself is identical for every visitor, so it may be cached
-		// by the browser and by a CDN. Everything else is per-visitor state.
-		if r.URL.Path == "/" {
+		// The pages are identical for every visitor, so they may be cached by
+		// the browser and by a CDN. Everything else is per-visitor state.
+		if _, page := s.pages[r.URL.Path]; page {
 			w.Header().Set("Cache-Control", pageCacheControl)
 		} else {
 			w.Header().Set("Cache-Control", "no-store")
@@ -304,17 +303,17 @@ func (s *Server) clientID(r *http.Request) string {
 	return ""
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (s *Server) servePage(w http.ResponseWriter, r *http.Request, p *builtPage) {
 	s.mu.Lock()
 	s.pageOpened = true
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("ETag", s.etag)
-	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, s.etag) {
+	w.Header().Set("ETag", p.etag)
+	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, p.etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	w.Write(s.page)
+	w.Write(p.body)
 }
 
 // handleRobots keeps crawlers out of the job API and points them at the
@@ -328,19 +327,28 @@ func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, body)
 }
 
-// handleSitemap lists the one page this server has. Without a public
-// address there is nothing to submit, so there is no sitemap either.
+// handleSitemap lists the site's pages. Without a public address there is
+// nothing to submit, so there is no sitemap either.
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.PublicURL == "" {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>%s/</loc><changefreq>monthly</changefreq><priority>1.0</priority></url>
-</urlset>
-`, html.EscapeString(s.cfg.PublicURL))
+`)
+	for _, p := range sitePages {
+		priority := "0.8"
+		if p.Home {
+			priority = "1.0"
+		}
+		fmt.Fprintf(&b, "  <url><loc>%s%s</loc><changefreq>monthly</changefreq><priority>%s</priority></url>\n",
+			html.EscapeString(s.cfg.PublicURL), html.EscapeString(p.Path), priority)
+	}
+	b.WriteString("</urlset>\n")
+	io.WriteString(w, b.String())
 }
 
 // InfoView tells the page about the environment.

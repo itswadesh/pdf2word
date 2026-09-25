@@ -1,0 +1,93 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>Free PDF to Word converter</h1>
+      <p class="lede">Upload a PDF and get an editable Word document back, laid out like the original.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap">
+      <h2>How to convert a PDF to Word</h2>
+      <ol class="steps">
+        <li><span class="step-n" aria-hidden="true">1</span><div><strong>Choose your PDF</strong><p>Pick it with the button above, or drop it anywhere on this page. Several at once is fine.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Convert it</strong><p>Press Convert to Word, after picking the language if the PDF is a scan. Each page shows as it is read, with the time left.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">3</span><div><strong>Open it in Word</strong><p>The Word file downloads by itself. Edit it in Word, Google Docs, LibreOffice or Pages.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap grid-3">
+      <section class="feature">
+        <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-layout"/></svg></span>
+        <h2>PDF to DOCX, same pages</h2>
+        <p>Fonts, headings, tables and pictures come across, every line breaks where the PDF broke it, and the DOCX has the same pages as the PDF.</p>
+        <a class="go" href="/pdf-to-docx">What the DOCX keeps<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </section>
+      <section class="feature">
+        <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-scan"/></svg></span>
+        <h2>Scanned PDFs, read with OCR</h2>
+        <p>Pages that are only pictures are read with text recognition, so a scan or a photo of paper becomes words you can edit.</p>
+        <a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </section>
+      <section class="feature">
+        <span class="feature__icon feature__icon--script" aria-hidden="true">ଓ</span>
+        <h2>Odia (ଓଡ଼ିଆ) and English</h2>
+        <p>Odia text recognition is built in next to English, and pages that mix the two work too.</p>
+        <a class="go" href="/odia-pdf-to-word">Odia PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </section>
+    </div>
+  </section>
+
+  <div class="section">
+    <div class="wrap features">
+      <section class="feature feature--wide">
+        <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span>
+        <h2>Free, with nothing to sign up for</h2>
+        <p>%PRIVACY%</p>
+      </section>
+    </div>
+  </div>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions</h2>
+      <div class="faq-list">
+        <details class="qa">
+          <summary>Is this PDF to DOCX converter really free?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Yes. It is open source, there is no paid tier, and nothing is added to the file you get back.</p>
+        </details>
+        <details class="qa">
+          <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+        </details>
+        <details class="qa">
+          <summary>Can it convert a scanned PDF to Word?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Yes. Pages without selectable text are recognised automatically, including files where a print driver turned the text into outlines.</p>
+        </details>
+        <details class="qa">
+          <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+        </details>
+        <details class="qa">
+          <summary>What happens to my files?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>%FILES_ANSWER%</p>
+        </details>
+      </div>
+      <p class="more"><a href="/faq">All questions about converting PDF to Word</a></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

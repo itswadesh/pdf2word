@@ -1,0 +1,75 @@
+{{define "content"}}
+  <section class="hero hero--page">
+    <div class="wrap narrow">
+      <h1>How the converter works</h1>
+      <p class="lede">What happens to a PDF on its way to Word, from the first page read to the DOCX that downloads.</p>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap">
+      <h2>Convert a PDF to Word in three steps</h2>
+      <ol class="steps">
+        <li><span class="step-n" aria-hidden="true">1</span><div><strong>Choose your PDF</strong><p>Open the <a href="/">converter</a> and pick the file, or drop it anywhere on that page. Several at once is fine.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">2</span><div><strong>Convert it</strong><p>Pick the language if the PDF is a scan and press Convert to Word. Each page shows as it is read, with the time left.</p></div></li>
+        <li><span class="step-n" aria-hidden="true">3</span><div><strong>Open it in Word</strong><p>The Word file downloads by itself. Edit it in Word, Google Docs, LibreOffice or Pages.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="pages">
+    <div class="wrap narrow">
+      <h2>What happens to each page</h2>
+      <div class="prose">
+        <ol>
+          <li><strong>The text is read with PDFium,</strong> the PDF engine inside Chrome: every character with its position and font, every picture with its place, and the lines that draw tables.</li>
+          <li><strong>Characters become lines and lines become paragraphs,</strong> each with the alignment, indent and spacing it had. Wrapped prose is joined again, while list items and labels stay separate. Grids of ruling lines become Word tables with the text in the right cells.</li>
+          <li><strong>A page with almost no text is read with OCR.</strong> It is drawn as a picture and passed to Tesseract, which returns every word and where it sits, and those words go through the same layout step.</li>
+          <li><strong>Everything is written as Word paragraphs, tables and pictures,</strong> with a page break between pages and the page size, orientation and margins of the PDF.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="speed">
+    <div class="wrap narrow">
+      <h2>How long it takes</h2>
+      <div class="prose">
+        <p>A PDF with text you can select converts in seconds. Drawing a page takes about a tenth of a second and reading it with OCR one to two seconds, and several scanned pages are read at once, so a 250-page scan takes a couple of minutes on a computer with several cores.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="devices">
+    <div class="wrap">
+      <h2>Convert PDF to Word on any device</h2>
+      <div class="grid-3">
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-globe"/></svg></span>
+          <h3>In your browser</h3>
+          <p>The converter is a web page, so it works the same on Windows, macOS, Linux, Android and iPhone. On a phone, choose the PDF from your files and the Word document is saved to your downloads.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-monitor"/></svg></span>
+          <h3>On your own computer</h3>
+          <p>The whole converter is one open source program. On Windows it carries the PDF engine and the text recognition inside it, so it converts without an internet connection and the files never leave the computer.</p>
+        </section>
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-server"/></svg></span>
+          <h3>On your own server</h3>
+          <p>The source comes with a Docker setup, so an office or a school can run its own copy for everyone on its network. <a href="https://github.com/itswadesh/pdf2word">The source code is on GitHub</a>.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <a class="btn btn--primary btn--lg" href="/">Convert a PDF to Word</a>
+      </div>
+    </div>
+  </section>
+{{end}}

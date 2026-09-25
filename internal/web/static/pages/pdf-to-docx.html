@@ -1,0 +1,106 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>PDF to DOCX converter</h1>
+      <p class="lede">Turn a PDF into a DOCX you can edit in Word, with the fonts, tables, pictures and pages of the original.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="layout">
+    <div class="wrap">
+      <h2>PDF to DOCX without losing the layout</h2>
+      <p class="lead">The DOCX is laid out like the PDF, not poured into one long column. Every line breaks where the PDF broke it and every page break falls where it fell, so the Word document has the same pages as the PDF. A typeface your computer does not have is replaced by Times New Roman, Arial or Courier New, with the spacing adjusted so each line still fits.</p>
+      <div class="grid-2">
+        <section class="feature">
+          <h3>Stays as it was</h3>
+          <ul class="checklist">
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Fonts, sizes, bold and italic</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Headings, indents, alignment and tab stops</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Tables drawn with lines, as real Word tables you can type in</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Pictures, at their size and in their place</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Page size, margins, line breaks and page breaks</li>
+          </ul>
+        </section>
+        <section class="feature">
+          <h3>Not carried over yet</h3>
+          <ul class="checklist checklist--not">
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Text colours</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Tables drawn without lines, which come across as plain text</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Pages set in two or three columns, which are read across rather than down each column</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Running headers and footers, which stay in the body of the page</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg>Bold and italic on scanned pages</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="docx">
+    <div class="wrap narrow">
+      <h2>What is a DOCX file?</h2>
+      <div class="prose">
+        <p>DOCX is the format Microsoft Word has saved in since 2007. It is an open standard, Office Open XML (ISO/IEC 29500), so Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+        <p>Inside, a DOCX is a zip of XML files that describe paragraphs, tables and pictures. That is why a converter can rebuild a PDF page as real Word content you can type in, rather than a picture of the page.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pdf-or-word">
+    <div class="wrap">
+      <h2>PDF or Word: which do you need?</h2>
+      <p class="lead">Keep the PDF for sending, printing and signing, when the page has to look the same everywhere. Convert it to Word when you need to change the words: update a CV, correct a contract, reuse the tables in a report or quote a scanned letter.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="compare-caption">
+        <table class="compare">
+          <caption id="compare-caption" class="visually-hidden">PDF and Word (DOCX) compared</caption>
+          <thead>
+            <tr><th scope="col"><span class="visually-hidden">Question</span></th><th scope="col">PDF</th><th scope="col">Word (DOCX)</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Made for</th><td>Reading and printing a page that looks the same on every screen</td><td>Writing and editing</td></tr>
+            <tr><th scope="row">Changing the text</th><td>Needs a PDF editor, and even then it is fiddly</td><td>Click and type</td></tr>
+            <tr><th scope="row">When you add a sentence</th><td>Nothing makes room for it</td><td>The text after it moves along</td></tr>
+            <tr><th scope="row">Opens in</th><td>Any web browser or PDF reader</td><td>Word, Google Docs, LibreOffice Writer and Apple Pages</td></tr>
+            <tr><th scope="row">Standard</th><td>ISO 32000</td><td>Office Open XML, ISO/IEC 29500</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions about PDF to DOCX</h2>
+      <div class="faq-list">
+        <details class="qa">
+          <summary>Will the Word document look like the PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Close to it. Lines break in the same places and the page count matches. A typeface your computer does not have is swapped for Times New Roman, Arial or Courier New, and the spacing is adjusted so the lines still fit.</p>
+        </details>
+        <details class="qa">
+          <summary>Does it keep tables?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Tables drawn with lines become real Word tables you can type in, with the text in the right cells. Tables with no lines come across as plain text.</p>
+        </details>
+        <details class="qa">
+          <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+        </details>
+        <details class="qa">
+          <summary>Can it turn a Word file back into a PDF?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>No, it only goes from PDF to Word. Word, Google Docs and LibreOffice can all save a document as a PDF themselves.</p>
+        </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}
