@@ -69,7 +69,7 @@ func TestSitePages(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("%s: missing %s", p.Path, want)
 		}
-		for _, leftover := range []string{"%PUBLIC_URL%", "%PRIVACY%", "%FILES_ANSWER%", "{{"} {
+		for _, leftover := range []string{"%PUBLIC_URL%", "%PRIVACY%", "%FILES_ANSWER%", "%ANALYTICS%", "{{"} {
 			if strings.Contains(page, leftover) {
 				t.Errorf("%s: %q left in the page", p.Path, leftover)
 			}

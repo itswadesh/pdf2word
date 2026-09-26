@@ -1130,6 +1130,37 @@
     .btn--primary { outline: 2px solid var(--on-accent); outline-offset: -4px; }
   }
 </style>
+{{if .GAID}}<script>
+  // Google Analytics 4: page views only. It queues gtag calls right away so
+  // nothing is lost, but does not fetch gtag.js until the page has loaded
+  // and gone idle, so it never competes with the converter for bandwidth or
+  // the main thread. It is never told a file name, a file's contents or
+  // anything about a conversion.
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '{{.GAID}}');
+  (function () {
+    function loadGtag() {
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id={{.GAID}}';
+      document.head.appendChild(s);
+    }
+    function idle() {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(loadGtag, { timeout: 3000 });
+      } else {
+        setTimeout(loadGtag, 1200);
+      }
+    }
+    if (document.readyState === 'complete') {
+      idle();
+    } else {
+      window.addEventListener('load', idle);
+    }
+  })();
+</script>{{end}}
 </head>
 <body>
 <div class="drag-ring" aria-hidden="true"></div>

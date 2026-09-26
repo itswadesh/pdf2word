@@ -47,6 +47,10 @@ type pageData struct {
 	pageDef
 	TitleJSON, DescriptionJSON, NameJSON string
 	Updated, Published                   string
+	// GAID is this deployment's GA4 Measurement ID, or "" on a deployment
+	// that must not load Google Analytics (see googleAnalyticsID). The
+	// layout only emits the tag when it is set.
+	GAID string
 }
 
 func jsonString(s string) string {
@@ -169,7 +173,7 @@ var sitePages = []pageDef{
 	{
 		Path: "/privacy", File: "privacy.html", Name: "Privacy",
 		Title:       "Privacy - What Happens to Your PDF Files",
-		Description: "How long your PDFs and Word files are kept, who can see them, and what this converter never does: no account, no tracking and nothing added to files.",
+		Description: "How long your PDFs and Word files are kept, who can see them, and what this converter never does: no account, and your files are never sent to Google.",
 	},
 }
 
@@ -180,24 +184,25 @@ type builtPage struct {
 }
 
 // buildPages renders every page, and the not-found page, with this
-// deployment's public address and privacy copy filled in.
-func buildPages(publicURL, privacy, filesAnswer string) (map[string]*builtPage, *builtPage, error) {
+// deployment's public address, privacy copy and analytics disclosure filled
+// in.
+func buildPages(publicURL, privacy, filesAnswer, analytics, gaID string) (map[string]*builtPage, *builtPage, error) {
 	out := make(map[string]*builtPage, len(sitePages))
 	for _, p := range sitePages {
-		b, err := buildPage(p, publicURL, privacy, filesAnswer)
+		b, err := buildPage(p, publicURL, privacy, filesAnswer, analytics, gaID)
 		if err != nil {
 			return nil, nil, err
 		}
 		out[p.Path] = b
 	}
-	notFound, err := buildPage(notFoundPage, publicURL, privacy, filesAnswer)
+	notFound, err := buildPage(notFoundPage, publicURL, privacy, filesAnswer, analytics, gaID)
 	if err != nil {
 		return nil, nil, err
 	}
 	return out, notFound, nil
 }
 
-func buildPage(p pageDef, publicURL, privacy, filesAnswer string) (*builtPage, error) {
+func buildPage(p pageDef, publicURL, privacy, filesAnswer, analytics, gaID string) (*builtPage, error) {
 	t, err := template.ParseFS(static, "static/layout.html", "static/tool.html", "static/pages/"+p.File)
 	if err != nil {
 		return nil, fmt.Errorf("page %s: %w", p.Path, err)
@@ -209,6 +214,7 @@ func buildPage(p pageDef, publicURL, privacy, filesAnswer string) (*builtPage, e
 		NameJSON:        jsonString(p.Name),
 		Updated:         siteUpdated,
 		Published:       articlesPublished,
+		GAID:            gaID,
 	}
 	data.Title = html.EscapeString(p.Title)
 	data.Description = html.EscapeString(p.Description)
@@ -221,6 +227,7 @@ func buildPage(p pageDef, publicURL, privacy, filesAnswer string) (*builtPage, e
 		"%PUBLIC_URL%":   publicURL,
 		"%PRIVACY%":      privacy,
 		"%FILES_ANSWER%": filesAnswer,
+		"%ANALYTICS%":    analytics,
 	} {
 		body = strings.ReplaceAll(body, from, to)
 	}

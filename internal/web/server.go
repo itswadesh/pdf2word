@@ -120,6 +120,32 @@ const (
 		"uploaded a file can see it or download the result, and nothing is passed to anyone else."
 )
 
+// googleAnalyticsID is the wooquery.com GA4 Measurement ID. It is the one
+// place the ID is written down: the layout's tag and the privacy page's
+// disclosure of the cookies GA sets both build off it.
+const googleAnalyticsID = "G-LFQ1ZGYTMT"
+
+// gaCookieName is the per-property cookie GA4 sets alongside "_ga": Google
+// derives it from the Measurement ID by dropping the "G-" prefix.
+var gaCookieName = "_ga_" + strings.TrimPrefix(googleAnalyticsID, "G-")
+
+// The two versions of the page's analytics disclosure, on the same footing
+// as the privacy copy above: a local, loopback copy of the converter never
+// loads Google Analytics (or anything else from Google) and must not claim
+// otherwise, and it must not report a stranger's use of their own machine to
+// wooquery.com's analytics.
+var (
+	localAnalyticsCopy = "This copy of the converter runs on your own computer and does not load Google " +
+		"Analytics, or any other script from Google: nothing about your visit is sent anywhere."
+	hostedAnalyticsCopy = "This site uses Google Analytics 4 (run by Google) to see how many people visit " +
+		"and which pages they read. It records the page you viewed, the page that sent you here, your " +
+		"device and browser, and an approximate location from your IP address. It sets two cookies, " +
+		"\"_ga\" and \"" + gaCookieName + "\", which Google keeps for up to two years by default. See " +
+		"<a href=\"https://policies.google.com/privacy\">Google's privacy policy</a> for how Google handles " +
+		"that data. Your uploaded files and their contents are never sent to Google or included in any " +
+		"analytics event."
+)
+
 // New prepares a Server. Call Close to remove its working directory.
 func New(cfg Config) (*Server, error) {
 	if cfg.MaxUploadBytes <= 0 {
@@ -133,11 +159,13 @@ func New(cfg Config) (*Server, error) {
 	// depends on who can reach this server. A copy bound to loopback only
 	// converts the operator's own files on their own machine; one reachable
 	// from the network is taking documents from other people.
-	privacy, filesAnswer := localPrivacyCopy, localFilesAnswer
+	// Analytics rides the same switch: only a deployment reachable from the
+	// network (wooquery.com) loads GA4 or claims to.
+	privacy, filesAnswer, analytics, gaID := localPrivacyCopy, localFilesAnswer, localAnalyticsCopy, ""
 	if cfg.AllowRemote {
-		privacy, filesAnswer = hostedPrivacyCopy, hostedFilesAnswer
+		privacy, filesAnswer, analytics, gaID = hostedPrivacyCopy, hostedFilesAnswer, hostedAnalyticsCopy, googleAnalyticsID
 	}
-	pages, notFound, err := buildPages(cfg.PublicURL, privacy, filesAnswer)
+	pages, notFound, err := buildPages(cfg.PublicURL, privacy, filesAnswer, analytics, gaID)
 	if err != nil {
 		return nil, fmt.Errorf("pages: %w", err)
 	}
