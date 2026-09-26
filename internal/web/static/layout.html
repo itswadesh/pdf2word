@@ -50,7 +50,7 @@
   "featureList": [
     "Convert PDF to Word DOCX",
     "Keeps fonts, headings, tables, pictures and page breaks",
-    "OCR for scanned PDFs, in English and Odia",
+    "OCR for scanned PDFs, in English, Odia and Hindi",
     "Works in any web browser",
     "No sign-up and no watermark",
     "Several files at once"
@@ -722,6 +722,35 @@
   .select select:disabled { cursor: default; opacity: .7; }
   .select .i { position: absolute; right: 12px; top: 50%; width: 18px; height: 18px; margin-top: -9px; pointer-events: none; color: var(--text-soft); }
 
+  /* ---- read every page as a scan ------------------------------------------------ */
+  /* A switch: the thumb slides across and the track fills with the accent;
+     it gives a little under the finger. Only transform and colours move. */
+  .pv__scan { display: grid; gap: var(--s1); }
+  .toggle {
+    position: relative; display: inline-flex; align-items: center; gap: var(--s3);
+    width: fit-content; min-height: 44px; cursor: pointer;
+    font-size: 15px; font-weight: 500; color: var(--text);
+  }
+  .toggle input { position: absolute; left: 0; width: 44px; height: 26px; margin: 0; opacity: 0; cursor: pointer; }
+  .toggle__track {
+    position: relative; flex: none; width: 44px; height: 26px; border-radius: var(--r-pill);
+    background: var(--track); border: 1px solid var(--edge);
+    transition: background-color .2s ease, border-color .2s ease;
+  }
+  .toggle__thumb {
+    position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--edge); box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .2);
+    transition: transform .2s var(--ease);
+  }
+  .toggle:hover .toggle__track { border-color: var(--accent); }
+  .toggle input:checked + .toggle__track { background: var(--accent); border-color: var(--accent); }
+  .toggle input:checked + .toggle__track .toggle__thumb { transform: translateX(18px); border-color: var(--accent); }
+  .toggle:active .toggle__thumb { transform: scale(.88); }
+  .toggle:active input:checked + .toggle__track .toggle__thumb { transform: translateX(18px) scale(.88); }
+  .toggle input:focus-visible + .toggle__track { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .toggle input:focus-visible { outline: none; }
+
   /* ---- promises under the card ----------------------------------------------- */
   .promises {
     display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s2) var(--s5);
@@ -1088,6 +1117,9 @@
     .section > .wrap > *, .challenge, .faq-group { animation: none !important; }
     .btn--primary:hover, .btn--quiet:hover, .feature:has(.go):hover, .feature:has(.go):hover .feature__icon,
     .go:hover .i, .foot li a:hover .i, .steps li:hover .step-n, .challenge:hover .challenge__n, .promises li:hover .i { transform: none; }
+    /* The switch still flips and fills; it just does not squeeze. */
+    .toggle:active .toggle__thumb { transform: none; }
+    .toggle:active input:checked + .toggle__track .toggle__thumb { transform: translateX(18px); }
     /* No sweep: the beam rests at the foot of the page and the wash is off. */
     .scan__track { animation: none; transform: translateY(100%); opacity: .8; }
     .scan__wash { animation: none; opacity: 0; }
@@ -1184,7 +1216,7 @@
           </svg>
           <span>pdf2word</span>
         </a>
-        <p>A free, open source PDF to Word converter. Scanned pages are read with text recognition, in English and Odia.</p>
+        <p>A free, open source PDF to Word converter. Scanned pages are read with text recognition, in English, Odia and Hindi.</p>
         <ul class="foot__badges">
           <li><svg class="i" aria-hidden="true"><use href="#i-user"/></svg>No sign-up</li>
           <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>No watermark</li>
@@ -1199,6 +1231,7 @@
           <li><a href="/pdf-to-docx"{{if eq .Path "/pdf-to-docx"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-file-word"/></svg>PDF to DOCX</a></li>
           <li><a href="/scanned-pdf-to-word"{{if eq .Path "/scanned-pdf-to-word"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>Scanned PDF to Word</a></li>
           <li><a href="/odia-pdf-to-word"{{if eq .Path "/odia-pdf-to-word"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-languages"/></svg>Odia PDF to Word</a></li>
+          <li><a href="/hindi-pdf-to-word"{{if eq .Path "/hindi-pdf-to-word"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-languages"/></svg>Hindi PDF to Word</a></li>
           <li><a href="/pdf-table-to-word"{{if eq .Path "/pdf-table-to-word"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-table"/></svg>PDF tables to Word</a></li>
           <li><a href="/convert-multiple-pdf-to-word"{{if eq .Path "/convert-multiple-pdf-to-word"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-files"/></svg>Several PDFs at once</a></li>
           <li><a href="/print-to-pdf-to-word"{{if eq .Path "/print-to-pdf-to-word"}} aria-current="page"{{end}}><svg class="i" aria-hidden="true"><use href="#i-printer"/></svg>Unselectable PDF text</a></li>

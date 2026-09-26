@@ -1,0 +1,90 @@
+{{define "content"}}
+  <section class="hero" id="converter">
+    <div class="wrap narrow">
+      <h1>Hindi PDF to Word converter</h1>
+      <p class="lede">Convert Hindi (हिन्दी) PDFs and scans into Word documents you can edit. Hindi text recognition is built in, next to English and Odia.</p>
+
+      {{template "tool" .}}
+    </div>
+  </section>
+
+  <section class="section" id="hindi">
+    <div class="wrap">
+      <h2>Hindi text recognition, built in</h2>
+      <p class="lead">When a page has no text to copy, it is read with Tesseract's Hindi language data, and on this page Hindi is already chosen for you. Pick English + Hindi for pages that mix the two. Every page of the PDF is read, up to 100 MB, and the Word file keeps the layout: headings, centring, indents and page breaks.</p>
+      <div class="grid-2">
+        <section class="feature">
+          <span class="feature__icon" aria-hidden="true"><svg class="i"><use href="#i-scan"/></svg></span>
+          <h3>For the cleanest Hindi text</h3>
+          <ol class="tips">
+            <li>Scan at 300 dpi or more, so the matras above and below the letters stay sharp.</li>
+            <li>Choose Hindi for Hindi pages, and English + Hindi where the two are mixed.</li>
+            <li>Check dates, amounts and other numbers: a scanned 1 can come back as a 4.</li>
+            <li>Bold and italic are not recognised in scans; the words come back in regular type.</li>
+          </ol>
+        </section>
+        <section class="feature">
+          <span class="feature__icon feature__icon--script" aria-hidden="true">ह</span>
+          <h3>Hindi text you can select</h3>
+          <p>A PDF that already has Hindi text you can select is copied, not read. The Word file asks for Nirmala UI, the Windows font that covers Devanagari, so the letters do not turn into boxes; on a computer without it, another font with the script is used if there is one.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="kruti-dev">
+    <div class="wrap narrow">
+      <h2>When the Hindi comes out as strange letters</h2>
+      <div class="prose">
+        <p>Many older Hindi documents were typed in fonts such as Kruti Dev or DevLys. They draw Devanagari but store each letter as an English one, so the text copies out as a jumble of Latin letters and symbols, and a Word file made from it shows the same jumble. Some other PDFs store their Hindi with a letter out of order, which puts a matra in the wrong place.</p>
+        <p>For those files, turn on <strong>Read every page as a scan</strong> before you press Convert to Word. The letters are then read from the page itself, the way a scan is. It takes longer, and bold and italic are lost, so leave it off for PDFs whose text copies out correctly.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap narrow">
+      <h2>Questions about Hindi PDFs</h2>
+      <div class="faq-list">
+        <details class="qa">
+          <summary>Which languages can it read in scanned PDFs?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>English, Odia and Hindi. English + Odia and English + Hindi handle pages that mix two of them.</p>
+        </details>
+        <details class="qa">
+          <summary>Can it read Hindi from a photo?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>It converts PDF files only. Your phone can turn a photo of a page into a PDF: use Scan Documents in the Files app on an iPhone, or Scan in the Google Drive app on Android, then convert that PDF here.</p>
+        </details>
+        <details class="qa">
+          <summary>Is it free?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>Yes. There is no sign-up, no watermark and no daily limit, and the whole document is converted, not one page at a time.</p>
+        </details>
+        <details class="qa">
+          <summary>What file do I get?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <p>A .docx file, the format Word has used since 2007. Google Docs, LibreOffice Writer and Apple Pages open it too.</p>
+        </details>
+      </div>
+      <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/odia-pdf-to-word">Odia PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/what-is-ocr">What is OCR?<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="cta">
+        <h2>Convert your PDF to Word now</h2>
+        <p>Free and without a sign-up. Choose a file, pick its language if it is a scan, and the Word document downloads when it is done.</p>
+        <button class="btn btn--primary btn--lg" id="pick-cta" type="button">Choose a PDF</button>
+      </div>
+    </div>
+  </section>
+{{end}}

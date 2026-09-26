@@ -29,7 +29,7 @@ type pageDef struct {
 // siteUpdated is when the pages last changed (the sitemap's lastmod and the
 // articles' dateModified); articlesPublished is when the articles went up.
 const (
-	siteUpdated       = "2026-09-25"
+	siteUpdated       = "2026-09-26"
 	articlesPublished = "2026-09-25"
 )
 
@@ -69,12 +69,17 @@ var sitePages = []pageDef{
 	{
 		Path: "/scanned-pdf-to-word", File: "scanned-pdf-to-word.html", Name: "Scanned PDF to Word", Tool: true,
 		Title:       "Scanned PDF to Word Converter with OCR - Free",
-		Description: "Turn a scanned PDF or a photo of a page into an editable Word document. Pages are read with OCR in English or Odia and keep their layout. Free.",
+		Description: "Turn a scanned PDF or a photo of a page into an editable Word document. Pages are read with OCR in English, Odia or Hindi and keep their layout. Free.",
 	},
 	{
 		Path: "/odia-pdf-to-word", File: "odia-pdf-to-word.html", Name: "Odia PDF to Word", Tool: true, Lang: "ori",
 		Title:       "Odia PDF to Word Converter - Free Odia OCR",
 		Description: "Convert Odia (ଓଡ଼ିଆ) PDFs and scans to editable Word files. Odia text recognition is built in, pages mixing English and Odia work, and it is free.",
+	},
+	{
+		Path: "/hindi-pdf-to-word", File: "hindi-pdf-to-word.html", Name: "Hindi PDF to Word", Tool: true, Lang: "hin",
+		Title:       "Hindi PDF to Word Converter - Free Hindi OCR",
+		Description: "Convert Hindi PDFs and scans to editable Word files. Hindi text recognition is built in, whole documents at once, the layout kept, and it is free.",
 	},
 	{
 		Path: "/pdf-table-to-word", File: "pdf-table-to-word.html", Name: "PDF tables to Word", Tool: true,

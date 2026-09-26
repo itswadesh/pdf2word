@@ -27,8 +27,8 @@ PDFs on the page that opens, and save the Word files it gives back.
 - Page breaks are preserved so the Word document follows the PDF's pagination.
 - Live progress: a page counter and bar while it works, per file.
 - One executable, no installer, no cgo. The PDF renderer (PDFium, as
-  WebAssembly) and, on Windows, the Tesseract OCR runtime with English and
-  Odia (ଓଡ଼ିଆ) language data are built in. Copy the exe to another machine
+  WebAssembly) and, on Windows, the Tesseract OCR runtime with English,
+  Odia (ଓଡ଼ିଆ) and Hindi (हिन्दी) language data are built in. Copy the exe to another machine
   and it works.
 - Indic and other complex scripts come out readable: the Word document sets
   Nirmala UI as its complex-script font and marks runs with the
@@ -58,11 +58,15 @@ PDFs on the page that opens, and save the Word files it gives back.
 
 Pages with fewer than 20 characters of real text are read with OCR. The one
 setting on the page is the language of those scanned pages: English unless
-you pick another, from a list of the languages installed (English, Odia, and
-both together for mixed pages). To start the page on another language, or to
+you pick another, from a list of the languages installed (English, Odia,
+Hindi, and English together with either for mixed pages). A switch under it,
+"Read every page as a scan", reads every page with OCR instead (the same as
+`-ocr force`): for PDFs whose text copies out as nonsense, such as those
+typed in older Indian fonts like Akruti or Kruti Dev, which store their
+letters as Latin ones. It is off for every new file. To start the page on another language, or to
 change the threshold, start the app with the corresponding flags, e.g.
 `pdf2word.exe -lang ori` or `pdf2word.exe -min-text 50`. The environment
-variable `PDF2WORD_LANG` sets the same default without a flag. English and Odia are built in; other languages need their Tesseract
+variable `PDF2WORD_LANG` sets the same default without a flag. English, Odia and Hindi are built in; other languages need their Tesseract
 `traineddata` files installed. A requested language that is not installed is
 skipped with a warning rather than failing the conversion.
 
@@ -105,7 +109,7 @@ or wrap it in a service manager such as NSSM.
 ## Running it as a server (Docker / Dokploy)
 
 The repository has a `Dockerfile` and a `docker-compose.yml`. The image is
-Debian with Tesseract and its English and Odia data installed from the
+Debian with Tesseract and its English, Odia and Hindi data installed from the
 distribution; the PDF engine is inside the Go binary, so nothing else is
 needed.
 
@@ -118,10 +122,10 @@ on, default 9090, as Cloud Run, Fly and Render set it), `PDF2WORD_LANG`
 (the OCR language the page starts on, default `eng`) and `PUBLIC_URL` (the address the page is
 reachable at from outside). They are set in the compose file.
 
-The site has twenty-two pages, all served by the same program: the converter
-at `/` and on nine pages written for particular searches (`/pdf-to-docx`,
-`/scanned-pdf-to-word`, `/odia-pdf-to-word`, whose converter starts on
-Odia, `/pdf-table-to-word`, `/resume-pdf-to-word`, `/pdf-to-google-docs`,
+The site has twenty-three pages, all served by the same program: the converter
+at `/` and on fourteen pages written for particular searches (`/pdf-to-docx`,
+`/scanned-pdf-to-word`, `/odia-pdf-to-word` and `/hindi-pdf-to-word`, whose
+converters start on Odia and Hindi, `/pdf-table-to-word`, `/resume-pdf-to-word`, `/pdf-to-google-docs`,
 `/convert-multiple-pdf-to-word`, `/large-pdf-to-word`,
 `/pdf-to-word-on-phone`, `/edit-pdf-in-word`, `/pdf-to-word-on-mac`,
 `/contract-pdf-to-word` and `/print-to-pdf-to-word`), and `/how-it-works`, five articles (`/pdf-to-word-challenges`,
@@ -150,13 +154,13 @@ live in the container's temp space and are removed an hour after conversion.
 There is no login, so put the domain behind Dokploy's access controls or a
 VPN if the server is reachable from the internet. More OCR languages: add
 `tesseract-ocr-<lang>` to the `apt-get install` line in the Dockerfile; the
-page lists it next to English and Odia.
+page lists it next to English, Odia and Hindi.
 
 ## Requirements
 
 | Purpose | Requirement |
 |---|---|
-| Run on Windows x64 | Nothing else: Tesseract 5.4 (English and Odia) is inside the exe |
+| Run on Windows x64 | Nothing else: Tesseract 5.4 (English, Odia and Hindi) is inside the exe |
 | Run on macOS / Linux | Tesseract 4 or 5 on your `PATH` (`brew install tesseract`, `apt install tesseract-ocr`) |
 | Build from source | Go 1.27 or newer |
 

@@ -8,6 +8,18 @@
     </div>
   </section>
 
+  <section class="section" id="whole-document">
+    <div class="wrap narrow">
+      <h2>The whole document, laid out like the original</h2>
+      <ul class="checklist">
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Every page of the PDF in one go, not one page at a time</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>A Word file with the headings, centring, indents and page breaks of the original, not plain text</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Up to 100 MB a file, and several files at once</li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Free, with no sign-up and no watermark</li>
+      </ul>
+    </div>
+  </section>
+
   <section class="section" id="odia">
     <div class="wrap">
       <h2>Odia text recognition, built in</h2>
@@ -19,7 +31,7 @@
           <ol class="tips">
             <li>Scan at 300 dpi or more, so the small marks above and below the letters stay sharp.</li>
             <li>Choose Odia for Odia pages, and English + Odia where the two are mixed.</li>
-            <li>A PDF that already has Odia text you can select is copied, not read, so it comes out exactly as written.</li>
+            <li>A PDF that already has Odia text you can select is copied, not read, so it comes out exactly as stored.</li>
             <li>Dotted lines in a table of contents can come back as stray letters. Delete them in Word.</li>
           </ol>
         </section>
@@ -32,17 +44,27 @@
     </div>
   </section>
 
+  <section class="section" id="akruti">
+    <div class="wrap narrow">
+      <h2>When the Odia comes out as strange letters</h2>
+      <div class="prose">
+        <p>Many Odia documents, government notices among them, were typed in older fonts such as Akruti or Sreelipi. They draw Odia but store each letter as an English one, so the text copies out as a jumble like <span lang="und">@û\ý aû¡Kýeò</span>, and a Word file made from it shows the same jumble.</p>
+        <p>For those files, turn on <strong>Read every page as a scan</strong> before you press Convert to Word. The letters are then read from the page itself, the way a scan is. Choose Odia for pages in Odia only, and English + Odia where English words are mixed in. Plain type reads well; fancy headline fonts can still come back with mistakes, so check them. It takes longer, and bold and italic are lost, so leave it off for PDFs whose text copies out correctly.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="faq">
     <div class="wrap narrow">
       <h2>Questions about Odia PDFs</h2>
       <div class="faq-list">
         <details class="qa">
           <summary>Which languages can it read in scanned PDFs?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-          <p>English and Odia are built in, and English + Odia handles pages that mix the two. Whoever runs the converter can add any of the more than 100 languages Tesseract has data for.</p>
+          <p>English, Odia and Hindi. English + Odia and English + Hindi handle pages that mix two of them.</p>
         </details>
         <details class="qa">
           <summary>Why are there strange characters in my Word file?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-          <p>Usually a scanned page was read in the wrong language, or the dotted leaders of a table of contents were read as letters. Pick the language the page is written in and convert it again, and delete any leftover dots in Word.</p>
+          <p>If the PDF was typed in an older Odia font such as Akruti, its text is stored as English letters: convert it again with Read every page as a scan turned on. Otherwise a scanned page was probably read in the wrong language, or the dotted leaders of a table of contents were read as letters. Pick the language the page is written in and convert it again, and delete any leftover dots in Word.</p>
         </details>
         <details class="qa">
           <summary>Can it convert a scanned PDF to Word?<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
@@ -54,6 +76,17 @@
         </details>
       </div>
       <p class="more"><a href="/faq">All questions</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="related">
+    <div class="wrap">
+      <h2>More ways to convert</h2>
+      <ul class="links">
+        <li><a class="go" href="/hindi-pdf-to-word">Hindi PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/scanned-pdf-to-word">Scanned PDF to Word<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+        <li><a class="go" href="/what-is-ocr">What is OCR?<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+      </ul>
     </div>
   </section>
 

@@ -514,7 +514,9 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStart converts a staged file, in the language sent in the form
-// field lang (the server's default when it is left out).
+// field lang (the server's default when it is left out) and with the OCR
+// mode sent in ocr (auto when it is left out; force reads every page as a
+// scan, for PDFs whose text copies out as nonsense).
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	j, ok := s.jobs.get(r.PathValue("id"))
 	if !ok || !s.owns(r, j) {
@@ -527,6 +529,15 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unknown language code "+strconv.Quote(lang))
 		return
 	}
+	var mode convert.OCRMode
+	if v := r.FormValue("ocr"); v != "" {
+		m, err := convert.ParseOCRMode(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		mode = m
+	}
 	j.mu.Lock()
 	if j.state != StateStaged {
 		j.mu.Unlock()
@@ -535,6 +546,9 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 	if lang != "" {
 		j.lang = lang
+	}
+	if mode != "" {
+		j.ocr = mode
 	}
 	j.state = StateQueued
 	j.mu.Unlock()

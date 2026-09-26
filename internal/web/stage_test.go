@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"pdf2word/internal/convert"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,38 @@ func TestStagedUploadWaitsToBeStarted(t *testing.T) {
 	}
 	if v := waitForJob(t, ts, staged.ID, mine); v.State != StateDone {
 		t.Errorf("staged file ended %s: %s", v.State, v.Message)
+	}
+}
+
+// "Read every page as a scan" is chosen at start, like the language: a text
+// PDF started with ocr=force is read with OCR, and a mode the converter does
+// not know is refused without starting the file.
+func TestStartCanReadEveryPageAsAScan(t *testing.T) {
+	s, ts := newTestServer(t)
+	data, _ := os.ReadFile(fixture("text.pdf"))
+	mine := &http.Cookie{Name: clientCookie, Value: "browser-one"}
+
+	var staged JobView
+	decode(t, uploadAs(t, ts, mine, "legacy-font.pdf", data, map[string]string{"hold": "1"}), &staged)
+	start := "/api/jobs/" + staged.ID + "/start"
+
+	r := postForm(t, ts, start, mine, url.Values{"ocr": {"always; rm -rf /"}})
+	r.Body.Close()
+	if r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("start with an unknown OCR mode: status %d, want 400", r.StatusCode)
+	}
+	if j, _ := s.jobs.get(staged.ID); j.currentState() != StateStaged {
+		t.Fatalf("a refused start left the file %s, want it still staged", j.currentState())
+	}
+
+	var started JobView
+	decode(t, postForm(t, ts, start, mine, url.Values{"lang": {"eng"}, "ocr": {"force"}}), &started)
+	if j, _ := s.jobs.get(staged.ID); j.ocr != convert.OCRForce {
+		t.Errorf("job OCR mode = %q, want force", j.ocr)
+	}
+	v := waitForJob(t, ts, staged.ID, mine)
+	if v.State != StateDone || v.Report.OCRPages != v.Report.Pages || v.Report.TextPages != 0 {
+		t.Errorf("forced start ended %s with %+v; want every page read with OCR", v.State, v.Report)
 	}
 }
 

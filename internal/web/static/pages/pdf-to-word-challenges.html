@@ -55,7 +55,7 @@
       <article class="challenge" id="c4">
         <h2><span class="challenge__n">4</span>Text that does not say what it shows</h2>
         <p>To draw a letter, a PDF only needs the shape. The mapping back to real characters is optional, and some PDFs leave it out or get it wrong, so the text looks right on screen but copies out as nonsense.</p>
-        <p><span class="state state--no">Not yet</span> Such pages are not detected: their text comes across as the PDF states it. If you run the program yourself, <code>-ocr force</code> reads every page with OCR instead, which gets the words from what is shown.</p>
+        <p><span class="state state--part">Partly</span> Such pages are not detected on their own: their text comes across as the PDF states it. Turn on <strong>Read every page as a scan</strong> before you convert, and the words are read from what is shown instead.</p>
       </article>
 
       <article class="challenge" id="c5">
@@ -79,7 +79,7 @@
       <article class="challenge" id="c8">
         <h2><span class="challenge__n">8</span>Line breaks or flowing text</h2>
         <p>Keep every line break and the Word pages match the PDF, but editing a sentence leaves ragged lines. Join the lines and the text reflows as you type, but the pages no longer match. A converter has to choose.</p>
-        <p><span class="state state--ok">Handled</span> By default every line breaks where the PDF broke it, so the pages match. If you run the program yourself, <code>-reflow</code> joins each paragraph instead.</p>
+        <p><span class="state state--ok">Handled</span> Every line breaks where the PDF broke it, so the pages match. Run the open source program on your own computer and it can join each paragraph instead.</p>
       </article>
 
       <article class="challenge" id="c9">
@@ -91,7 +91,7 @@
       <article class="challenge" id="c10">
         <h2><span class="challenge__n">10</span>Indian and other complex scripts</h2>
         <p>Scripts such as Odia, Hindi, Bengali and Tamil join letters and marks into clusters, and need a font that has them. Without one, Word shows empty boxes.</p>
-        <p><span class="state state--part">Partly</span> The Word file asks for Nirmala UI, the Windows font that covers these scripts, so the text renders. Odia scans are read with Odia OCR; other scripts need their language data added by whoever runs the converter. <a href="/odia-pdf-to-word">Odia PDF to Word</a></p>
+        <p><span class="state state--part">Partly</span> The Word file asks for Nirmala UI, the Windows font that covers these scripts, so the text renders. Odia and Hindi scans are read with their own OCR; Bengali, Tamil and other scripts are not read in scans yet. Text stored in an older font such as Akruti or Kruti Dev copies out as English letters: Read every page as a scan reads it from the page instead. <a href="/odia-pdf-to-word">Odia PDF to Word</a> <a href="/hindi-pdf-to-word">Hindi PDF to Word</a></p>
       </article>
 
       <article class="challenge" id="c11">

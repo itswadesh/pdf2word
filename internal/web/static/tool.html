@@ -108,6 +108,16 @@
       </div>
       <p class="pv__hint">Only used for pages that are pictures of text. Text in the PDF is copied as it is.</p>
     </div>
+    <!-- Shown once the file is up, when the server can read scans. Off for
+         every new file: it is slower and loses bold and italic. -->
+    <div class="pv__scan hidden" id="scan-row">
+      <label class="toggle">
+        <input type="checkbox" id="force-ocr" role="switch" aria-describedby="force-ocr-hint">
+        <span class="toggle__track" aria-hidden="true"><span class="toggle__thumb"></span></span>
+        <span>Read every page as a scan</span>
+      </label>
+      <p class="pv__hint" id="force-ocr-hint">For a PDF whose copied text comes out as strange letters, often an older font such as Akruti or Kruti Dev. Slower, and bold and italic are lost.</p>
+    </div>
     <button class="btn btn--primary btn--xl" id="pv-convert" type="button" disabled>Convert to Word</button>
   </div>
   <div class="pv__foot pv-progress">
@@ -167,6 +177,8 @@
   // visitor's own choice is remembered on this device.
   const langSelect = $('lang'), langRow = $('lang-row');
   let langAvailable = false; // more than one language to choose from
+  const forceOcr = $('force-ocr'), scanRow = $('scan-row');
+  let ocrAvailable = false;  // the server can read scans, so every page can be read as one
   const LANG_NAMES = {
     eng: 'English', ori: 'Odia (ଓଡ଼ିଆ)', hin: 'Hindi', ben: 'Bengali', tam: 'Tamil', tel: 'Telugu',
     mar: 'Marathi', guj: 'Gujarati', kan: 'Kannada', mal: 'Malayalam', pan: 'Punjabi', urd: 'Urdu',
@@ -179,7 +191,9 @@
   }
   const LANG_KEY = 'pdf2word.lang';
   function setupLanguages(ocr) {
-    const installed = ((ocr && ocr.languages) || []).filter((c) => c !== 'osd' && c !== 'equ');
+    ocrAvailable = !!(ocr && ocr.available);
+    if (pvMode === 'ready') renderReady();
+    const installed =((ocr && ocr.languages) || []).filter((c) => c !== 'osd' && c !== 'equ');
     const codes = installed.slice().sort((a, b) => (a === 'eng' ? -1 : b === 'eng' ? 1 : langName(a).localeCompare(langName(b))));
     if (installed.indexOf('eng') >= 0) for (const c of codes.slice()) if (c !== 'eng') codes.push('eng+' + c);
     const def = (ocr && ocr.defaultLang) || 'eng';
@@ -286,6 +300,8 @@
 
     const data = new FormData();
     // Fields must come before the file: the server reads them in order.
+    // A retry keeps the way the file was first read.
+    if (row.ocr) data.append('ocr', row.ocr);
     row.lang = langSelect.disabled ? '' : langSelect.value;
     if (row.lang) data.append('lang', row.lang);
     data.append('file', file, file.name);
@@ -648,7 +664,7 @@
   let seed = null;        // { id, img }: that page, handed on to the scanner
 
   function prepare(files, skipped) {
-    if (!(pv.open && pvMode === 'ready')) discardPending();
+    if (!(pv.open && pvMode === 'ready')) { discardPending(); forceOcr.checked = false; }
     pvMode = 'ready';
     skippedNote = skipped || '';
     for (const f of files) {
@@ -758,6 +774,7 @@
     // The language only once everything is up; then the button.
     const ready = !uploading.length && staged.length > 0;
     langRow.classList.toggle('hidden', !(ready && langAvailable));
+    scanRow.classList.toggle('hidden', !(ready && ocrAvailable));
     pvConvert.disabled = !ready;
     // While files go up, the button fills with their progress.
     if (uploading.length) { pvConvert.setAttribute('data-uploading', ''); pvConvert.style.setProperty('--fill', pct + '%'); }
@@ -779,24 +796,27 @@
 
   pvConvert.addEventListener('click', () => {
     const lang = langAvailable && !langSelect.disabled ? langSelect.value : '';
+    const ocr = ocrAvailable && forceOcr.checked ? 'force' : '';
     const files = pending.filter((p) => p.state === 'staged');
     const shown = pvFirstPage.querySelector('img');
     seed = firstShown && shown ? { id: firstShown.id, img: shown } : null;
     pending = [];
     firstShown = null;
     pvMode = 'progress';
-    for (const p of files) startStaged(p, lang);
+    for (const p of files) startStaged(p, lang, ocr);
     renderModal();
     $('pv-name').focus();
   });
-  function startStaged(p, lang) {
+  function startStaged(p, lang, ocr) {
     const row = addRow(p.id);
     row.file = p.file;
     row.lang = lang;
+    row.ocr = ocr;
     row.el.dataset.id = p.id;
     setView(row, { id: p.id, filename: p.file.name, size: p.file.size, state: 'queued', done: 0, total: 0 });
     const body = new URLSearchParams();
     if (lang) body.set('lang', lang);
+    if (ocr) body.set('ocr', ocr);
     fetch('/api/jobs/' + p.id + '/start', { method: 'POST', body: body })
       .then((r) => r.json().then((v) => ({ ok: r.ok, v: v })))
       .then((res) => {
