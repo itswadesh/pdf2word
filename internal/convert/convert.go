@@ -525,6 +525,16 @@ const (
 	ocrMaxFontSize = 40.0
 )
 
+// Indian scripts have marks above and below the letters, so their line boxes
+// are taller at the same type size: measured in Nirmala UI, 1.18 times the
+// size for Devanagari and 1.13 for Odia, against 0.98 for Latin. These
+// factors land them as near their size as ocrFontFactor lands Latin.
+const (
+	ocrDevanagariFactor = 0.87
+	ocrOdiaFactor       = 0.91
+	ocrIndicFactor      = 0.89 // the other Indian scripts, between the two
+)
+
 // leaderJunk matches what Tesseract makes of dotted leaders and rules:
 // strings of dots, dashes or the letters c/e/o it mistakes them for.
 var leaderJunk = regexp.MustCompile("^[.·…:;,'`~_\\-]{3,}$|^[ceoCEO.·…:;,'`~_\\-]{6,}$")
@@ -535,20 +545,26 @@ var leaderJunk = regexp.MustCompile("^[.·…:;,'`~_\\-]{3,}$|^[ceoCEO.·…:;,'
 // page's median line height so cells and headings do not jitter.
 func ocrWords(words []ocr.Word, imgW, imgH int, pageW, pageH float64) []pdflayout.Word {
 	scale := pageW / float64(imgW) // points per pixel
+	factors := lineFactors(words)
+	// em is the font size a word's line box stands for, in pixels.
+	em := func(wd ocr.Word) float64 {
+		f, ok := factors[lineKey{wd.Block, wd.Par, wd.Line}]
+		if !ok {
+			f = ocrFontFactor
+		}
+		return float64(wd.LineHeight) * f
+	}
 
-	// Median line height over words (so long body lines dominate), ignoring
-	// boxes that cannot be text lines.
-	var hs []float64
+	// Median line height and size over words (so long body lines dominate),
+	// ignoring boxes that cannot be text lines.
+	var hs, ems []float64
 	for _, wd := range words {
 		if wd.Text != "" && wd.LineHeight > 0 && float64(wd.LineHeight) <= 0.12*float64(imgH) {
 			hs = append(hs, float64(wd.LineHeight))
+			ems = append(ems, em(wd))
 		}
 	}
-	sort.Float64s(hs)
-	median := 0.0
-	if len(hs) > 0 {
-		median = hs[len(hs)/2]
-	}
+	median, medianEm := middle(hs), middle(ems)
 
 	out := make([]pdflayout.Word, 0, len(words))
 	for _, wd := range words {
@@ -562,11 +578,11 @@ func ocrWords(words []ocr.Word, imgW, imgH int, pageW, pageH float64) []pdflayou
 		if median > 0 && float64(wd.Height) > 3*median && wd.Width < wd.Height {
 			continue // tall thin box: border or vertical rule read as a word
 		}
-		size := lh
-		if median > 0 && math.Abs(lh-median) <= ocrSizeJitter*median {
-			size = median
+		size := em(wd)
+		if medianEm > 0 && math.Abs(size-medianEm) <= ocrSizeJitter*medianEm {
+			size = medianEm
 		}
-		sizePt := clamp(size*scale*ocrFontFactor, ocrMinFontSize, ocrMaxFontSize)
+		sizePt := clamp(size*scale, ocrMinFontSize, ocrMaxFontSize)
 		out = append(out, pdflayout.Word{
 			Text:  wd.Text,
 			X0:    float64(wd.Left) * scale,
@@ -581,6 +597,60 @@ func ocrWords(words []ocr.Word, imgW, imgH int, pageW, pageH float64) []pdflayou
 }
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
+
+// middle returns the median of vs (0 when empty); vs is sorted in place.
+func middle(vs []float64) float64 {
+	if len(vs) == 0 {
+		return 0
+	}
+	sort.Float64s(vs)
+	return vs[len(vs)/2]
+}
+
+type lineKey struct{ block, par, line int }
+
+// lineFactors gives the line-height to font-size factor of each OCR line
+// written mostly in an Indian script (Devanagari to Malayalam, U+0900 to
+// U+0D7F); other lines use ocrFontFactor.
+func lineFactors(words []ocr.Word) map[lineKey]float64 {
+	type counts struct{ deva, odia, indic, other int }
+	lines := map[lineKey]*counts{}
+	for _, wd := range words {
+		k := lineKey{wd.Block, wd.Par, wd.Line}
+		c := lines[k]
+		if c == nil {
+			c = &counts{}
+			lines[k] = c
+		}
+		for _, r := range wd.Text {
+			switch {
+			case r >= 0x0900 && r <= 0x097F:
+				c.deva++
+			case r >= 0x0B00 && r <= 0x0B7F:
+				c.odia++
+			case r >= 0x0980 && r <= 0x0D7F:
+				c.indic++
+			case unicode.IsLetter(r):
+				c.other++
+			}
+		}
+	}
+	factors := make(map[lineKey]float64)
+	for k, c := range lines {
+		if c.deva+c.odia+c.indic <= c.other {
+			continue
+		}
+		switch {
+		case c.deva >= c.odia && c.deva >= c.indic:
+			factors[k] = ocrDevanagariFactor
+		case c.odia >= c.indic:
+			factors[k] = ocrOdiaFactor
+		default:
+			factors[k] = ocrIndicFactor
+		}
+	}
+	return factors
+}
 
 // sparseAdditions returns the words of a sparse pass that the normal pass
 // missed: confident, at least two letters long, and not overlapping any word

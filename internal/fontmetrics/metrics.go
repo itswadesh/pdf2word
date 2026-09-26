@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"unicode"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
@@ -55,19 +56,41 @@ func Available(family string, bold, italic bool) bool {
 	return lookup(family, bold, italic) != nil
 }
 
+// missingAdvance is the width, in ems, guessed for a letter the font does
+// not have: the average letter of its script in Nirmala UI, which Word sets
+// the Indian scripts in (measured on running Hindi and Odia text).
+func missingAdvance(r rune) float64 {
+	switch {
+	case r >= 0x0900 && r <= 0x097F: // Devanagari
+		return 0.52
+	case r >= 0x0B00 && r <= 0x0B7F: // Odia
+		return 0.58
+	}
+	return 0.55
+}
+
 func (fc *face) advance(r rune) float64 {
 	if a, ok := fc.adv[r]; ok {
 		return a
 	}
 	a := 0.0
-	if gi, err := fc.f.GlyphIndex(&fc.buf, r); err == nil {
+	gi, err := fc.f.GlyphIndex(&fc.buf, r)
+	switch {
+	case err != nil || gi == 0:
+		// Not in the font, so not its missing-glyph box either: Word takes
+		// the letter from another font. A combining mark or a joiner sits
+		// on its letter and adds no width.
+		if !unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf) {
+			a = missingAdvance(r) * fc.upem
+		}
+	default:
 		ppem := fixed.Int26_6(int(fc.upem) << 6)
 		if adv, err := fc.f.GlyphAdvance(&fc.buf, gi, ppem, font.HintingNone); err == nil {
 			a = float64(adv) / 64
 		}
-	}
-	if a == 0 && r != ' ' {
-		a = 0.5 * fc.upem // unknown glyph: an average width
+		if a == 0 && r != ' ' && !unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf) {
+			a = 0.5 * fc.upem // a glyph without an advance: an average width
+		}
 	}
 	fc.adv[r] = a
 	return a

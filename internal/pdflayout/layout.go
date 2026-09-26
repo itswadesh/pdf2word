@@ -297,7 +297,7 @@ func AssembleOCR(number int, width, height float64, words []Word, assets *PageAs
 		if w.Text == "" {
 			continue
 		}
-		c := char{text: w.Text, x0: w.X0, y0: w.Y0, x1: w.X1, y1: w.Y1, size: w.Size, font: fontInfo{Family: w.Font, Bold: w.Bold, Italic: w.Italic}, group: w.Group}
+		c := char{text: w.Text, x0: w.X0, y0: w.Y0, x1: w.X1, y1: w.Y1, size: w.Size, font: fontInfo{Family: w.Font, Bold: w.Bold, Italic: w.Italic}, group: w.Group, word: true}
 		if c.size <= 0 {
 			c.size = math.Max(1, (w.Y1-w.Y0)*0.8)
 		}

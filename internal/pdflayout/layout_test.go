@@ -287,6 +287,29 @@ func TestAssembleOCR_SyntheticWords(t *testing.T) {
 	}
 }
 
+// Devanagari line boxes are tall (marks above the headline and below the
+// letters), so the size estimated from them is large and the gap between
+// two words is under a quarter of it. Tesseract has already said they are
+// two words, so they keep their space. Gaps are Tesseract's own for 18 pt
+// Hindi: 18 px against a 92 px line at 300 dpi.
+func TestAssembleOCR_WordsKeepTheirSpaces(t *testing.T) {
+	const px = 72.0 / 300
+	size, top := 92*px*1.05, 700.0
+	var words []Word
+	x := 72.0
+	for _, w := range []struct {
+		text  string
+		width float64 // px
+	}{{"यह", 60}, {"समझौता", 170}, {"दिनांक", 140}, {"को", 50}, {"मकान", 120}} {
+		words = append(words, Word{Text: w.text, X0: x, X1: x + w.width*px, Y1: top, Y0: top - 92*px, Size: size})
+		x += (w.width + 18) * px
+	}
+	page, _ := AssembleOCR(1, 612, 792, words, nil, Options{Reflow: true}, nil, nil)
+	if len(page.Blocks) != 1 || page.Blocks[0].Text() != "यह समझौता दिनांक को मकान" {
+		t.Errorf("blocks:\n%s\nwant one paragraph with a space between every word", describe(page.Blocks))
+	}
+}
+
 func TestExtract_MissingFile(t *testing.T) {
 	if _, _, err := Extract(fixture("nope.pdf")); err == nil {
 		t.Fatal("expected an error")

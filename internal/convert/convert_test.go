@@ -511,6 +511,42 @@ func TestOCRWords_FiltersNoiseAndSnapsSizes(t *testing.T) {
 	}
 }
 
+// Hindi and Odia line boxes are taller than Latin ones at the same type
+// size: the marks above the headline and below the letters add about a
+// sixth. Line heights here are Tesseract's for 18 pt Nirmala UI at 300 dpi
+// (75 px); each script's size comes out near 18 pt, where the Latin factor
+// alone made the Indian scripts about 22 pt and squeezed them to fit.
+func TestOCRWords_SizesIndianScriptsLikeLatin(t *testing.T) {
+	line := func(texts []string, top, lineH, id int) []ocr.Word {
+		var ws []ocr.Word
+		for i, s := range texts {
+			ws = append(ws, ocr.Word{Text: s, Left: 100 + 200*i, Top: top, Width: 180, Height: lineH - 10, LineTop: top, LineHeight: lineH, Block: 1, Par: id, Line: id, Conf: 95})
+		}
+		return ws
+	}
+	for _, tc := range []struct {
+		script string
+		words  []ocr.Word
+	}{
+		{"English", line([]string{"The", "tenant", "will", "pay"}, 100, 74, 1)},
+		{"Hindi", line([]string{"किरायेदार", "हर", "महीने", "की"}, 100, 88, 1)},
+		{"Odia", line([]string{"ଭଡ଼ାଟିଆ", "ପ୍ରତି", "ମାସର", "ପାଞ୍ଚ"}, 100, 85, 1)},
+	} {
+		got := ocrWords(tc.words, 2550, 3300, 612, 792)
+		if len(got) == 0 || got[0].Size < 17.3 || got[0].Size > 18.7 {
+			t.Errorf("%s at 18 pt: size %.1f pt, want 17.3 to 18.7 (within 4%%)", tc.script, got[0].Size)
+		}
+	}
+
+	// On a page that mixes them, English and Hindi lines of one size still
+	// snap to one size.
+	mixed := append(line([]string{"The", "tenant"}, 100, 74, 1), line([]string{"किरायेदार", "हर"}, 200, 88, 2)...)
+	got := ocrWords(mixed, 2550, 3300, 612, 792)
+	if got[0].Size != got[2].Size {
+		t.Errorf("mixed page: English %.1f pt, Hindi %.1f pt; want the same size", got[0].Size, got[2].Size)
+	}
+}
+
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 
 func TestSparseAdditions(t *testing.T) {

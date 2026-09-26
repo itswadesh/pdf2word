@@ -1,6 +1,9 @@
 package fontmetrics
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestMeasure(t *testing.T) {
 	if !Available("Times New Roman", false, false) {
@@ -25,5 +28,25 @@ func TestMeasure(t *testing.T) {
 	}
 	if _, ok := Measure("No Such Font Family", false, false, 12, "x"); ok {
 		t.Error("unknown family must report not ok")
+	}
+}
+
+// Letters a font lacks are guessed at their script's average width in
+// Nirmala UI (0.52 em for Devanagari, 0.58 em for Odia, 0.55 em otherwise),
+// not at the width of the font's missing-glyph box, and a combining mark (a
+// virama, a vowel sign above or below) sits on its letter and takes no width
+// of its own. "ପ୍ରତି" is ପ, ୍ (mark), ର, ତ and ି (mark): three letters;
+// "किराया" is क, ि (a spacing sign), र, ा (spacing), य, ा (spacing): six.
+func TestMeasureMissingGlyphs(t *testing.T) {
+	if !Available("Times New Roman", false, false) {
+		t.Skip("Times New Roman (or Liberation Serif) is not installed here")
+	}
+	for _, tc := range []struct {
+		text string
+		want float64
+	}{{"ପ୍ରତି", 3 * 5.8}, {"किराया", 6 * 5.2}, {"ক", 5.5}} {
+		if w, _ := Measure("Times New Roman", false, false, 10, tc.text); math.Abs(w-tc.want) > 0.01 {
+			t.Errorf("%s at 10 pt = %.2f pt, want %.2f", tc.text, w, tc.want)
+		}
 	}
 }

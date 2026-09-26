@@ -20,7 +20,8 @@ type char struct {
 	hasBase        bool
 	size           float64
 	font           fontInfo
-	group          int // OCR paragraph id (0 = unknown)
+	group          int  // OCR paragraph id (0 = unknown)
+	word           bool // a whole word read by OCR: its neighbours are other words
 }
 
 func (c char) hasAdvance() bool { return c.ax1 > c.ax0 }
@@ -248,6 +249,12 @@ func splitSegments(chars []char, size, gapFactor float64) []segment {
 		isWordGap := wordGap > wordThreshold*refSize
 		if tracking > 0 {
 			isWordGap = wordGap > trackingWordGap*tracking
+		}
+		if prev != nil && prev.word && c.word {
+			// OCR has already split the line into words. Judging the gap
+			// again against a size taken from the line box would join the
+			// words of scripts with tall lines, such as Devanagari.
+			isWordGap = true
 		}
 		if cur == nil || gap > gapFactor*refSize {
 			// New segment (also the first one).
