@@ -16,7 +16,8 @@ services:
       OMP_THREAD_LIMIT: "1"
       PORT: "9090"
       # The language scanned pages are read in unless the visitor picks
-      # another; the page lists every language in the image (English, Odia).
+      # another; the page lists every language in the image (English, Odia,
+      # Hindi).
       PDF2WORD_LANG: "eng"
       # The site's public address. It makes the canonical links, the sharing
       # tags, the structured data and /sitemap.xml absolute, which search

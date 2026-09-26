@@ -14,12 +14,13 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 # ---- runtime ---------------------------------------------------------------
 # The PDF engine (PDFium as WebAssembly) is inside the binary; only Tesseract
-# is needed from the distribution. English and Odia data are installed; add
-# tesseract-ocr-<lang> packages for more languages and the page offers them
-# too. Debian rather than Alpine: Alpine has no Odia traineddata package.
+# is needed from the distribution. English, Odia and Hindi data are
+# installed; add tesseract-ocr-<lang> packages for more languages and the page
+# offers them too. Debian rather than Alpine: Alpine has no Odia traineddata
+# package.
 FROM debian:bookworm-slim
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-ori ca-certificates curl \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-ori tesseract-ocr-hin ca-certificates curl \
       fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --create-home --home-dir /home/pdf2word pdf2word
